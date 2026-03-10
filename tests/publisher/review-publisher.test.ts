@@ -250,6 +250,99 @@ describe("ReviewPublisher", () => {
     expect(client.calls).toHaveLength(0);
   });
 
+  it("does not create another summary review once nitpickr already posted one", async () => {
+    const client = new FakePublishReviewClient();
+    client.existingReviews = [
+      {
+        reviewId: "review_summary",
+        body: [
+          "<!-- nitpickr:summary -->",
+          "<!-- nitpickr:review-run:review_run_1 -->",
+          "# nitpickr review ✨",
+        ].join("\n"),
+      },
+    ];
+    const publisher = new ReviewPublisher(client);
+
+    const published = await publisher.publish({
+      reviewRunId: "review_run_2",
+      installationId: "123456",
+      repository: {
+        owner: "rubenspessoa",
+        name: "nitpickr",
+      },
+      pullNumber: 42,
+      result: {
+        summary: "Queue fairness improved.",
+        mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+        findings: [],
+      },
+    });
+
+    expect(published.reviewId).toBe("review_summary");
+    expect(client.calls).toHaveLength(0);
+  });
+
+  it("publishes later review comments without another visible summary", async () => {
+    const client = new FakePublishReviewClient();
+    client.existingReviews = [
+      {
+        reviewId: "review_summary",
+        body: [
+          "<!-- nitpickr:summary -->",
+          "<!-- nitpickr:review-run:review_run_1 -->",
+          "# nitpickr review ✨",
+        ].join("\n"),
+      },
+    ];
+    const publisher = new ReviewPublisher(client);
+
+    const published = await publisher.publish({
+      reviewRunId: "review_run_2",
+      installationId: "123456",
+      repository: {
+        owner: "rubenspessoa",
+        name: "nitpickr",
+      },
+      pullNumber: 42,
+      result: {
+        summary: "Queue fairness improved.",
+        mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+        findings: [
+          {
+            path: "src/queue/queue-scheduler.ts",
+            line: 18,
+            severity: "high",
+            category: "correctness",
+            title: "Stable ordering breaks",
+            body: "Equal priorities do not preserve insertion order.",
+            fixPrompt:
+              "Refactor the queue to preserve insertion order for equal priorities.",
+          },
+        ],
+      },
+      files: [
+        {
+          path: "src/queue/queue-scheduler.ts",
+          patch: [
+            "@@ -17,1 +17,2 @@",
+            " context",
+            "+inserted",
+            "+stable ordering",
+          ].join("\n"),
+        },
+      ],
+    });
+
+    expect(published.reviewId).toBe("review_1");
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0]?.body).toContain(
+      "<!-- nitpickr:review-run:review_run_2 -->",
+    );
+    expect(client.calls[0]?.body).not.toContain("# nitpickr review ✨");
+    expect(client.calls[0]?.comments).toHaveLength(1);
+  });
+
   it("rejects publish calls with no repository owner", async () => {
     const publisher = new ReviewPublisher(new FakePublishReviewClient());
 

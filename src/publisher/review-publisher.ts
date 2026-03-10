@@ -105,6 +105,10 @@ function buildReviewRunMarker(reviewRunId: string): string {
   return `<!-- nitpickr:review-run:${reviewRunId} -->`;
 }
 
+function buildSummaryMarker(): string {
+  return "<!-- nitpickr:summary -->";
+}
+
 export class ReviewPublisher {
   readonly #client: PublishReviewClient;
 
@@ -131,6 +135,7 @@ export class ReviewPublisher {
           ].join("\n");
 
     return [
+      buildSummaryMarker(),
       buildReviewRunMarker(input.reviewRunId),
       "",
       "# nitpickr review ✨",
@@ -151,6 +156,10 @@ export class ReviewPublisher {
       "",
       "</details>",
     ].join("\n");
+  }
+
+  buildFollowUpBody(reviewRunId: string): string {
+    return buildReviewRunMarker(reviewRunId);
   }
 
   buildInlineComments(
@@ -243,13 +252,13 @@ export class ReviewPublisher {
       throw new Error("pullNumber must be positive.");
     }
 
-    const existingReview = (
-      await this.#client.listPullRequestReviews({
-        installationId: input.installationId,
-        repository: input.repository,
-        pullNumber: input.pullNumber,
-      })
-    ).find((review) =>
+    const existingReviews = await this.#client.listPullRequestReviews({
+      installationId: input.installationId,
+      repository: input.repository,
+      pullNumber: input.pullNumber,
+    });
+
+    const existingReview = existingReviews.find((review) =>
       review.body.includes(buildReviewRunMarker(input.reviewRunId)),
     );
 
@@ -259,22 +268,35 @@ export class ReviewPublisher {
       };
     }
 
+    const existingSummaryReview = existingReviews.find((review) =>
+      review.body.includes(buildSummaryMarker()),
+    );
+    const comments =
+      input.files === undefined
+        ? this.buildInlineComments(input.result.findings)
+        : this.buildInlineComments(input.result.findings, {
+            files: input.files,
+          });
+
+    if (existingSummaryReview && comments.length === 0) {
+      return {
+        reviewId: existingSummaryReview.reviewId,
+      };
+    }
+
     return this.#client.publishPullRequestReview({
       installationId: input.installationId,
       repository: input.repository,
       pullNumber: input.pullNumber,
-      body: this.buildSummaryBody({
-        reviewRunId: input.reviewRunId,
-        summary: input.result.summary,
-        mermaid: input.result.mermaid,
-        findings: input.result.findings,
-      }),
-      comments:
-        input.files === undefined
-          ? this.buildInlineComments(input.result.findings)
-          : this.buildInlineComments(input.result.findings, {
-              files: input.files,
-            }),
+      body: existingSummaryReview
+        ? this.buildFollowUpBody(input.reviewRunId)
+        : this.buildSummaryBody({
+            reviewRunId: input.reviewRunId,
+            summary: input.result.summary,
+            mermaid: input.result.mermaid,
+            findings: input.result.findings,
+          }),
+      comments,
     });
   }
 }

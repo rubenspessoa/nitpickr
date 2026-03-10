@@ -1,0 +1,37 @@
+{
+  "name": "nitpickr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted AI code review service for GitHub pull requests.",
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev:api": "tsx src/api/index.ts",
+    "dev:worker": "tsx src/worker/index.ts",
+    "start:api": "node dist/src/api/index.js",
+    "start:worker": "node dist/src/worker/index.js",
+    "migrate": "tsx src/cli/index.ts migrate",
+    "cli": "tsx src/cli/index.ts"
+  },
+  "dependencies": {
+    "fastify": "^5.2.1",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,280 @@
+import { targetReviewCommentLine } from "./review-comment-targeter.js";
+
+export interface PublishedFinding {
+  path: string;
+  line: number;
+  severity: "low" | "medium" | "high" | "critical";
+  category:
+    | "correctness"
+    | "performance"
+    | "security"
+    | "maintainability"
+    | "testing"
+    | "style";
+  title: string;
+  body: string;
+  fixPrompt: string;
+  suggestedChange?: string | undefined;
+}
+
+export interface PublishReviewClient {
+  listPullRequestReviews(input: {
+    installationId: string;
+    repository: {
+      owner: string;
+      name: string;
+    };
+    pullNumber: number;
+  }): Promise<
+    Array<{
+      reviewId: string;
+      body: string;
+    }>
+  >;
+  publishPullRequestReview(input: {
+    installationId: string;
+    repository: {
+      owner: string;
+      name: string;
+    };
+    pullNumber: number;
+    body: string;
+    comments: Array<{
+      path: string;
+      line: number;
+      side: "RIGHT";
+      body: string;
+    }>;
+  }): Promise<{
+    reviewId: string;
+  }>;
+}
+
+export interface PublishedInlineComment {
+  path: string;
+  line: number;
+  side: "RIGHT";
+  body: string;
+}
+
+const severityEmoji: Record<PublishedFinding["severity"], string> = {
+  low: "🔹",
+  medium: "🟠",
+  high: "⚠️",
+  critical: "🚨",
+};
+
+const categoryEmoji: Record<PublishedFinding["category"], string> = {
+  correctness: "🧩",
+  performance: "⚡",
+  security: "🔒",
+  maintainability: "🛠️",
+  testing: "🧪",
+  style: "🎨",
+};
+
+function escapeMarkdownTableCell(value: string): string {
+  return value.replace(/\|/g, "\\|").trim();
+}
+
+function renderSignal(finding: PublishedFinding): string {
+  return `${severityEmoji[finding.severity]} ${categoryEmoji[finding.category]}`;
+}
+
+function renderGitHubSuggestion(suggestedChange: string | undefined): string[] {
+  if (!suggestedChange) {
+    return [];
+  }
+
+  return ["```suggestion", suggestedChange, "```", ""];
+}
+
+function summarizeFindingCount(count: number): string {
+  if (count === 0) {
+    return "No actionable inline findings.";
+  }
+
+  if (count === 1) {
+    return "Posted 1 inline finding.";
+  }
+
+  return `Posted ${count} inline findings.`;
+}
+
+function buildReviewRunMarker(reviewRunId: string): string {
+  return `<!-- nitpickr:review-run:${reviewRunId} -->`;
+}
+
+export class ReviewPublisher {
+  readonly #client: PublishReviewClient;
+
+  constructor(client: PublishReviewClient) {
+    this.#client = client;
+  }
+
+  buildSummaryBody(input: {
+    reviewRunId: string;
+    summary: string;
+    mermaid: string;
+    findings: PublishedFinding[];
+  }): string {
+    const findingTable =
+      input.findings.length === 0
+        ? "- ✅ No actionable inline findings."
+        : [
+            "| Signal | Location | Finding |",
+            "| --- | --- | --- |",
+            ...input.findings.map(
+              (finding) =>
+                `| ${renderSignal(finding)} | \`${finding.path}:${finding.line}\` | **${escapeMarkdownTableCell(finding.title)}**<br />${escapeMarkdownTableCell(finding.body)} |`,
+            ),
+          ].join("\n");
+
+    return [
+      buildReviewRunMarker(input.reviewRunId),
+      "",
+      "# nitpickr review ✨",
+      "",
+      `> ${input.summary.trim()}`,
+      "",
+      `**Summary:** ${summarizeFindingCount(input.findings.length)}`,
+      "",
+      "## Findings",
+      findingTable,
+      "",
+      "<details>",
+      "<summary>🧭 Change flow</summary>",
+      "",
+      "```mermaid",
+      input.mermaid.trim(),
+      "```",
+      "",
+      "</details>",
+    ].join("\n");
+  }
+
+  buildInlineComments(
+    findings: PublishedFinding[],
+    input: {
+      files?: Array<{
+        path: string;
+        patch: string | null;
+      }>;
+      maxLineDistance?: number;
+    } = {},
+  ): PublishedInlineComment[] {
+    const patchByPath = new Map(
+      (input.files ?? []).map((file) => [file.path, file.patch]),
+    );
+
+    return findings.flatMap((finding) => {
+      const patch = patchByPath.get(finding.path) ?? null;
+      const line =
+        input.files === undefined
+          ? finding.line
+          : targetReviewCommentLine(
+              input.maxLineDistance === undefined
+                ? {
+                    requestedLine: finding.line,
+                    patch,
+                  }
+                : {
+                    requestedLine: finding.line,
+                    patch,
+                    maxLineDistance: input.maxLineDistance,
+                  },
+            );
+
+      if (line === null) {
+        return [];
+      }
+
+      return [
+        {
+          path: finding.path,
+          line,
+          side: "RIGHT",
+          body: [
+            `${renderSignal(finding)} **${finding.title}**`,
+            `**Where:** \`${finding.path}:${line}\``,
+            "",
+            `${finding.body}`,
+            "",
+            ...renderGitHubSuggestion(finding.suggestedChange),
+            "<details>",
+            "<summary>🤖 AI prompt</summary>",
+            "",
+            "```text",
+            finding.fixPrompt,
+            "```",
+            "",
+            "</details>",
+          ].join("\n"),
+        },
+      ];
+    });
+  }
+
+  async publish(input: {
+    reviewRunId: string;
+    installationId: string;
+    repository: {
+      owner: string;
+      name: string;
+    };
+    pullNumber: number;
+    result: {
+      summary: string;
+      mermaid: string;
+      findings: PublishedFinding[];
+    };
+    files?: Array<{
+      path: string;
+      patch: string | null;
+    }>;
+  }): Promise<{ reviewId: string }> {
+    if (input.repository.owner.trim().length === 0) {
+      throw new Error("repository owner must not be empty.");
+    }
+    if (input.repository.name.trim().length === 0) {
+      throw new Error("repository name must not be empty.");
+    }
+    if (input.pullNumber <= 0) {
+      throw new Error("pullNumber must be positive.");
+    }
+
+    const existingReview = (
+      await this.#client.listPullRequestReviews({
+        installationId: input.installationId,
+        repository: input.repository,
+        pullNumber: input.pullNumber,
+      })
+    ).find((review) =>
+      review.body.includes(buildReviewRunMarker(input.reviewRunId)),
+    );
+
+    if (existingReview) {
+      return {
+        reviewId: existingReview.reviewId,
+      };
+    }
+
+    return this.#client.publishPullRequestReview({
+      installationId: input.installationId,
+      repository: input.repository,
+      pullNumber: input.pullNumber,
+      body: this.buildSummaryBody({
+        reviewRunId: input.reviewRunId,
+        summary: input.result.summary,
+        mermaid: input.result.mermaid,
+        findings: input.result.findings,
+      }),
+      comments:
+        input.files === undefined
+          ? this.buildInlineComments(input.result.findings)
+          : this.buildInlineComments(input.result.findings, {
+              files: input.files,
+            }),
+    });
+  }
+}

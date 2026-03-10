@@ -1,0 +1,88 @@
+export interface PromptBuilderInput {
+  changeRequest: {
+    title: string;
+    number: number;
+  };
+  chunk: {
+    index: number;
+    total: number;
+    files: Array<{
+      path: string;
+      patch: string | null;
+      additions: number;
+      deletions: number;
+    }>;
+  };
+  instructionText: string;
+  memory: Array<{
+    summary: string;
+    path?: string;
+  }>;
+  commentBudget: number;
+}
+
+export interface ReviewPrompt {
+  system: string;
+  user: string;
+}
+
+export class PromptBuilder {
+  build(input: PromptBuilderInput): ReviewPrompt {
+    if (input.chunk.files.length === 0) {
+      throw new Error("Review chunk must contain at least one file.");
+    }
+
+    return {
+      system: [
+        "You are nitpickr, an AI pull request reviewer.",
+        "Return strict JSON with keys: summary, diagram, findings.",
+        'Prefer `diagram.type = "sequence"` for pull request review flows.',
+        'Use `diagram.type = "flowchart"` only when a single component\'s internal logic is the main story.',
+        "Do not return raw Mermaid text. Return a structured diagram object instead.",
+        "Each finding must contain path, line, severity, category, title, body, fixPrompt.",
+        "A finding may also include suggestedChange for a small, high-confidence inline replacement.",
+        "Severity must be one of: 'low' | 'medium' | 'high' | 'critical'.",
+        "Category must be one of: 'correctness' | 'performance' | 'security' | 'maintainability' | 'testing' | 'style'.",
+        "Keep the summary concise: at most two short sentences.",
+        "Write polished GitHub-ready copy in plain Markdown.",
+        "Keep each finding body concise, clear, and actionable: one or two short sentences.",
+        "Lead with the issue, then the impact. Avoid filler, hedging, and repetition.",
+        "Every fixPrompt must mention the exact file path and target line that need changes.",
+        "Only return suggestedChange when the fix is small, local, and safe to apply inline on GitHub.",
+        "suggestedChange must contain only the replacement code, with no diff markers or markdown fences.",
+        "For sequence diagrams, return participants [{ id, label }] and steps [{ from, to, label }].",
+        "For flowcharts, return nodes [{ id, label }] and edges [{ from, to, label? }].",
+        "Keep the diagram GitHub-safe, compact, and limited to the most important flow.",
+        "Only report actionable review comments that matter for correctness, security, performance, maintainability, or testing.",
+      ].join("\n"),
+      user: [
+        `Pull request #${input.changeRequest.number}: ${input.changeRequest.title}`,
+        `Chunk ${input.chunk.index + 1} of ${input.chunk.total}`,
+        `Comment budget for this review: ${input.commentBudget}`,
+        "",
+        "Repository instructions:",
+        input.instructionText.trim(),
+        "",
+        "Relevant memory:",
+        input.memory.length === 0
+          ? "None"
+          : input.memory
+              .map((entry) =>
+                entry.path ? `${entry.path}: ${entry.summary}` : entry.summary,
+              )
+              .join("\n"),
+        "",
+        "Changed files:",
+        ...input.chunk.files.map((file) =>
+          [
+            `Path: ${file.path}`,
+            `Additions: ${file.additions}`,
+            `Deletions: ${file.deletions}`,
+            "Patch:",
+            file.patch ?? "Patch unavailable.",
+          ].join("\n"),
+        ),
+      ].join("\n"),
+    };
+  }
+}

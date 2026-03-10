@@ -1,0 +1,5 @@
+review:
+  strictness: balanced
+  maxComments: 20
+  focusAreas: []
+  ignorePaths: []

@@ -5,7 +5,7 @@ import type {
 } from "./webhook-event-service.js";
 
 export interface PostgresWebhookEventClient {
-  unsafe<T extends Record<string, unknown>>(
+  query<T extends Record<string, unknown>>(
     query: string,
     params?: readonly unknown[],
   ): Promise<T[]>;
@@ -33,7 +33,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
   ): Promise<WebhookEventRecord | null> {
     assertNonEmpty(deliveryId, "deliveryId");
 
-    const rows = await this.#client.unsafe<Record<string, unknown>>(
+    const rows = await this.#client.query<Record<string, unknown>>(
       `
         select delivery_id, provider, event_name, status
         from webhook_events
@@ -66,7 +66,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
     assertNonEmpty(input.deliveryId, "deliveryId");
     assertNonEmpty(input.eventName, "eventName");
 
-    await this.#client.unsafe(
+    await this.#client.query(
       `
         insert into webhook_events (
           delivery_id,
@@ -105,7 +105,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
       assertNonEmpty(input.changeRequestId, "changeRequestId");
     }
 
-    await this.#client.unsafe(
+    await this.#client.query(
       `
         update webhook_events
         set status = $2,

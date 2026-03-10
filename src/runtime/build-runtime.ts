@@ -1,3 +1,5 @@
+import type postgres from "postgres";
+
 import { PostgresWebhookEventStore } from "../api/postgres-webhook-event-store.js";
 import { WebhookEventService } from "../api/webhook-event-service.js";
 import {
@@ -72,7 +74,15 @@ export function buildRuntime(
   );
   const reviewPlanner = new ReviewPlanner();
   const webhookEventService = new WebhookEventService(
-    new PostgresWebhookEventStore(sql),
+    new PostgresWebhookEventStore({
+      query: (query, params) =>
+        sql.unsafe(
+          query,
+          params
+            ? ([...params] as postgres.ParameterOrJSON<never>[])
+            : undefined,
+        ),
+    }),
   );
   const runtimeConfigService = new RuntimeConfigService(
     config.secretKey

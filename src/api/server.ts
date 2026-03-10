@@ -1,9 +1,12 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import { z } from "zod";
 
 import type { ReadinessStatus } from "../health/readiness-service.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
 import type { SetupStatus } from "../setup/runtime-config-service.js";
 import type { GitHubWebhookService } from "./github-webhook-service.js";
+
+const webhookPayloadSchema = z.record(z.string(), z.unknown());
 
 function renderSetupPage(setupStatus: SetupStatus): string {
   return `<!doctype html>
@@ -120,7 +123,17 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
     }
 
     const rawBody = typeof request.body === "string" ? request.body : "";
-    const payload = rawBody.length === 0 ? {} : JSON.parse(rawBody);
+    let payload: Record<string, unknown>;
+    try {
+      payload = webhookPayloadSchema.parse(
+        rawBody.length === 0 ? {} : JSON.parse(rawBody),
+      );
+    } catch {
+      return reply.status(400).send({
+        accepted: false,
+        message: "Invalid GitHub webhook payload.",
+      });
+    }
     const deliveryId = request.headers["x-github-delivery"];
     const eventName = String(request.headers["x-github-event"] ?? "");
     const signature = String(request.headers["x-hub-signature-256"] ?? "");

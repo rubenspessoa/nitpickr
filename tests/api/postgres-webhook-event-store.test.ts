@@ -15,7 +15,7 @@ class FakePostgresClient {
     this.responses.push(rows);
   }
 
-  async unsafe<T extends Record<string, unknown>>(
+  async query<T extends Record<string, unknown>>(
     query: string,
     params?: readonly unknown[],
   ): Promise<T[]> {

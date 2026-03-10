@@ -211,4 +211,35 @@ describe("createApiServer", () => {
       },
     });
   });
+
+  it("rejects malformed GitHub webhook payloads before processing", async () => {
+    const server = createApiServer({
+      githubWebhookService: {
+        async handle() {
+          return {
+            statusCode: 202,
+            accepted: true,
+            message: "queued",
+          };
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "x-github-event": "pull_request",
+        "x-hub-signature-256": "sha256=test",
+        "content-type": "application/json",
+      },
+      payload: "{not-json",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      accepted: false,
+      message: "Invalid GitHub webhook payload.",
+    });
+  });
 });

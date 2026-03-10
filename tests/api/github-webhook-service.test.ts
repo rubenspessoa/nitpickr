@@ -376,16 +376,17 @@ describe("GitHubWebhookService", () => {
       throw new Error("boom");
     };
 
-    await expect(
-      service.handle({
-        deliveryId: "delivery-fail",
-        eventName: "pull_request",
-        signature: "sha256=test",
-        rawBody: "{}",
-        payload: {},
-      }),
-    ).rejects.toThrow("boom");
+    const result = await service.handle({
+      deliveryId: "delivery-fail",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
 
+    expect(result.statusCode).toBe(500);
+    expect(result.accepted).toBe(false);
+    expect(result.message).toBe("Failed to process GitHub webhook event.");
     expect(logger.entries).toContainEqual({
       level: "warn",
       message: "Failed to persist GitHub webhook event status.",
@@ -394,6 +395,41 @@ describe("GitHubWebhookService", () => {
         deliveryId: "delivery-fail",
         status: "failed",
         error: "db write failed",
+      },
+    });
+    expect(logger.entries).toContainEqual({
+      level: "error",
+      message: "GitHub webhook processing failed.",
+      fields: {
+        component: "github-webhook",
+        eventName: "pull_request",
+        error: "boom",
+      },
+    });
+  });
+
+  it("logs when webhook event tracking is disabled", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(adapter, queue, logger);
+
+    const result = await service.handle({
+      deliveryId: "delivery-noop",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(202);
+    expect(logger.entries).toContainEqual({
+      level: "debug",
+      message: "GitHub webhook event tracking is disabled.",
+      fields: {
+        component: "webhook-event-tracker",
+        deliveryId: "delivery-noop",
+        operation: "beginDelivery",
       },
     });
   });

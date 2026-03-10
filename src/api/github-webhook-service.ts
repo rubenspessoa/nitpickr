@@ -30,15 +30,6 @@ type WebhookEventTracker = Pick<
   "beginDelivery" | "markFailed" | "markIgnored" | "markQueued"
 >;
 
-const noopWebhookEventTracker: WebhookEventTracker = {
-  async beginDelivery() {
-    return "new";
-  },
-  async markFailed() {},
-  async markIgnored() {},
-  async markQueued() {},
-};
-
 function buildReviewJobInput(
   event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
 ): EnqueueJobInput {
@@ -78,14 +69,50 @@ export class GitHubWebhookService {
     >,
     queueScheduler: Pick<QueueScheduler, "enqueue">,
     logger: Logger = noopLogger,
-    webhookEventService: WebhookEventTracker = noopWebhookEventTracker,
+    webhookEventService?: WebhookEventTracker,
   ) {
     this.#adapter = adapter;
     this.#queueScheduler = queueScheduler;
     this.#logger = logger.child({
       component: "github-webhook",
     });
-    this.#webhookEventService = webhookEventService;
+    this.#webhookEventService =
+      webhookEventService ??
+      this.#createNoopWebhookEventTracker(
+        this.#logger.child({
+          component: "webhook-event-tracker",
+        }),
+      );
+  }
+
+  #createNoopWebhookEventTracker(logger: Logger): WebhookEventTracker {
+    return {
+      beginDelivery: async ({ deliveryId }) => {
+        logger.debug("GitHub webhook event tracking is disabled.", {
+          deliveryId,
+          operation: "beginDelivery",
+        });
+        return "new";
+      },
+      markFailed: async ({ deliveryId }) => {
+        logger.debug("GitHub webhook event tracking is disabled.", {
+          deliveryId,
+          operation: "markFailed",
+        });
+      },
+      markIgnored: async ({ deliveryId }) => {
+        logger.debug("GitHub webhook event tracking is disabled.", {
+          deliveryId,
+          operation: "markIgnored",
+        });
+      },
+      markQueued: async ({ deliveryId }) => {
+        logger.debug("GitHub webhook event tracking is disabled.", {
+          deliveryId,
+          operation: "markQueued",
+        });
+      },
+    };
   }
 
   async #updateWebhookEventStatus(
@@ -248,8 +275,16 @@ export class GitHubWebhookService {
         errorMessage:
           error instanceof Error ? error.message : "Unknown webhook failure.",
       });
-
-      throw error;
+      this.#logger.error("GitHub webhook processing failed.", {
+        eventName: parsed.eventName,
+        error:
+          error instanceof Error ? error.message : "Unknown webhook failure.",
+      });
+      return {
+        statusCode: 500,
+        accepted: false,
+        message: "Failed to process GitHub webhook event.",
+      };
     }
   }
 }

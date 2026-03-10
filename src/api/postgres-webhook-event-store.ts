@@ -11,6 +11,16 @@ export interface PostgresWebhookEventClient {
   ): Promise<T[]>;
 }
 
+function assertNonEmpty(value: string, fieldName: string): void {
+  if (value.trim().length === 0) {
+    throw new Error(`${fieldName} must not be empty.`);
+  }
+}
+
+function toJsonPayload(value: unknown): string {
+  return JSON.stringify(value);
+}
+
 export class PostgresWebhookEventStore implements WebhookEventStore {
   readonly #client: PostgresWebhookEventClient;
 
@@ -21,6 +31,8 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
   async getByDeliveryId(
     deliveryId: string,
   ): Promise<WebhookEventRecord | null> {
+    assertNonEmpty(deliveryId, "deliveryId");
+
     const rows = await this.#client.unsafe<Record<string, unknown>>(
       `
         select delivery_id, provider, event_name, status
@@ -51,6 +63,9 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
     status: WebhookEventStatus;
     payload: unknown;
   }): Promise<void> {
+    assertNonEmpty(input.deliveryId, "deliveryId");
+    assertNonEmpty(input.eventName, "eventName");
+
     await this.#client.unsafe(
       `
         insert into webhook_events (
@@ -69,7 +84,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
         input.provider,
         input.eventName,
         input.status,
-        JSON.stringify(input.payload),
+        toJsonPayload(input.payload),
       ],
     );
   }
@@ -82,6 +97,14 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
     errorMessage?: string;
     payload?: unknown;
   }): Promise<void> {
+    assertNonEmpty(input.deliveryId, "deliveryId");
+    if (input.repositoryId !== undefined) {
+      assertNonEmpty(input.repositoryId, "repositoryId");
+    }
+    if (input.changeRequestId !== undefined) {
+      assertNonEmpty(input.changeRequestId, "changeRequestId");
+    }
+
     await this.#client.unsafe(
       `
         update webhook_events
@@ -99,7 +122,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
         input.repositoryId ?? null,
         input.changeRequestId ?? null,
         input.errorMessage ?? null,
-        input.payload === undefined ? null : JSON.stringify(input.payload),
+        input.payload === undefined ? null : toJsonPayload(input.payload),
       ],
     );
   }

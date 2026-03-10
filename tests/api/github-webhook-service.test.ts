@@ -79,6 +79,7 @@ class FakeWebhookEventService {
   ignored: string[] = [];
   failed: string[] = [];
   duplicates = new Set<string>();
+  markFailedError: Error | null = null;
 
   async beginDelivery(input: { deliveryId: string }) {
     this.received.push(input.deliveryId);
@@ -94,6 +95,9 @@ class FakeWebhookEventService {
   }
 
   async markFailed(input: { deliveryId: string }) {
+    if (this.markFailedError) {
+      throw this.markFailedError;
+    }
     this.failed.push(input.deliveryId);
   }
 }
@@ -353,5 +357,44 @@ describe("GitHubWebhookService", () => {
     expect(result.accepted).toBe(false);
     expect(result.message).toBe("Duplicate GitHub webhook delivery ignored.");
     expect(queue.calls).toEqual([]);
+  });
+
+  it("logs webhook event persistence failures without swallowing the original webhook error", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    webhookEvents.markFailedError = new Error("db write failed");
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      logger,
+      webhookEvents,
+    );
+
+    adapter.normalizeWebhookEvent = () => {
+      throw new Error("boom");
+    };
+
+    await expect(
+      service.handle({
+        deliveryId: "delivery-fail",
+        eventName: "pull_request",
+        signature: "sha256=test",
+        rawBody: "{}",
+        payload: {},
+      }),
+    ).rejects.toThrow("boom");
+
+    expect(logger.entries).toContainEqual({
+      level: "warn",
+      message: "Failed to persist GitHub webhook event status.",
+      fields: {
+        component: "github-webhook",
+        deliveryId: "delivery-fail",
+        status: "failed",
+        error: "db write failed",
+      },
+    });
   });
 });

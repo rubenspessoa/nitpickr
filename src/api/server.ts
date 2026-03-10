@@ -25,16 +25,26 @@ function renderSetupPage(setupStatus: SetupStatus): string {
 </html>`;
 }
 
-export function createApiServer(input: {
+type GitHubWebhookHandler = Pick<GitHubWebhookService, "handle">;
+
+export interface ApiServerDependencies {
   logger?: Logger;
-  githubWebhookService?: Pick<GitHubWebhookService, "handle">;
+  // This stays optional while nitpickr is in setup_required mode.
+  // In that state the API still serves health/setup endpoints, but webhook
+  // requests are rejected with 503 until onboarding finishes.
+  githubWebhookService?: GitHubWebhookHandler;
   readinessService?: {
     getStatus(): Promise<ReadinessStatus>;
   };
   setupStatusService?: {
     getSetupStatus(): Promise<SetupStatus>;
   };
-}): FastifyInstance {
+}
+
+export function createApiServer(input: ApiServerDependencies): FastifyInstance {
+  const githubWebhookService = input.githubWebhookService;
+  const readinessService = input.readinessService;
+  const setupStatusService = input.setupStatusService;
   const server = Fastify({
     logger: false,
   });
@@ -54,8 +64,8 @@ export function createApiServer(input: {
     ok: true,
   }));
 
-  server.get("/readyz", async (request, reply) => {
-    if (!input.readinessService) {
+  server.get("/readyz", async (_request, reply) => {
+    if (!readinessService) {
       return {
         ok: true,
         state: "ready",
@@ -68,13 +78,13 @@ export function createApiServer(input: {
       };
     }
 
-    const status = await input.readinessService.getStatus();
+    const status = await readinessService.getStatus();
     return reply.status(status.ok ? 200 : 503).send(status);
   });
 
   server.get("/setup", async (_request, reply) => {
-    const setupStatus = input.setupStatusService
-      ? await input.setupStatusService.getSetupStatus()
+    const setupStatus = setupStatusService
+      ? await setupStatusService.getSetupStatus()
       : {
           state: "ready" as const,
           openAiConfigured: true,
@@ -89,7 +99,7 @@ export function createApiServer(input: {
   });
 
   server.get("/setup/status", async () => {
-    if (!input.setupStatusService) {
+    if (!setupStatusService) {
       return {
         state: "ready" as const,
         openAiConfigured: true,
@@ -98,11 +108,11 @@ export function createApiServer(input: {
       };
     }
 
-    return input.setupStatusService.getSetupStatus();
+    return setupStatusService.getSetupStatus();
   });
 
   server.post("/webhooks/github", async (request, reply) => {
-    if (!input.githubWebhookService) {
+    if (!githubWebhookService) {
       return reply.status(503).send({
         accepted: false,
         message: "Nitpickr setup is incomplete.",
@@ -115,7 +125,7 @@ export function createApiServer(input: {
     const eventName = String(request.headers["x-github-event"] ?? "");
     const signature = String(request.headers["x-hub-signature-256"] ?? "");
 
-    const result = await input.githubWebhookService.handle({
+    const result = await githubWebhookService.handle({
       ...(typeof deliveryId === "string" && deliveryId.trim().length > 0
         ? { deliveryId }
         : {}),

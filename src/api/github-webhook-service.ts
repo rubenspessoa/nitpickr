@@ -25,6 +25,20 @@ export interface GitHubWebhookResult {
   message: string;
 }
 
+type WebhookEventTracker = Pick<
+  WebhookEventService,
+  "beginDelivery" | "markFailed" | "markIgnored" | "markQueued"
+>;
+
+const noopWebhookEventTracker: WebhookEventTracker = {
+  async beginDelivery() {
+    return "new";
+  },
+  async markFailed() {},
+  async markIgnored() {},
+  async markQueued() {},
+};
+
 function buildReviewJobInput(
   event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
 ): EnqueueJobInput {
@@ -55,10 +69,7 @@ export class GitHubWebhookService {
   >;
   readonly #queueScheduler: Pick<QueueScheduler, "enqueue">;
   readonly #logger: Logger;
-  readonly #webhookEventService: Pick<
-    WebhookEventService,
-    "beginDelivery" | "markFailed" | "markIgnored" | "markQueued"
-  > | null;
+  readonly #webhookEventService: WebhookEventTracker;
 
   constructor(
     adapter: Pick<
@@ -67,10 +78,7 @@ export class GitHubWebhookService {
     >,
     queueScheduler: Pick<QueueScheduler, "enqueue">,
     logger: Logger = noopLogger,
-    webhookEventService: Pick<
-      WebhookEventService,
-      "beginDelivery" | "markFailed" | "markIgnored" | "markQueued"
-    > | null = null,
+    webhookEventService: WebhookEventTracker = noopWebhookEventTracker,
   ) {
     this.#adapter = adapter;
     this.#queueScheduler = queueScheduler;
@@ -78,6 +86,58 @@ export class GitHubWebhookService {
       component: "github-webhook",
     });
     this.#webhookEventService = webhookEventService;
+  }
+
+  async #updateWebhookEventStatus(
+    deliveryId: string | undefined,
+    status: "failed" | "ignored" | "queued",
+    fields: {
+      repositoryId?: string;
+      changeRequestId?: string;
+      errorMessage?: string;
+    } = {},
+  ): Promise<void> {
+    if (!deliveryId) {
+      return;
+    }
+
+    try {
+      if (status === "failed") {
+        await this.#webhookEventService.markFailed({
+          deliveryId,
+          errorMessage: fields.errorMessage ?? "Unknown webhook failure.",
+        });
+        return;
+      }
+
+      if (status === "ignored") {
+        await this.#webhookEventService.markIgnored({
+          deliveryId,
+          ...(fields.repositoryId ? { repositoryId: fields.repositoryId } : {}),
+          ...(fields.changeRequestId
+            ? { changeRequestId: fields.changeRequestId }
+            : {}),
+        });
+        return;
+      }
+
+      await this.#webhookEventService.markQueued({
+        deliveryId,
+        ...(fields.repositoryId ? { repositoryId: fields.repositoryId } : {}),
+        ...(fields.changeRequestId
+          ? { changeRequestId: fields.changeRequestId }
+          : {}),
+      });
+    } catch (error) {
+      this.#logger.warn("Failed to persist GitHub webhook event status.", {
+        deliveryId,
+        status,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unknown webhook event persistence failure.",
+      });
+    }
   }
 
   async handle(input: {
@@ -88,7 +148,7 @@ export class GitHubWebhookService {
     payload: unknown;
   }): Promise<GitHubWebhookResult> {
     const parsed = webhookRequestSchema.parse(input);
-    if (parsed.deliveryId && this.#webhookEventService) {
+    if (parsed.deliveryId) {
       const delivery = await this.#webhookEventService.beginDelivery({
         deliveryId: parsed.deliveryId,
         provider: "github",
@@ -114,12 +174,9 @@ export class GitHubWebhookService {
       parsed.signature,
     );
     if (!valid) {
-      if (parsed.deliveryId && this.#webhookEventService) {
-        await this.#webhookEventService.markFailed({
-          deliveryId: parsed.deliveryId,
-          errorMessage: "Invalid GitHub webhook signature.",
-        });
-      }
+      await this.#updateWebhookEventStatus(parsed.deliveryId, "failed", {
+        errorMessage: "Invalid GitHub webhook signature.",
+      });
       this.#logger.warn("Rejected GitHub webhook with invalid signature.", {
         eventName: parsed.eventName,
       });
@@ -157,11 +214,7 @@ export class GitHubWebhookService {
       );
 
       if (normalized.kind === "ignored") {
-        if (parsed.deliveryId && this.#webhookEventService) {
-          await this.#webhookEventService.markIgnored({
-            deliveryId: parsed.deliveryId,
-          });
-        }
+        await this.#updateWebhookEventStatus(parsed.deliveryId, "ignored");
         this.#logger.info("Ignored GitHub webhook event.", {
           eventName: parsed.eventName,
           reason: normalized.reason,
@@ -174,13 +227,10 @@ export class GitHubWebhookService {
       }
 
       await this.#queueScheduler.enqueue(buildReviewJobInput(normalized));
-      if (parsed.deliveryId && this.#webhookEventService) {
-        await this.#webhookEventService.markQueued({
-          deliveryId: parsed.deliveryId,
-          repositoryId: normalized.repository.repositoryId,
-          changeRequestId: `${normalized.repository.repositoryId}:${normalized.pullNumber}`,
-        });
-      }
+      await this.#updateWebhookEventStatus(parsed.deliveryId, "queued", {
+        repositoryId: normalized.repository.repositoryId,
+        changeRequestId: `${normalized.repository.repositoryId}:${normalized.pullNumber}`,
+      });
       this.#logger.info("Queued GitHub review job.", {
         eventName: parsed.eventName,
         installationId: normalized.installationId,
@@ -194,13 +244,10 @@ export class GitHubWebhookService {
         message: "Review job queued.",
       };
     } catch (error) {
-      if (parsed.deliveryId && this.#webhookEventService) {
-        await this.#webhookEventService.markFailed({
-          deliveryId: parsed.deliveryId,
-          errorMessage:
-            error instanceof Error ? error.message : "Unknown webhook failure.",
-        });
-      }
+      await this.#updateWebhookEventStatus(parsed.deliveryId, "failed", {
+        errorMessage:
+          error instanceof Error ? error.message : "Unknown webhook failure.",
+      });
 
       throw error;
     }

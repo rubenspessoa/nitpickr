@@ -67,4 +67,29 @@ describe("PostgresWebhookEventStore", () => {
     expect(client.calls[0]?.query).toContain("insert into webhook_events");
     expect(client.calls[1]?.query).toContain("update webhook_events");
   });
+
+  it("rejects empty identifiers before querying", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(() => store.getByDeliveryId("")).rejects.toThrow(
+      /deliveryId/i,
+    );
+    await expect(() =>
+      store.createEvent({
+        deliveryId: "delivery-3",
+        provider: "github",
+        eventName: "",
+        status: "received",
+        payload: {},
+      }),
+    ).rejects.toThrow(/eventName/i);
+    await expect(() =>
+      store.updateEvent({
+        deliveryId: "delivery-3",
+        status: "queued",
+        repositoryId: "",
+      }),
+    ).rejects.toThrow(/repositoryId/i);
+  });
 });

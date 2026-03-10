@@ -1,19 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import type { RuntimeSecrets } from "../../src/config/app-config.js";
 import {
   RuntimeConfigService,
   type RuntimeConfigStore,
 } from "../../src/setup/runtime-config-service.js";
 
 class InMemoryRuntimeConfigStore implements RuntimeConfigStore {
-  runtimeSecrets: {
-    openAiApiKey: string;
-    openAiModel?: string;
-    githubAppId: number;
-    githubPrivateKey: string;
-    githubWebhookSecret: string;
-    githubBotLogins?: string[];
-  } | null = null;
+  runtimeSecrets: RuntimeSecrets | null = null;
 
   async loadRuntimeSecrets() {
     return this.runtimeSecrets;

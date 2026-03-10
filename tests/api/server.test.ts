@@ -59,6 +59,7 @@ describe("createApiServer", () => {
       method: "POST",
       url: "/webhooks/github",
       headers: {
+        "x-github-delivery": "delivery-1",
         "x-github-event": "pull_request",
         "x-hub-signature-256": "sha256=test",
         "content-type": "application/json",
@@ -159,6 +160,7 @@ describe("createApiServer", () => {
       method: "POST",
       url: "/webhooks/github",
       headers: {
+        "x-github-delivery": "delivery-2",
         "x-github-event": "pull_request",
         "x-hub-signature-256": "sha256=test",
         "content-type": "application/json",
@@ -190,6 +192,7 @@ describe("createApiServer", () => {
       method: "POST",
       url: "/webhooks/github",
       headers: {
+        "x-github-delivery": "delivery-3",
         "x-github-event": "pull_request",
         "x-hub-signature-256": "sha256=test",
         "content-type": "application/json",
@@ -240,6 +243,37 @@ describe("createApiServer", () => {
     expect(response.json()).toEqual({
       accepted: false,
       message: "Invalid GitHub webhook payload.",
+    });
+  });
+
+  it("rejects webhook requests that are missing required GitHub headers", async () => {
+    const server = createApiServer({
+      githubWebhookService: {
+        async handle() {
+          return {
+            statusCode: 202,
+            accepted: true,
+            message: "queued",
+          };
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "content-type": "application/json",
+      },
+      payload: JSON.stringify({
+        action: "opened",
+      }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      accepted: false,
+      message: "Missing required GitHub webhook headers.",
     });
   });
 });

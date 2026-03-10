@@ -110,6 +110,21 @@ describe("parseRuntimeSecretsFromEnvironment", () => {
       }),
     ).toBeNull();
   });
+
+  it("parses and normalizes runtime bot logins", () => {
+    expect(
+      parseRuntimeSecretsFromEnvironment({
+        OPENAI_API_KEY: "sk-test-key",
+        GITHUB_APP_ID: "123456",
+        GITHUB_BOT_LOGINS: "GetNitpickr, nitpickr",
+        GITHUB_PRIVATE_KEY:
+          "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+        GITHUB_WEBHOOK_SECRET: "webhook-secret",
+      }),
+    ).toMatchObject({
+      githubBotLogins: ["getnitpickr", "nitpickr"],
+    });
+  });
 });
 
 describe("buildAppConfig", () => {

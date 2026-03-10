@@ -10,15 +10,25 @@ interface QueryCall {
 class FakePostgresClient {
   readonly calls: QueryCall[] = [];
   readonly responses: unknown[][] = [];
+  readonly errors: Error[] = [];
 
   queueResponse(rows: unknown[]): void {
     this.responses.push(rows);
+  }
+
+  queueError(error: Error): void {
+    this.errors.push(error);
   }
 
   async unsafe<T extends Record<string, unknown>>(
     query: string,
     params?: readonly unknown[],
   ): Promise<T[]> {
+    const error = this.errors.shift();
+    if (error) {
+      throw error;
+    }
+
     this.calls.push({ query, params });
     return (this.responses.shift() ?? []) as T[];
   }
@@ -50,5 +60,29 @@ describe("PostgresWorkerHeartbeatStore", () => {
     await expect(
       store.listFreshWorkerIds(new Date("2026-03-09T09:59:00.000Z")),
     ).resolves.toEqual(["worker-1"]);
+  });
+
+  it("adds context when heartbeat persistence fails", async () => {
+    const client = new FakePostgresClient();
+    client.queueError(new Error("db unavailable"));
+    const store = new PostgresWorkerHeartbeatStore(client);
+
+    await expect(
+      store.recordHeartbeat({
+        workerId: "worker-1",
+        status: "ready",
+        recordedAt: new Date("2026-03-09T10:00:00.000Z"),
+      }),
+    ).rejects.toThrow(/record worker heartbeat/i);
+  });
+
+  it("adds context when heartbeat reads fail", async () => {
+    const client = new FakePostgresClient();
+    client.queueError(new Error("db unavailable"));
+    const store = new PostgresWorkerHeartbeatStore(client);
+
+    await expect(
+      store.hasFreshHeartbeat(new Date("2026-03-09T09:59:00.000Z")),
+    ).rejects.toThrow(/query worker heartbeat/i);
   });
 });

@@ -579,6 +579,7 @@ describe("review flow integration", () => {
       payload,
       headers: {
         "content-type": "application/json",
+        "x-github-delivery": "delivery-1",
         "x-github-event": "pull_request",
         "x-hub-signature-256": createSignature("webhook-secret", payload),
       },
@@ -678,6 +679,7 @@ describe("review flow integration", () => {
       payload,
       headers: {
         "content-type": "application/json",
+        "x-github-delivery": "delivery-2",
         "x-github-event": "issue_comment",
         "x-hub-signature-256": createSignature("webhook-secret", payload),
       },

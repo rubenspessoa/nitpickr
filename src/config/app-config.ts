@@ -34,6 +34,7 @@ const runtimeSecretEnvironmentSchema = z.object({
 });
 
 type BootstrapEnvironment = z.infer<typeof bootstrapEnvironmentSchema>;
+type BotLogins = [string, ...string[]];
 
 export interface RuntimeSecrets {
   openAiApiKey: string;
@@ -41,7 +42,7 @@ export interface RuntimeSecrets {
   githubAppId: number;
   githubPrivateKey: string;
   githubWebhookSecret: string;
-  githubBotLogins?: string[];
+  githubBotLogins?: BotLogins;
 }
 
 export interface BootstrapConfig {
@@ -56,7 +57,7 @@ export interface BootstrapConfig {
   };
   github: {
     apiBaseUrl: string;
-    botLogins: string[];
+    botLogins: BotLogins;
   };
   logging: {
     level: "debug" | "info" | "warn" | "error";
@@ -90,7 +91,7 @@ export interface AppConfig {
   github: {
     appId: number;
     apiBaseUrl: string;
-    botLogins: string[];
+    botLogins: BotLogins;
     privateKey: string;
     webhookSecret: string;
     webhookUrl: string;
@@ -130,7 +131,7 @@ function parseInteger(
   return parsed;
 }
 
-function parseBotLogins(value: string | undefined): string[] {
+function parseBotLogins(value: string | undefined): BotLogins {
   if (value === undefined) {
     return ["nitpickr", "getnitpickr"];
   }
@@ -144,7 +145,7 @@ function parseBotLogins(value: string | undefined): string[] {
     throw new Error("GITHUB_BOT_LOGINS must contain at least one login.");
   }
 
-  return [...new Set(parsed)];
+  return [...new Set(parsed)] as BotLogins;
 }
 
 function parseRepositoryAllowlist(value: string | undefined): string[] | null {
@@ -319,14 +320,31 @@ export function buildAppConfig(
 export function parseAppConfig(
   input: Record<string, string | undefined>,
 ): AppConfig {
-  const secrets = parseRuntimeSecretsFromEnvironment(input);
-  if (!secrets) {
-    runtimeSecretEnvironmentSchema.parse(input);
+  const runtimeSecrets = runtimeSecretEnvironmentSchema.safeParse(input);
+  if (!runtimeSecrets.success) {
+    throw runtimeSecrets.error;
   }
 
   return buildAppConfig(
     parseBootstrapConfig(input),
-    secrets as RuntimeSecrets,
+    {
+      openAiApiKey: runtimeSecrets.data.OPENAI_API_KEY,
+      githubAppId: Number.parseInt(runtimeSecrets.data.GITHUB_APP_ID, 10),
+      githubPrivateKey: normalizePrivateKey(
+        runtimeSecrets.data.GITHUB_PRIVATE_KEY,
+      ),
+      githubWebhookSecret: runtimeSecrets.data.GITHUB_WEBHOOK_SECRET,
+      ...(runtimeSecrets.data.OPENAI_MODEL
+        ? { openAiModel: runtimeSecrets.data.OPENAI_MODEL }
+        : {}),
+      ...(runtimeSecrets.data.GITHUB_BOT_LOGINS
+        ? {
+            githubBotLogins: parseBotLogins(
+              runtimeSecrets.data.GITHUB_BOT_LOGINS,
+            ),
+          }
+        : {}),
+    },
     "environment",
   );
 }

@@ -50,7 +50,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
 
     return {
       deliveryId: String(row.delivery_id),
-      provider: "github",
+      provider: String(row.provider) as "github",
       eventName: String(row.event_name),
       status: String(row.status) as WebhookEventStatus,
     };

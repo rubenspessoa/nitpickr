@@ -7,6 +7,11 @@ import type { SetupStatus } from "../setup/runtime-config-service.js";
 import type { GitHubWebhookService } from "./github-webhook-service.js";
 
 const webhookPayloadSchema = z.record(z.string(), z.unknown());
+const githubWebhookHeadersSchema = z.object({
+  eventName: z.string().min(1),
+  signature: z.string().min(1),
+  deliveryId: z.string().min(1),
+});
 
 function renderSetupPage(setupStatus: SetupStatus): string {
   return `<!doctype html>
@@ -134,16 +139,23 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
         message: "Invalid GitHub webhook payload.",
       });
     }
-    const deliveryId = request.headers["x-github-delivery"];
-    const eventName = String(request.headers["x-github-event"] ?? "");
-    const signature = String(request.headers["x-hub-signature-256"] ?? "");
+    const headerResult = githubWebhookHeadersSchema.safeParse({
+      deliveryId: request.headers["x-github-delivery"],
+      eventName: request.headers["x-github-event"],
+      signature: request.headers["x-hub-signature-256"],
+    });
+
+    if (!headerResult.success) {
+      return reply.status(400).send({
+        accepted: false,
+        message: "Missing required GitHub webhook headers.",
+      });
+    }
 
     const result = await githubWebhookService.handle({
-      ...(typeof deliveryId === "string" && deliveryId.trim().length > 0
-        ? { deliveryId }
-        : {}),
-      eventName,
-      signature,
+      deliveryId: headerResult.data.deliveryId,
+      eventName: headerResult.data.eventName,
+      signature: headerResult.data.signature,
       rawBody,
       payload,
     });

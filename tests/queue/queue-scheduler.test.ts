@@ -117,6 +117,36 @@ class InMemoryJobStore implements JobStore {
 
     return canceled;
   }
+
+  async requeueStaleRunningJobs(input: {
+    activeWorkerIds: string[];
+    staleStartedBefore: Date;
+    recoveredAt: Date;
+  }): Promise<number> {
+    let recovered = 0;
+
+    for (const [jobId, job] of this.jobs.entries()) {
+      if (
+        job.status === "running" &&
+        job.startedAt !== null &&
+        job.startedAt <= input.staleStartedBefore &&
+        (!job.workerId || !input.activeWorkerIds.includes(job.workerId))
+      ) {
+        this.jobs.set(jobId, {
+          ...job,
+          status: "queued",
+          scheduledAt: input.recoveredAt,
+          startedAt: null,
+          workerId: null,
+          lastError:
+            "Recovered stale running job after worker heartbeat timeout.",
+        });
+        recovered += 1;
+      }
+    }
+
+    return recovered;
+  }
 }
 
 const sha = {
@@ -352,5 +382,43 @@ describe("QueueScheduler", () => {
 
     expect(failed.status).toBe("failed");
     expect(failed.attempts).toBe(1);
+  });
+
+  it("requeues stale running jobs from workers without a fresh heartbeat", async () => {
+    const store = new InMemoryJobStore();
+    await store.createJob(
+      buildJobInput({
+        id: "stale_running_job",
+        status: "running",
+      }),
+    );
+    await store.updateJob("stale_running_job", {
+      startedAt: new Date("2026-03-09T09:50:00.000Z"),
+      workerId: "worker-stale",
+    });
+
+    await store.createJob(
+      buildJobInput({
+        id: "healthy_running_job",
+        status: "running",
+      }),
+    );
+    await store.updateJob("healthy_running_job", {
+      startedAt: new Date("2026-03-09T09:59:30.000Z"),
+      workerId: "worker-fresh",
+    });
+
+    const scheduler = new QueueScheduler(store, {
+      now: () => new Date("2026-03-09T10:00:00.000Z"),
+    });
+
+    const recovered = await scheduler.recoverStaleRunningJobs({
+      activeWorkerIds: ["worker-fresh"],
+      staleStartedBefore: new Date("2026-03-09T09:58:00.000Z"),
+    });
+
+    expect(recovered).toBe(1);
+    expect(store.jobs.get("stale_running_job")?.status).toBe("queued");
+    expect(store.jobs.get("healthy_running_job")?.status).toBe("running");
   });
 });

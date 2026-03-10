@@ -154,6 +154,10 @@ class InMemoryJobStore implements JobStore {
 
     return canceled;
   }
+
+  async requeueStaleRunningJobs(): Promise<number> {
+    return 0;
+  }
 }
 
 class InMemoryMemoryStore implements MemoryStore {

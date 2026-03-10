@@ -129,4 +129,39 @@ export const migrations = [
     alter table review_findings
     add column if not exists suggested_change text;
   `,
+  `
+    alter table review_runs
+    add column if not exists check_run_id text;
+  `,
+  `
+    create table if not exists app_runtime_config (
+      singleton_key text primary key,
+      encrypted_runtime_secrets text,
+      updated_at timestamptz not null
+    );
+  `,
+  `
+    create table if not exists worker_heartbeats (
+      worker_id text primary key,
+      status text not null,
+      last_seen_at timestamptz not null,
+      updated_at timestamptz not null
+    );
+  `,
+  `
+    create table if not exists webhook_events (
+      delivery_id text primary key,
+      provider text not null,
+      event_name text not null,
+      status text not null,
+      repository_id text,
+      change_request_id text,
+      payload jsonb,
+      error_message text,
+      received_at timestamptz not null,
+      updated_at timestamptz not null
+    );
+
+    create index if not exists webhook_events_status_idx on webhook_events (provider, status, updated_at desc);
+  `,
 ];

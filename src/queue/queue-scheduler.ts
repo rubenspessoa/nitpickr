@@ -64,6 +64,11 @@ export interface JobStore {
     changeRequestId: string;
     headSha: string;
   }): Promise<number>;
+  requeueStaleRunningJobs(input: {
+    activeWorkerIds: string[];
+    staleStartedBefore: Date;
+    recoveredAt: Date;
+  }): Promise<number>;
 }
 
 export interface QueueSchedulerDependencies {
@@ -177,6 +182,17 @@ export class QueueScheduler {
     assertNonEmpty(input.headSha, "headSha");
 
     return this.#store.cancelSupersededReviewJobs(input);
+  }
+
+  async recoverStaleRunningJobs(input: {
+    activeWorkerIds: string[];
+    staleStartedBefore: Date;
+  }): Promise<number> {
+    return this.#store.requeueStaleRunningJobs({
+      activeWorkerIds: input.activeWorkerIds,
+      staleStartedBefore: input.staleStartedBefore,
+      recoveredAt: this.#now(),
+    });
   }
 
   async completeJob(jobId: string): Promise<QueueJob> {

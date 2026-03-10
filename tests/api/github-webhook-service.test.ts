@@ -73,6 +73,31 @@ class FakeQueueScheduler {
   }
 }
 
+class FakeWebhookEventService {
+  received: string[] = [];
+  queued: string[] = [];
+  ignored: string[] = [];
+  failed: string[] = [];
+  duplicates = new Set<string>();
+
+  async beginDelivery(input: { deliveryId: string }) {
+    this.received.push(input.deliveryId);
+    return this.duplicates.has(input.deliveryId) ? "duplicate" : "new";
+  }
+
+  async markQueued(input: { deliveryId: string }) {
+    this.queued.push(input.deliveryId);
+  }
+
+  async markIgnored(input: { deliveryId: string }) {
+    this.ignored.push(input.deliveryId);
+  }
+
+  async markFailed(input: { deliveryId: string }) {
+    this.failed.push(input.deliveryId);
+  }
+}
+
 class FakeGitHubAdapter {
   signatureValid = true;
   mentionReaction: {
@@ -121,10 +146,17 @@ describe("GitHubWebhookService", () => {
   it("enqueues review jobs for supported GitHub events", async () => {
     const adapter = new FakeGitHubAdapter();
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      logger,
+      webhookEvents,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-1",
       eventName: "pull_request",
       signature: "sha256=test",
       rawBody: "{}",
@@ -139,6 +171,7 @@ describe("GitHubWebhookService", () => {
       type: "pr_opened",
       actorLogin: "ruben",
     });
+    expect(webhookEvents.queued).toEqual(["delivery-1"]);
     expect(logger.entries).toContainEqual({
       level: "info",
       message: "Queued GitHub review job.",
@@ -160,10 +193,17 @@ describe("GitHubWebhookService", () => {
       content: "eyes",
     };
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      logger,
+      webhookEvents,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-2",
       eventName: "issue_comment",
       signature: "sha256=test",
       rawBody: "{}",
@@ -187,10 +227,17 @@ describe("GitHubWebhookService", () => {
     const adapter = new FakeGitHubAdapter();
     adapter.mentionReactionError = new Error("reaction failed");
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      logger,
+      webhookEvents,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-3",
       eventName: "issue_comment",
       signature: "sha256=test",
       rawBody: "{}",
@@ -213,10 +260,17 @@ describe("GitHubWebhookService", () => {
     const adapter = new FakeGitHubAdapter();
     adapter.signatureValid = false;
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      logger,
+      webhookEvents,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-4",
       eventName: "pull_request",
       signature: "sha256=bad",
       rawBody: "{}",
@@ -242,10 +296,17 @@ describe("GitHubWebhookService", () => {
       reason: "unsupported",
     };
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      logger,
+      webhookEvents,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-5",
       eventName: "issue_comment",
       signature: "sha256=test",
       rawBody: "{}",
@@ -255,6 +316,7 @@ describe("GitHubWebhookService", () => {
     expect(result.statusCode).toBe(202);
     expect(result.accepted).toBe(false);
     expect(queue.calls).toEqual([]);
+    expect(webhookEvents.ignored).toEqual(["delivery-5"]);
     expect(logger.entries).toContainEqual({
       level: "info",
       message: "Ignored GitHub webhook event.",
@@ -264,5 +326,32 @@ describe("GitHubWebhookService", () => {
         reason: "unsupported",
       },
     });
+  });
+
+  it("dedupes repeated webhook deliveries before queueing", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    webhookEvents.duplicates.add("delivery-dup");
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      logger,
+      webhookEvents,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-dup",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(202);
+    expect(result.accepted).toBe(false);
+    expect(result.message).toBe("Duplicate GitHub webhook delivery ignored.");
+    expect(queue.calls).toEqual([]);
   });
 });

@@ -9,14 +9,31 @@ async function main(): Promise<void> {
   const logger = runtime.logger.child({
     component: "api",
   });
-  const githubWebhookService = new GitHubWebhookService(
-    runtime.githubAdapter,
-    runtime.queueScheduler,
-    logger,
-  );
   const server = createApiServer({
     logger,
-    githubWebhookService,
+    readinessService: runtime.readinessService,
+    setupStatusService: runtime.runtimeConfigService,
+    githubWebhookService: {
+      handle: async (input) => {
+        const operationalRuntime = await runtime.getOperationalRuntime();
+        if (!operationalRuntime) {
+          return {
+            statusCode: 503,
+            accepted: false,
+            message: "Nitpickr setup is incomplete.",
+          };
+        }
+
+        const githubWebhookService = new GitHubWebhookService(
+          operationalRuntime.githubAdapter,
+          runtime.queueScheduler,
+          logger,
+          runtime.webhookEventService,
+        );
+
+        return githubWebhookService.handle(input);
+      },
+    },
   });
 
   logger.info("Starting API server.", {

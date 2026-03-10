@@ -1,6 +1,6 @@
 import { cwd, env, exit } from "node:process";
 
-import { parseAppConfig } from "../config/app-config.js";
+import { parseBootstrapConfig } from "../config/app-config.js";
 import { createPostgresClient } from "../runtime/postgres.js";
 import { DoctorCommand } from "./doctor-command.js";
 import { MigrateCommand } from "./migrate-command.js";
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "migrate") {
-    const config = parseAppConfig(env);
+    const config = parseBootstrapConfig(env);
     const sql = createPostgresClient(config.databaseUrl);
     try {
       const migrate = new MigrateCommand(sql);

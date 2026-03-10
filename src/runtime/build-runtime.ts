@@ -75,7 +75,7 @@ export function buildRuntime(
   const reviewPlanner = new ReviewPlanner();
   const webhookEventService = new WebhookEventService(
     new PostgresWebhookEventStore({
-      query: (query, params) =>
+      executeParameterized: (query, params) =>
         sql.unsafe(
           query,
           params

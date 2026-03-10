@@ -10,15 +10,25 @@ interface QueryCall {
 class FakePostgresClient {
   readonly calls: QueryCall[] = [];
   readonly responses: unknown[][] = [];
+  readonly errors: Error[] = [];
 
   queueResponse(rows: unknown[]): void {
     this.responses.push(rows);
   }
 
-  async query<T extends Record<string, unknown>>(
+  queueError(error: Error): void {
+    this.errors.push(error);
+  }
+
+  async executeParameterized<T extends Record<string, unknown>>(
     query: string,
     params?: readonly unknown[],
   ): Promise<T[]> {
+    const error = this.errors.shift();
+    if (error) {
+      throw error;
+    }
+
     this.calls.push({ query, params });
     return (this.responses.shift() ?? []) as T[];
   }
@@ -91,5 +101,35 @@ describe("PostgresWebhookEventStore", () => {
         repositoryId: "",
       }),
     ).rejects.toThrow(/repositoryId/i);
+  });
+
+  it("adds context when database writes fail", async () => {
+    const client = new FakePostgresClient();
+    client.queueError(new Error("db unavailable"));
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(() =>
+      store.createEvent({
+        deliveryId: "delivery-4",
+        provider: "github",
+        eventName: "pull_request",
+        status: "received",
+        payload: {},
+      }),
+    ).rejects.toThrow(/create webhook event/i);
+  });
+
+  it("adds context when database updates fail", async () => {
+    const client = new FakePostgresClient();
+    client.queueError(new Error("db unavailable"));
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(() =>
+      store.updateEvent({
+        deliveryId: "delivery-5",
+        status: "failed",
+        errorMessage: "boom",
+      }),
+    ).rejects.toThrow(/update webhook event/i);
   });
 });

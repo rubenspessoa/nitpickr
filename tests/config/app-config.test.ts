@@ -125,6 +125,19 @@ describe("parseRuntimeSecretsFromEnvironment", () => {
       githubBotLogins: ["getnitpickr", "nitpickr"],
     });
   });
+
+  it("rejects bot login values that normalize to an empty list", () => {
+    expect(() =>
+      parseRuntimeSecretsFromEnvironment({
+        OPENAI_API_KEY: "sk-test-key",
+        GITHUB_APP_ID: "123456",
+        GITHUB_BOT_LOGINS: " , ",
+        GITHUB_PRIVATE_KEY:
+          "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+        GITHUB_WEBHOOK_SECRET: "webhook-secret",
+      }),
+    ).toThrow(/GITHUB_BOT_LOGINS/i);
+  });
 });
 
 describe("buildAppConfig", () => {

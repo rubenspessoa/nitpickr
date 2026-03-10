@@ -276,4 +276,59 @@ describe("createApiServer", () => {
       message: "Missing required GitHub webhook headers.",
     });
   });
+
+  it("accepts nested GitHub webhook payloads", async () => {
+    let receivedPayload: unknown = null;
+    const server = createApiServer({
+      githubWebhookService: {
+        async handle(input) {
+          receivedPayload = input.payload;
+          return {
+            statusCode: 202,
+            accepted: true,
+            message: "queued",
+          };
+        },
+      },
+    });
+
+    const payload = JSON.stringify({
+      action: "opened",
+      pull_request: {
+        labels: [{ name: "bug" }],
+      },
+      commits: [
+        {
+          id: "abc",
+          files: ["src/api/server.ts"],
+        },
+      ],
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "x-github-delivery": "delivery-nested",
+        "x-github-event": "pull_request",
+        "x-hub-signature-256": "sha256=test",
+        "content-type": "application/json",
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(receivedPayload).toEqual({
+      action: "opened",
+      pull_request: {
+        labels: [{ name: "bug" }],
+      },
+      commits: [
+        {
+          id: "abc",
+          files: ["src/api/server.ts"],
+        },
+      ],
+    });
+  });
 });

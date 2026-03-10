@@ -6,7 +6,7 @@ import { type Logger, noopLogger } from "../logging/logger.js";
 import type { SetupStatus } from "../setup/runtime-config-service.js";
 import type { GitHubWebhookService } from "./github-webhook-service.js";
 
-const webhookPayloadSchema = z.record(z.string(), z.unknown());
+const webhookPayloadSchema = z.object({}).passthrough();
 const githubWebhookHeadersSchema = z.object({
   eventName: z.string().min(1),
   signature: z.string().min(1),
@@ -120,7 +120,8 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
   });
 
   server.post("/webhooks/github", async (request, reply) => {
-    if (!githubWebhookService) {
+    const webhookHandler = githubWebhookService;
+    if (!webhookHandler) {
       return reply.status(503).send({
         accepted: false,
         message: "Nitpickr setup is incomplete.",
@@ -152,7 +153,7 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
       });
     }
 
-    const result = await githubWebhookService.handle({
+    const result = await webhookHandler.handle({
       deliveryId: headerResult.data.deliveryId,
       eventName: headerResult.data.eventName,
       signature: headerResult.data.signature,

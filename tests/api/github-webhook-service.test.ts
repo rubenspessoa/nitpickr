@@ -283,6 +283,7 @@ describe("GitHubWebhookService", () => {
 
     expect(result.statusCode).toBe(401);
     expect(queue.calls).toEqual([]);
+    expect(webhookEvents.received).toEqual([]);
     expect(logger.entries).toContainEqual({
       level: "warn",
       message: "Rejected GitHub webhook with invalid signature.",
@@ -408,7 +409,7 @@ describe("GitHubWebhookService", () => {
     });
   });
 
-  it("logs when webhook event tracking is disabled", async () => {
+  it("logs a warning when webhook event tracking falls back to noop mode", async () => {
     const adapter = new FakeGitHubAdapter();
     const queue = new FakeQueueScheduler();
     const logger = new FakeLogger();
@@ -424,12 +425,10 @@ describe("GitHubWebhookService", () => {
 
     expect(result.statusCode).toBe(202);
     expect(logger.entries).toContainEqual({
-      level: "debug",
-      message: "GitHub webhook event tracking is disabled.",
+      level: "warn",
+      message: "GitHub webhook event tracking is disabled; using noop tracker.",
       fields: {
-        component: "webhook-event-tracker",
-        deliveryId: "delivery-noop",
-        operation: "beginDelivery",
+        component: "github-webhook",
       },
     });
   });

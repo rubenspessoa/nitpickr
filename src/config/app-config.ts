@@ -131,6 +131,17 @@ function parseInteger(
   return parsed;
 }
 
+function toBotLogins(entries: string[]): BotLogins {
+  const uniqueEntries = [...new Set(entries)];
+  const [firstLogin, ...remainingLogins] = uniqueEntries;
+
+  if (!firstLogin) {
+    throw new Error("GITHUB_BOT_LOGINS must contain at least one login.");
+  }
+
+  return [firstLogin, ...remainingLogins];
+}
+
 function parseBotLogins(value: string | undefined): BotLogins {
   if (value === undefined) {
     return ["nitpickr", "getnitpickr"];
@@ -145,7 +156,7 @@ function parseBotLogins(value: string | undefined): BotLogins {
     throw new Error("GITHUB_BOT_LOGINS must contain at least one login.");
   }
 
-  return [...new Set(parsed)] as BotLogins;
+  return toBotLogins(parsed);
 }
 
 function parseRepositoryAllowlist(value: string | undefined): string[] | null {
@@ -193,6 +204,27 @@ function deriveBaseUrl(parsed: BootstrapEnvironment, port: number): string {
 
 function normalizePrivateKey(value: string): string {
   return value.replace(/\\n/g, "\n");
+}
+
+function normalizeRuntimeSecrets(
+  parsed: z.infer<typeof runtimeSecretEnvironmentSchema>,
+): RuntimeSecrets {
+  const runtimeSecrets: RuntimeSecrets = {
+    openAiApiKey: parsed.OPENAI_API_KEY,
+    githubAppId: Number.parseInt(parsed.GITHUB_APP_ID, 10),
+    githubPrivateKey: normalizePrivateKey(parsed.GITHUB_PRIVATE_KEY),
+    githubWebhookSecret: parsed.GITHUB_WEBHOOK_SECRET,
+  };
+
+  if (parsed.OPENAI_MODEL) {
+    runtimeSecrets.openAiModel = parsed.OPENAI_MODEL;
+  }
+
+  if (parsed.GITHUB_BOT_LOGINS) {
+    runtimeSecrets.githubBotLogins = parseBotLogins(parsed.GITHUB_BOT_LOGINS);
+  }
+
+  return runtimeSecrets;
 }
 
 export function parseBootstrapConfig(
@@ -264,24 +296,7 @@ export function parseRuntimeSecretsFromEnvironment(
     return null;
   }
 
-  const runtimeSecrets: RuntimeSecrets = {
-    openAiApiKey: result.data.OPENAI_API_KEY,
-    githubAppId: Number.parseInt(result.data.GITHUB_APP_ID, 10),
-    githubPrivateKey: normalizePrivateKey(result.data.GITHUB_PRIVATE_KEY),
-    githubWebhookSecret: result.data.GITHUB_WEBHOOK_SECRET,
-  };
-
-  if (result.data.OPENAI_MODEL) {
-    runtimeSecrets.openAiModel = result.data.OPENAI_MODEL;
-  }
-
-  if (result.data.GITHUB_BOT_LOGINS) {
-    runtimeSecrets.githubBotLogins = parseBotLogins(
-      result.data.GITHUB_BOT_LOGINS,
-    );
-  }
-
-  return runtimeSecrets;
+  return normalizeRuntimeSecrets(result.data);
 }
 
 export function buildAppConfig(
@@ -327,24 +342,7 @@ export function parseAppConfig(
 
   return buildAppConfig(
     parseBootstrapConfig(input),
-    {
-      openAiApiKey: runtimeSecrets.data.OPENAI_API_KEY,
-      githubAppId: Number.parseInt(runtimeSecrets.data.GITHUB_APP_ID, 10),
-      githubPrivateKey: normalizePrivateKey(
-        runtimeSecrets.data.GITHUB_PRIVATE_KEY,
-      ),
-      githubWebhookSecret: runtimeSecrets.data.GITHUB_WEBHOOK_SECRET,
-      ...(runtimeSecrets.data.OPENAI_MODEL
-        ? { openAiModel: runtimeSecrets.data.OPENAI_MODEL }
-        : {}),
-      ...(runtimeSecrets.data.GITHUB_BOT_LOGINS
-        ? {
-            githubBotLogins: parseBotLogins(
-              runtimeSecrets.data.GITHUB_BOT_LOGINS,
-            ),
-          }
-        : {}),
-    },
+    normalizeRuntimeSecrets(runtimeSecrets.data),
     "environment",
   );
 }

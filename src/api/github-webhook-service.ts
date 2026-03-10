@@ -30,6 +30,15 @@ type WebhookEventTracker = Pick<
   "beginDelivery" | "markFailed" | "markIgnored" | "markQueued"
 >;
 
+const noopWebhookEventTracker: WebhookEventTracker = {
+  async beginDelivery() {
+    return "new";
+  },
+  async markFailed() {},
+  async markIgnored() {},
+  async markQueued() {},
+};
+
 function buildReviewJobInput(
   event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
 ): EnqueueJobInput {
@@ -76,43 +85,12 @@ export class GitHubWebhookService {
     this.#logger = logger.child({
       component: "github-webhook",
     });
-    this.#webhookEventService =
-      webhookEventService ??
-      this.#createNoopWebhookEventTracker(
-        this.#logger.child({
-          component: "webhook-event-tracker",
-        }),
+    if (!webhookEventService) {
+      this.#logger.warn(
+        "GitHub webhook event tracking is disabled; using noop tracker.",
       );
-  }
-
-  #createNoopWebhookEventTracker(logger: Logger): WebhookEventTracker {
-    return {
-      beginDelivery: async ({ deliveryId }) => {
-        logger.debug("GitHub webhook event tracking is disabled.", {
-          deliveryId,
-          operation: "beginDelivery",
-        });
-        return "new";
-      },
-      markFailed: async ({ deliveryId }) => {
-        logger.debug("GitHub webhook event tracking is disabled.", {
-          deliveryId,
-          operation: "markFailed",
-        });
-      },
-      markIgnored: async ({ deliveryId }) => {
-        logger.debug("GitHub webhook event tracking is disabled.", {
-          deliveryId,
-          operation: "markIgnored",
-        });
-      },
-      markQueued: async ({ deliveryId }) => {
-        logger.debug("GitHub webhook event tracking is disabled.", {
-          deliveryId,
-          operation: "markQueued",
-        });
-      },
-    };
+    }
+    this.#webhookEventService = webhookEventService ?? noopWebhookEventTracker;
   }
 
   async #updateWebhookEventStatus(
@@ -175,6 +153,21 @@ export class GitHubWebhookService {
     payload: unknown;
   }): Promise<GitHubWebhookResult> {
     const parsed = webhookRequestSchema.parse(input);
+    const valid = this.#adapter.verifyWebhookSignature(
+      parsed.rawBody,
+      parsed.signature,
+    );
+    if (!valid) {
+      this.#logger.warn("Rejected GitHub webhook with invalid signature.", {
+        eventName: parsed.eventName,
+      });
+      return {
+        statusCode: 401,
+        accepted: false,
+        message: "Invalid GitHub webhook signature.",
+      };
+    }
+
     if (parsed.deliveryId) {
       const delivery = await this.#webhookEventService.beginDelivery({
         deliveryId: parsed.deliveryId,
@@ -194,24 +187,6 @@ export class GitHubWebhookService {
           message: "Duplicate GitHub webhook delivery ignored.",
         };
       }
-    }
-
-    const valid = this.#adapter.verifyWebhookSignature(
-      parsed.rawBody,
-      parsed.signature,
-    );
-    if (!valid) {
-      await this.#updateWebhookEventStatus(parsed.deliveryId, "failed", {
-        errorMessage: "Invalid GitHub webhook signature.",
-      });
-      this.#logger.warn("Rejected GitHub webhook with invalid signature.", {
-        eventName: parsed.eventName,
-      });
-      return {
-        statusCode: 401,
-        accepted: false,
-        message: "Invalid GitHub webhook signature.",
-      };
     }
 
     try {

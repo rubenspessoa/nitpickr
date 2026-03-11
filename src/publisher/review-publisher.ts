@@ -5,7 +5,7 @@ import {
   DIAGNOSTIC_MAX_STRING_LENGTH,
   DIAGNOSTIC_OBJECT_BUDGET,
   DIAGNOSTIC_OBJECT_TRUNCATION_MARKER,
-  DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_SET,
+  DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_VARIANTS,
   DIAGNOSTIC_SANITIZED_MAX_LENGTH,
 } from "./diagnostic-constants.js";
 import { targetReviewCommentLine } from "./review-comment-targeter.js";
@@ -278,7 +278,7 @@ export function sanitizeDiagnosticErrorMessage(value: unknown): string {
 
   for (const marker of [
     DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER,
-    ...DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_SET,
+    ...DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_VARIANTS,
   ]) {
     if (!sanitized.includes(marker)) {
       continue;

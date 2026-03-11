@@ -216,6 +216,7 @@
   - added `CHANGELOG.md` with an Unreleased note about marker casing and the deprecated alias
   - clarified changelog wording to foreground backward compatibility
   - exported a marker `Set` companion for compatibility-friendly membership checks
+  - kept sanitizer marker iteration on the ordered variants array for readability and deterministic ordering
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

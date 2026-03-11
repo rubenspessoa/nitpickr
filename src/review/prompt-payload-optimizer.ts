@@ -114,7 +114,7 @@ function truncateTextHead(input: string, maxCharacters: number): string {
 
 function normalizeComparablePath(pathValue: string): string {
   const normalized = normalizePath(pathValue);
-  const posixStyle = normalized.replace(/\\/g, posix.sep);
+  const posixStyle = normalized.replace(/[\\/]+/g, posix.sep);
   return posix.normalize(posixStyle);
 }
 

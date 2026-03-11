@@ -221,11 +221,14 @@ function parseJsonPayloadFromText(text: string): unknown | null {
     return null;
   }
 
+  const maxJsonEndScanAttempts = 128;
+  let attempts = 0;
   for (
     let jsonEnd = text.lastIndexOf("}");
-    jsonEnd > jsonStart;
+    jsonEnd > jsonStart && attempts < maxJsonEndScanAttempts;
     jsonEnd = text.lastIndexOf("}", jsonEnd - 1)
   ) {
+    attempts += 1;
     const candidate = text.slice(jsonStart, jsonEnd + 1).trim();
     const parsed = tryParseObject(candidate);
     if (parsed) {

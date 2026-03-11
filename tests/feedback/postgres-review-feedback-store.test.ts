@@ -48,6 +48,9 @@ describe("PostgresReviewFeedbackStore", () => {
     expect(client.calls[0]?.query).toContain(
       "insert into review_feedback_events",
     );
+    expect(client.calls[0]?.query).toContain(
+      "on conflict (repository_id, scope_key) do update set",
+    );
   });
 
   it("lists repository-scoped feedback records", async () => {

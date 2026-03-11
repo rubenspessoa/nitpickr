@@ -745,8 +745,6 @@ describe("review flow integration", () => {
         path: "src/api/server.ts",
         line: 12,
         side: "RIGHT",
-        fingerprint:
-          "src/api/server.ts:13:maintainability:clarify_request_parsing",
         body: expect.stringContaining("Clarify request parsing"),
       },
     ]);
@@ -1044,7 +1042,6 @@ describe("review flow integration", () => {
         path: "src/api/server.ts",
         line: 11,
         side: "RIGHT",
-        fingerprint: "src/api/server.ts:13:correctness:guard_malformed_json",
         body: expect.stringContaining("Guard malformed JSON"),
       },
     ]);

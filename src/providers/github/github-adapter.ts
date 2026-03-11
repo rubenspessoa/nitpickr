@@ -221,6 +221,66 @@ interface ParsedInteractionCommand {
   argumentText: string | null;
 }
 
+const manualCommandDefinitions: Array<{
+  canonicalCommand:
+    | "review"
+    | "full_review"
+    | "summary"
+    | "recheck"
+    | "ignore_this";
+  triggerCommand:
+    | "review"
+    | "full_review"
+    | "summary"
+    | "recheck"
+    | "ignore_this";
+  mode: NormalizedReviewMode;
+}> = [
+  {
+    canonicalCommand: "review",
+    triggerCommand: "review",
+    mode: "quick",
+  },
+  {
+    canonicalCommand: "full_review",
+    triggerCommand: "full_review",
+    mode: "full",
+  },
+  {
+    canonicalCommand: "summary",
+    triggerCommand: "summary",
+    mode: "summary",
+  },
+  {
+    canonicalCommand: "recheck",
+    triggerCommand: "recheck",
+    mode: "quick",
+  },
+  {
+    canonicalCommand: "ignore_this",
+    triggerCommand: "ignore_this",
+    mode: "quick",
+  },
+];
+
+const interactionCommands = [
+  "why",
+  "teach",
+  "reconsider",
+  "fix",
+  "learn",
+  "status",
+] as const;
+
+const supportedCommandSuffixes = [
+  "review",
+  "full review",
+  "summary",
+  "recheck",
+  "ignore this",
+  ...interactionCommands,
+] as const;
+
 interface NormalizedRepositoryRef {
   installationId: string;
   repositoryId: string;
@@ -353,63 +413,21 @@ function parseManualCommand(
   const canonicalCommand = canonicalizeCommand(
     extractMentionCommand(body, botLogins),
   );
-
-  if (canonicalCommand === "review") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "review",
-        actorLogin,
-      },
-      mode: "quick",
-    };
+  const definition = manualCommandDefinitions.find(
+    (candidate) => candidate.canonicalCommand === canonicalCommand,
+  );
+  if (!definition) {
+    return null;
   }
 
-  if (canonicalCommand === "full_review") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "full_review",
-        actorLogin,
-      },
-      mode: "full",
-    };
-  }
-
-  if (canonicalCommand === "summary") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "summary",
-        actorLogin,
-      },
-      mode: "summary",
-    };
-  }
-
-  if (canonicalCommand === "recheck") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "recheck",
-        actorLogin,
-      },
-      mode: "quick",
-    };
-  }
-
-  if (canonicalCommand === "ignore_this") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "ignore_this",
-        actorLogin,
-      },
-      mode: "quick",
-    };
-  }
-
-  return null;
+  return {
+    trigger: {
+      type: "manual_command",
+      command: definition.triggerCommand,
+      actorLogin,
+    },
+    mode: definition.mode,
+  };
 }
 
 function parseInteractionCommand(
@@ -430,9 +448,9 @@ function parseInteractionCommand(
     return null;
   }
 
-  const match = /^(why|teach|reconsider|fix|learn|status)(?:_+(.+))?$/.exec(
-    canonicalCommand,
-  );
+  const match = new RegExp(
+    `^(${interactionCommands.join("|")})(?:_+(.+))?$`,
+  ).exec(canonicalCommand);
   if (!match?.[1]) {
     return null;
   }
@@ -710,19 +728,9 @@ export class GitHubAdapter {
   }
 
   #supportedCommandExamples(): string[] {
-    return this.#botLogins.flatMap((botLogin) => [
-      `@${botLogin} review`,
-      `@${botLogin} full review`,
-      `@${botLogin} summary`,
-      `@${botLogin} recheck`,
-      `@${botLogin} ignore this`,
-      `@${botLogin} why`,
-      `@${botLogin} teach`,
-      `@${botLogin} reconsider`,
-      `@${botLogin} fix`,
-      `@${botLogin} learn`,
-      `@${botLogin} status`,
-    ]);
+    return this.#botLogins.flatMap((botLogin) =>
+      supportedCommandSuffixes.map((suffix) => `@${botLogin} ${suffix}`),
+    );
   }
 
   async fetchChangeRequestContext(input: {

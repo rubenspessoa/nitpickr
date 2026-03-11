@@ -454,6 +454,58 @@ describe("GitHubAdapter", () => {
     );
   });
 
+  it("captures learn interaction arguments from issue comments", () => {
+    const adapter = new GitHubAdapter({
+      apiClient: new FakeGitHubApiClient(),
+      appConfig: {
+        appId: 123456,
+        privateKey: "test",
+        webhookSecret: "super-secret",
+        webhookUrl: "https://nitpickr.example.com/webhooks/github",
+        botLogins: ["nitpickr", "getnitpickr"],
+      },
+    });
+
+    const event = adapter.normalizeWebhookEvent("issue_comment", {
+      action: "created",
+      installation: {
+        id: 123456,
+      },
+      repository: {
+        id: 99,
+        name: "nitpickr",
+        owner: {
+          login: "rubenspessoa",
+        },
+        default_branch: "main",
+      },
+      issue: {
+        number: 42,
+        pull_request: {
+          url: "https://api.github.com/repos/rubenspessoa/nitpickr/pulls/42",
+        },
+      },
+      comment: {
+        id: 5004,
+        body: "@getnitpickr learn prefer explicit guards in API handlers",
+        user: {
+          login: "maintainer",
+        },
+      },
+    });
+
+    expect(event).toEqual(
+      expect.objectContaining({
+        kind: "interaction_requested",
+        pullNumber: 42,
+        command: "learn",
+        source: expect.objectContaining({
+          argumentText: "prefer explicit guards in api handlers",
+        }),
+      }),
+    );
+  });
+
   it("normalizes review-thread replies into interaction requests", () => {
     const adapter = new GitHubAdapter({
       apiClient: new FakeGitHubApiClient(),

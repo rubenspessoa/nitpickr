@@ -213,9 +213,15 @@ export const migrations = [
     );
 
     create unique index if not exists review_feedback_events_scope_idx
-      on review_feedback_events (repository_id, scope_key, kind);
+      on review_feedback_events (repository_id, scope_key);
 
     create index if not exists review_feedback_events_repo_idx
       on review_feedback_events (tenant_id, repository_id, updated_at desc);
+  `,
+  `
+    drop index if exists review_feedback_events_scope_idx;
+
+    create unique index if not exists review_feedback_events_scope_idx
+      on review_feedback_events (repository_id, scope_key);
   `,
 ];

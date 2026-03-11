@@ -87,4 +87,15 @@ describe("EvalReviewsCommand", () => {
     expect(output.join("\n")).toContain("Precision: 1.00");
     expect(output.join("\n")).toContain("Comment count / review: 1.00");
   });
+
+  it("fails fast when the fixture directory does not exist", async () => {
+    const command = new EvalReviewsCommand();
+
+    await expect(
+      command.run({
+        fixtureDirectory: join(tmpdir(), "nitpickr-missing-review-fixtures"),
+        write: () => undefined,
+      }),
+    ).rejects.toThrow("Fixture directory does not exist");
+  });
 });

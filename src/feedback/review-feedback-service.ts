@@ -47,6 +47,10 @@ export interface ReviewFeedbackOutcomeEvent {
   kind: Exclude<ReviewFeedbackKind, "reaction_positive" | "reaction_negative">;
 }
 
+interface AggregatedSignal extends ReviewFeedbackSignal {
+  score: number;
+}
+
 function normalizeCount(count: number): number {
   if (!Number.isFinite(count) || count <= 0) {
     return 0;
@@ -63,6 +67,10 @@ function matchesPath(recordPath: string | null, reviewPath: string): boolean {
   return reviewPath === recordPath || reviewPath.startsWith(`${recordPath}/`);
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unhandled feedback kind: ${String(value)}`);
+}
+
 function scoreForRecord(record: ReviewFeedbackRecord): number {
   switch (record.kind) {
     case "reaction_positive":
@@ -75,7 +83,83 @@ function scoreForRecord(record: ReviewFeedbackRecord): number {
       return -Math.max(record.count * 3, 3);
     case "ignored":
       return -Math.max(record.count * 2, 2);
+    default:
+      return assertNever(record.kind);
   }
+}
+
+function buildReactionScopeKey(
+  kind: "reaction_positive" | "reaction_negative",
+  providerCommentId: string,
+): string {
+  return `${kind}:${providerCommentId}`;
+}
+
+function buildOutcomeScopeKey(
+  event: ReviewFeedbackOutcomeEvent,
+  fallbackKey: string,
+): string {
+  if (event.fingerprint) {
+    return `${event.kind}:${event.fingerprint}`;
+  }
+
+  if (event.path || event.category || event.findingType) {
+    return [
+      event.kind,
+      event.path ?? "_",
+      event.category ?? "_",
+      event.findingType ?? "_",
+    ].join(":");
+  }
+
+  return `${event.kind}:${fallbackKey}`;
+}
+
+function buildSignalAggregationKey(record: ReviewFeedbackRecord): string {
+  if (record.fingerprint) {
+    return `fingerprint:${record.fingerprint}`;
+  }
+
+  if (record.path || record.category || record.findingType) {
+    return [
+      "signal",
+      record.path ?? "_",
+      record.category ?? "_",
+      record.findingType ?? "_",
+    ].join(":");
+  }
+
+  return `record:${record.id}`;
+}
+
+function createAggregatedSignal(
+  record: ReviewFeedbackRecord,
+): AggregatedSignal {
+  return {
+    ...(record.fingerprint === null ? {} : { fingerprint: record.fingerprint }),
+    ...(record.path === null ? {} : { path: record.path }),
+    ...(record.category === null ? {} : { category: record.category }),
+    ...(record.findingType === null ? {} : { findingType: record.findingType }),
+    score: 0,
+  };
+}
+
+function compareSignals(
+  left: AggregatedSignal,
+  right: AggregatedSignal,
+): number {
+  if ((right.suppress ?? false) !== (left.suppress ?? false)) {
+    return Number(right.suppress ?? false) - Number(left.suppress ?? false);
+  }
+
+  const scoreDifference = Math.abs(right.score) - Math.abs(left.score);
+  if (scoreDifference !== 0) {
+    return scoreDifference;
+  }
+
+  return (left.fingerprint ?? left.path ?? "").localeCompare(
+    right.fingerprint ?? right.path ?? "",
+  );
 }
 
 function isSuppressingRecord(record: ReviewFeedbackRecord): boolean {
@@ -119,7 +203,10 @@ export class ReviewFeedbackService {
         id: this.#createId(),
         tenantId: input.tenantId,
         repositoryId: input.repositoryId,
-        scopeKey: comment.providerCommentId,
+        scopeKey: buildReactionScopeKey(
+          "reaction_positive",
+          comment.providerCommentId,
+        ),
         providerCommentId: comment.providerCommentId,
         fingerprint: comment.fingerprint,
         path: comment.path,
@@ -134,7 +221,10 @@ export class ReviewFeedbackService {
         id: this.#createId(),
         tenantId: input.tenantId,
         repositoryId: input.repositoryId,
-        scopeKey: comment.providerCommentId,
+        scopeKey: buildReactionScopeKey(
+          "reaction_negative",
+          comment.providerCommentId,
+        ),
         providerCommentId: comment.providerCommentId,
         fingerprint: comment.fingerprint,
         path: comment.path,
@@ -165,10 +255,7 @@ export class ReviewFeedbackService {
         id: this.#createId(),
         tenantId: input.tenantId,
         repositoryId: input.repositoryId,
-        scopeKey:
-          event.fingerprint !== undefined
-            ? `${event.kind}:${event.fingerprint}`
-            : `${event.kind}:${event.path ?? this.#createId()}`,
+        scopeKey: buildOutcomeScopeKey(event, this.#createId()),
         providerCommentId: null,
         fingerprint: event.fingerprint ?? null,
         path: event.path ?? null,
@@ -199,30 +286,14 @@ export class ReviewFeedbackService {
       repositoryId: input.repositoryId,
     });
 
-    const aggregated = new Map<string, ReviewFeedbackSignal>();
+    const aggregated = new Map<string, AggregatedSignal>();
     for (const record of records) {
       if (!input.paths.some((path) => matchesPath(record.path, path))) {
         continue;
       }
 
-      const key =
-        record.fingerprint ??
-        [
-          record.path ?? "",
-          record.category ?? "",
-          record.findingType ?? "",
-        ].join(":");
-      const current = aggregated.get(key) ?? {
-        ...(record.fingerprint === null
-          ? {}
-          : { fingerprint: record.fingerprint }),
-        ...(record.path === null ? {} : { path: record.path }),
-        ...(record.category === null ? {} : { category: record.category }),
-        ...(record.findingType === null
-          ? {}
-          : { findingType: record.findingType }),
-        score: 0,
-      };
+      const key = buildSignalAggregationKey(record);
+      const current = aggregated.get(key) ?? createAggregatedSignal(record);
 
       current.score += scoreForRecord(record);
       if (isSuppressingRecord(record)) {
@@ -234,22 +305,7 @@ export class ReviewFeedbackService {
 
     return [...aggregated.values()]
       .filter((signal) => (signal.suppress ?? false) || signal.score !== 0)
-      .sort((left, right) => {
-        if ((right.suppress ?? false) !== (left.suppress ?? false)) {
-          return (
-            Number(right.suppress ?? false) - Number(left.suppress ?? false)
-          );
-        }
-
-        const scoreDifference = Math.abs(right.score) - Math.abs(left.score);
-        if (scoreDifference !== 0) {
-          return scoreDifference;
-        }
-
-        return (left.fingerprint ?? left.path ?? "").localeCompare(
-          right.fingerprint ?? right.path ?? "",
-        );
-      })
+      .sort(compareSignals)
       .slice(0, input.limit);
   }
 }

@@ -227,6 +227,7 @@ describe("ReviewPublisher", () => {
     expect(client.calls[0]?.comments).toHaveLength(1);
     expect(client.calls[0]?.body).toContain("Queue fairness improved.");
     expect(client.calls[0]?.comments[0]?.side).toBe("RIGHT");
+    expect(client.calls[0]?.comments[0]).not.toHaveProperty("fingerprint");
   });
 
   it("reuses an existing review when the same review run was already published", async () => {

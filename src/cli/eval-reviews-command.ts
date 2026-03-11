@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -17,6 +18,7 @@ export class EvalReviewsCommand {
     const directory =
       input.fixtureDirectory ??
       join(input.cwd ?? process.cwd(), "tests/fixtures/review-evals");
+    await this.#ensureFixtureDirectoryExists(directory);
     const fixtures = await loadReviewEvaluationFixtures(directory);
     const report = await new ReviewEvaluator().evaluate(fixtures);
 
@@ -33,5 +35,13 @@ export class EvalReviewsCommand {
     write(
       `Suggestion eligibility rate: ${report.metrics.suggestionEligibilityRate.toFixed(2)}`,
     );
+  }
+
+  async #ensureFixtureDirectoryExists(directory: string): Promise<void> {
+    try {
+      await access(directory);
+    } catch {
+      throw new Error(`Fixture directory does not exist: ${directory}`);
+    }
   }
 }

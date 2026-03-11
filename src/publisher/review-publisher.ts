@@ -52,6 +52,20 @@ export interface PublishReviewClient {
   }>;
 }
 
+function toProviderReviewComments(comments: PublishedInlineComment[]): Array<{
+  path: string;
+  line: number;
+  side: "RIGHT";
+  body: string;
+}> {
+  return comments.map((comment) => ({
+    path: comment.path,
+    line: comment.line,
+    side: comment.side,
+    body: comment.body,
+  }));
+}
+
 export interface PublishedInlineComment {
   path: string;
   line: number;
@@ -375,7 +389,7 @@ export class ReviewPublisher {
       repository: input.repository,
       pullNumber: input.pullNumber,
       body,
-      comments,
+      comments: toProviderReviewComments(comments),
     });
   }
 }

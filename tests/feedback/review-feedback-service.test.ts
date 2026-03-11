@@ -10,8 +10,7 @@ class InMemoryReviewFeedbackStore {
       const existingIndex = this.entries.findIndex(
         (candidate) =>
           candidate.repositoryId === entry.repositoryId &&
-          candidate.scopeKey === entry.scopeKey &&
-          candidate.kind === entry.kind,
+          candidate.scopeKey === entry.scopeKey,
       );
       if (existingIndex >= 0) {
         this.entries.splice(existingIndex, 1, entry);
@@ -73,6 +72,10 @@ describe("ReviewFeedbackService", () => {
         score: 1,
       }),
     );
+    expect(store.entries.map((entry) => entry.scopeKey)).toEqual([
+      "reaction_positive:comment_1",
+      "reaction_negative:comment_1",
+    ]);
   });
 
   it("turns resolved-without-code-change outcomes into suppression signals", async () => {
@@ -112,5 +115,62 @@ describe("ReviewFeedbackService", () => {
         suppress: true,
       }),
     );
+  });
+
+  it("keeps null-identity records from collapsing into the same signal", async () => {
+    const store = new InMemoryReviewFeedbackStore();
+    const service = new ReviewFeedbackService(store as never, {
+      now: () => new Date("2026-03-11T12:00:00.000Z"),
+      createId: (() => {
+        let count = 0;
+        return () => `feedback_${++count}`;
+      })(),
+    });
+
+    await store.save([
+      {
+        id: "feedback_1",
+        tenantId: "tenant_1",
+        repositoryId: "repo_1",
+        scopeKey: "ignored:src/api/server.ts:_:_",
+        providerCommentId: null,
+        fingerprint: null,
+        path: "src/api/server.ts",
+        category: null,
+        findingType: null,
+        kind: "ignored",
+        count: 1,
+        createdAt: "2026-03-11T12:00:00.000Z",
+        updatedAt: "2026-03-11T12:00:00.000Z",
+      },
+      {
+        id: "feedback_2",
+        tenantId: "tenant_1",
+        repositoryId: "repo_1",
+        scopeKey: "resolved_without_code_change:fallback_2",
+        providerCommentId: null,
+        fingerprint: null,
+        path: null,
+        category: null,
+        findingType: null,
+        kind: "resolved_without_code_change",
+        count: 1,
+        createdAt: "2026-03-11T12:00:00.000Z",
+        updatedAt: "2026-03-11T12:00:00.000Z",
+      },
+    ]);
+
+    const signals = await service.getSignals({
+      tenantId: "tenant_1",
+      repositoryId: "repo_1",
+      paths: ["src/api/server.ts"],
+      limit: 10,
+    });
+
+    expect(signals).toHaveLength(1);
+    expect(signals[0]).toMatchObject({
+      path: "src/api/server.ts",
+      suppress: true,
+    });
   });
 });

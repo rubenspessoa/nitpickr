@@ -90,7 +90,7 @@ export class PostgresReviewFeedbackStore implements ReviewFeedbackStore {
             updated_at
           )
           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-          on conflict (repository_id, scope_key, kind) do update set
+          on conflict (repository_id, scope_key) do update set
             provider_comment_id = excluded.provider_comment_id,
             fingerprint = excluded.fingerprint,
             path = excluded.path,

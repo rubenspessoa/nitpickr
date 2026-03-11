@@ -41,6 +41,8 @@ function patchIncludesLine(patch: string, line: number): boolean {
     ...patch.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm),
   ];
   if (matches.length === 0) {
+    // Some provider patches omit hunk headers for binary or compact diffs.
+    // Keep those files eligible and let later comment targeting be the stricter gate.
     return true;
   }
 
@@ -65,28 +67,32 @@ function severityWeight(severity: GateFinding["severity"]): number {
   }
 }
 
+function matchesFeedbackSignal(
+  finding: GateFinding,
+  signal: ReviewFeedbackSignal,
+): boolean {
+  const fingerprint = fingerprintFinding(finding);
+  const exactFingerprintMatch =
+    signal.fingerprint !== undefined && signal.fingerprint === fingerprint;
+  const pathMatch =
+    signal.path !== undefined && signal.path === finding.path.trim();
+  const categoryMatch =
+    signal.category !== undefined && signal.category === finding.category;
+  const findingTypeMatch =
+    signal.findingType !== undefined &&
+    signal.findingType === finding.findingType;
+
+  return (
+    exactFingerprintMatch || (pathMatch && (categoryMatch || findingTypeMatch))
+  );
+}
+
 function feedbackScoreForFinding(
   finding: GateFinding,
   feedbackSignals: ReviewFeedbackSignal[],
 ): number {
-  const fingerprint = fingerprintFinding(finding);
-
   return feedbackSignals.reduce((score, signal) => {
-    const exactFingerprintMatch =
-      signal.fingerprint !== undefined && signal.fingerprint === fingerprint;
-    const pathMatch =
-      signal.path !== undefined && signal.path === finding.path.trim();
-    const categoryMatch =
-      signal.category !== undefined && signal.category === finding.category;
-    const findingTypeMatch =
-      signal.findingType !== undefined &&
-      signal.findingType === finding.findingType;
-
-    if (exactFingerprintMatch) {
-      return score + signal.score;
-    }
-
-    if (pathMatch && (categoryMatch || findingTypeMatch)) {
+    if (matchesFeedbackSignal(finding, signal)) {
       return score + signal.score;
     }
 
@@ -98,29 +104,10 @@ function isSuppressedByFeedback(
   finding: GateFinding,
   feedbackSignals: ReviewFeedbackSignal[],
 ): boolean {
-  const fingerprint = fingerprintFinding(finding);
-
-  return feedbackSignals.some((signal) => {
-    const exactFingerprintMatch =
-      signal.fingerprint !== undefined && signal.fingerprint === fingerprint;
-    const pathMatch =
-      signal.path !== undefined && signal.path === finding.path.trim();
-    const categoryMatch =
-      signal.category !== undefined && signal.category === finding.category;
-    const findingTypeMatch =
-      signal.findingType !== undefined &&
-      signal.findingType === finding.findingType;
-
-    if (signal.suppress && exactFingerprintMatch) {
-      return true;
-    }
-
-    if (signal.suppress && pathMatch && (categoryMatch || findingTypeMatch)) {
-      return true;
-    }
-
-    return false;
-  });
+  return feedbackSignals.some(
+    (signal) =>
+      (signal.suppress ?? false) && matchesFeedbackSignal(finding, signal),
+  );
 }
 
 function compareFindingsWithFeedback(

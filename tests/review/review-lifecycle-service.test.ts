@@ -15,6 +15,8 @@ class FakeReviewLifecycleStore implements ReviewLifecycleStore {
   readonly failedRuns: Array<Record<string, unknown>> = [];
   readonly discussionEvents: PersistedDiscussionEvent[] = [];
   readonly supersededRuns: Array<Record<string, unknown>> = [];
+  readonly resolvedComments: Array<Record<string, unknown>> = [];
+  latestCompletedReviewRun: PersistedReviewRun | null = null;
 
   async upsertChangeRequest(changeRequest: ChangeRequest): Promise<void> {
     this.changeRequests.push(changeRequest);
@@ -41,6 +43,17 @@ class FakeReviewLifecycleStore implements ReviewLifecycleStore {
     events: PersistedDiscussionEvent[],
   ): Promise<void> {
     this.discussionEvents.push(...events);
+  }
+
+  async findLatestCompletedReviewRun(): Promise<PersistedReviewRun | null> {
+    return this.latestCompletedReviewRun;
+  }
+
+  async markPublishedCommentsResolved(
+    input: Record<string, unknown>,
+  ): Promise<number> {
+    this.resolvedComments.push(input);
+    return 1;
   }
 }
 
@@ -81,6 +94,8 @@ describe("ReviewLifecycleService", () => {
       changeRequest,
       trigger,
       mode: "quick",
+      scope: "full_pr",
+      comparedFromSha: null,
       budgets: {
         maxFiles: 50,
         maxHunks: 200,
@@ -108,7 +123,9 @@ describe("ReviewLifecycleService", () => {
       changeRequestId: changeRequest.id,
       trigger,
       mode: "quick",
+      scope: "full_pr",
       headSha: changeRequest.headSha,
+      comparedFromSha: null,
       status: "running",
     });
     expect(store.supersededRuns[0]).toMatchObject({
@@ -151,6 +168,7 @@ describe("ReviewLifecycleService", () => {
           {
             path: "src/queue/queue-scheduler.ts",
             line: 24,
+            findingType: "safe_suggestion",
             severity: "medium",
             category: "performance",
             title: "Avoid rescanning running jobs",
@@ -185,6 +203,7 @@ describe("ReviewLifecycleService", () => {
         repositoryId: changeRequest.repositoryId,
         path: "src/queue/queue-scheduler.ts",
         line: 24,
+        findingType: "safe_suggestion",
         severity: "medium",
         category: "performance",
         title: "Avoid rescanning running jobs",
@@ -203,9 +222,48 @@ describe("ReviewLifecycleService", () => {
         path: "src/queue/queue-scheduler.ts",
         line: 24,
         body: "**Avoid rescanning running jobs**",
+        providerThreadId: null,
+        providerCommentId: null,
+        fingerprint: null,
+        resolvedAt: null,
         createdAt: "2026-03-09T10:05:00.000Z",
       },
     ]);
+  });
+
+  it("persists commit-delta run metadata", async () => {
+    const store = new FakeReviewLifecycleStore();
+    const service = new ReviewLifecycleService(store, {
+      now: () => new Date("2026-03-09T10:07:00.000Z"),
+      createId: () => "review_run_2",
+    });
+
+    await service.startReview({
+      tenantId: changeRequest.tenantId,
+      repositoryId: changeRequest.repositoryId,
+      changeRequest,
+      trigger: {
+        type: "pr_synchronized",
+        actorLogin: "ruben",
+      },
+      mode: "quick",
+      scope: "commit_delta",
+      comparedFromSha: "cccccccccccccccccccccccccccccccccccccccc",
+      budgets: {
+        maxFiles: 10,
+        maxHunks: 40,
+        maxTokens: 40000,
+        maxComments: 5,
+        maxDurationMs: 300000,
+      },
+      discussionSnapshot: [],
+    });
+
+    expect(store.reviewRuns[0]).toMatchObject({
+      id: "review_run_2",
+      scope: "commit_delta",
+      comparedFromSha: "cccccccccccccccccccccccccccccccccccccccc",
+    });
   });
 
   it("marks failed reviews with an error message", async () => {
@@ -226,5 +284,54 @@ describe("ReviewLifecycleService", () => {
         completedAt: "2026-03-09T10:06:00.000Z",
       },
     ]);
+  });
+
+  it("loads the latest completed review run for a change request", async () => {
+    const store = new FakeReviewLifecycleStore();
+    store.latestCompletedReviewRun = {
+      id: "review_run_0",
+      tenantId: changeRequest.tenantId,
+      repositoryId: changeRequest.repositoryId,
+      changeRequestId: changeRequest.id,
+      trigger,
+      mode: "quick",
+      scope: "full_pr",
+      headSha: "cccccccccccccccccccccccccccccccccccccccc",
+      comparedFromSha: null,
+      status: "published",
+      budgets: {
+        maxFiles: 50,
+        maxHunks: 200,
+        maxTokens: 120000,
+        maxComments: 20,
+        maxDurationMs: 300000,
+      },
+      createdAt: "2026-03-09T09:50:00.000Z",
+      updatedAt: "2026-03-09T09:51:00.000Z",
+      completedAt: "2026-03-09T09:51:00.000Z",
+    };
+    const service = new ReviewLifecycleService(store);
+
+    await expect(
+      service.getLatestCompletedReview(changeRequest.id),
+    ).resolves.toEqual(store.latestCompletedReviewRun);
+  });
+
+  it("marks published comments resolved by provider thread id", async () => {
+    const store = new FakeReviewLifecycleStore();
+    const service = new ReviewLifecycleService(store, {
+      now: () => new Date("2026-03-09T10:08:00.000Z"),
+    });
+
+    const count = await service.markPublishedCommentsResolved([
+      "thread_1",
+      "thread_2",
+    ]);
+
+    expect(count).toBe(1);
+    expect(store.resolvedComments[0]).toMatchObject({
+      providerThreadIds: ["thread_1", "thread_2"],
+      resolvedAt: "2026-03-09T10:08:00.000Z",
+    });
   });
 });

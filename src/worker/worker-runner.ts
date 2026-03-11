@@ -116,6 +116,111 @@ function prependSummaryReason(
   };
 }
 
+function determineReviewScope(
+  trigger: ReturnType<typeof parseReviewTrigger>,
+): ReviewRun["scope"] {
+  return trigger.type === "pr_synchronized" ? "commit_delta" : "full_pr";
+}
+
+function isAutomaticTrigger(
+  trigger: ReturnType<typeof parseReviewTrigger>,
+): boolean {
+  return (
+    trigger.type === "pr_opened" ||
+    trigger.type === "pr_ready_for_review" ||
+    trigger.type === "pr_synchronized"
+  );
+}
+
+function selectPublishableResult(
+  result: ReviewEngineResult,
+  trigger: ReturnType<typeof parseReviewTrigger>,
+): ReviewEngineResult {
+  if (!isAutomaticTrigger(trigger)) {
+    return result;
+  }
+
+  return {
+    ...result,
+    findings: result.findings.filter(
+      (finding) =>
+        finding.findingType === "bug" ||
+        finding.findingType === "safe_suggestion",
+    ),
+  };
+}
+
+async function enrichPublishedCommentsWithProviderMetadata(
+  comments: Array<{
+    path: string;
+    line: number;
+    body: string;
+    fingerprint?: string | null;
+    providerThreadId?: string | null;
+    providerCommentId?: string | null;
+    resolvedAt?: string | null;
+  }>,
+  threads: Array<{
+    threadId: string;
+    providerCommentId: string;
+    path: string;
+    line: number;
+    fingerprint: string;
+    isResolved: boolean;
+  }>,
+): Promise<
+  Array<{
+    path: string;
+    line: number;
+    body: string;
+    providerThreadId: string | null;
+    providerCommentId: string | null;
+    fingerprint: string | null;
+    resolvedAt: string | null;
+  }>
+> {
+  return comments.map((comment) => {
+    const thread =
+      comment.fingerprint === undefined
+        ? null
+        : (threads.find(
+            (candidate) => candidate.fingerprint === comment.fingerprint,
+          ) ?? null);
+
+    return {
+      path: comment.path,
+      line: comment.line,
+      body: comment.body,
+      providerThreadId: thread?.threadId ?? null,
+      providerCommentId: thread?.providerCommentId ?? null,
+      fingerprint: comment.fingerprint ?? null,
+      resolvedAt: null,
+    };
+  });
+}
+
+function findStaleThreadIds(input: {
+  comparedPaths: string[];
+  currentFingerprints: Set<string>;
+  threads: Array<{
+    threadId: string;
+    path: string;
+    fingerprint: string;
+    isResolved: boolean;
+  }>;
+}): string[] {
+  const comparedPathSet = new Set(input.comparedPaths);
+
+  return input.threads
+    .filter(
+      (thread) =>
+        !thread.isResolved &&
+        comparedPathSet.has(thread.path) &&
+        !input.currentFingerprints.has(thread.fingerprint),
+    )
+    .map((thread) => thread.threadId);
+}
+
 type ReviewStatusPhase = "pending" | "published" | "skipped" | "failed";
 
 const noopStatusPublisher: Pick<
@@ -236,7 +341,15 @@ export interface WorkerRunnerDependencies {
     QueueScheduler,
     "claimNextJobs" | "cancelSupersededReviewJobs" | "completeJob" | "failJob"
   >;
-  githubAdapter: Pick<GitHubAdapter, "fetchChangeRequestContext">;
+  githubAdapter: Pick<GitHubAdapter, "fetchChangeRequestContext"> &
+    Partial<
+      Pick<
+        GitHubAdapter,
+        | "comparePullRequestRange"
+        | "listNitpickrReviewThreads"
+        | "resolveReviewThread"
+      >
+    >;
   instructionBundleLoader: InstructionBundleLoader;
   memoryService: Pick<
     MemoryService,
@@ -246,7 +359,13 @@ export interface WorkerRunnerDependencies {
   reviewLifecycle: Pick<
     ReviewLifecycleService,
     "startReview" | "completeReview" | "failReview"
-  >;
+  > &
+    Partial<
+      Pick<
+        ReviewLifecycleService,
+        "getLatestCompletedReview" | "markPublishedCommentsResolved"
+      >
+    >;
   reviewEngine: Pick<ReviewEngine, "review">;
   publisher: Pick<ReviewPublisher, "buildInlineComments" | "publish">;
   statusPublisher?: Pick<
@@ -353,6 +472,7 @@ export class WorkerRunner {
     let checkRunId: string | null = null;
     let statusChecksEnabled = false;
     let changeRequestContext: GitHubChangeRequestContext | null = null;
+    let resolvedThreadCount = 0;
 
     try {
       let context: GitHubChangeRequestContext;
@@ -368,6 +488,38 @@ export class WorkerRunner {
         throw classifyReviewError("github", error);
       }
       changeRequestContext = context;
+      const reviewScope = determineReviewScope(payload.trigger);
+      const latestCompletedReview =
+        reviewScope === "commit_delta" &&
+        this.#reviewLifecycle.getLatestCompletedReview
+          ? await this.#reviewLifecycle.getLatestCompletedReview(
+              context.changeRequest.id,
+            )
+          : null;
+      const comparedFromSha =
+        latestCompletedReview &&
+        latestCompletedReview.headSha !== context.changeRequest.headSha
+          ? latestCompletedReview.headSha
+          : null;
+      const comparePullRequestRange =
+        this.#githubAdapter.comparePullRequestRange?.bind(this.#githubAdapter);
+      const reviewFiles =
+        reviewScope === "commit_delta" &&
+        comparedFromSha &&
+        comparePullRequestRange
+          ? await (async () => {
+              try {
+                return await comparePullRequestRange({
+                  installationId: payload.installationId,
+                  repository: payload.repository,
+                  baseSha: comparedFromSha,
+                  headSha: context.changeRequest.headSha,
+                });
+              } catch (error) {
+                throw classifyReviewError("github", error);
+              }
+            })()
+          : context.files;
 
       const supersededCount =
         await this.#queueScheduler.cancelSupersededReviewJobs({
@@ -397,7 +549,7 @@ export class WorkerRunner {
       const reviewPlan = this.#reviewPlanner.plan({
         mode: payload.mode,
         config: instructionBundle.config,
-        files: context.files.map((file) => ({
+        files: reviewFiles.map((file) => ({
           path: file.path,
           additions: file.additions,
           deletions: file.deletions,
@@ -409,6 +561,8 @@ export class WorkerRunner {
         jobId: job.id,
         repositoryId: job.repositoryId,
         mode: payload.mode,
+        scope: reviewScope,
+        comparedFromSha,
         reviewableFileCount: reviewPlan.files.length,
         summaryOnly: reviewPlan.summaryOnly,
       });
@@ -419,6 +573,8 @@ export class WorkerRunner {
         changeRequest: context.changeRequest,
         trigger: payload.trigger,
         mode: payload.mode,
+        scope: reviewScope,
+        comparedFromSha,
         budgets: {
           maxFiles: reviewPlan.files.length,
           maxHunks: instructionBundle.config.review.maxHunks,
@@ -508,6 +664,16 @@ export class WorkerRunner {
                         },
                   ),
                   commentBudget: reviewPlan.commentBudget,
+                  ...(reviewScope === "commit_delta"
+                    ? {
+                        contextFiles: context.files.map((file) => ({
+                          path: file.path,
+                          additions: file.additions,
+                          deletions: file.deletions,
+                          patch: file.patch,
+                        })),
+                      }
+                    : {}),
                 });
               } catch (error) {
                 throw classifyReviewError("review", error);
@@ -518,6 +684,10 @@ export class WorkerRunner {
           ? rawResult
           : stripSuggestedChanges(rawResult),
         reviewPlan.summaryOnlyReason,
+      );
+      const publishableResult = selectPublishableResult(
+        result,
+        payload.trigger,
       );
 
       if (reviewPlan.files.length === 0) {
@@ -532,12 +702,12 @@ export class WorkerRunner {
         this.#logger.info("Generated review result.", {
           jobId: job.id,
           reviewRunId: startedReviewRunId,
-          findingCount: result.findings.length,
+          findingCount: publishableResult.findings.length,
         });
       }
 
-      const publishedComments = this.#publisher.buildInlineComments(
-        result.findings,
+      const draftPublishedComments = this.#publisher.buildInlineComments(
+        publishableResult.findings,
         {
           files: reviewPlan.files.map((file) => ({
             path: file.path,
@@ -545,6 +715,49 @@ export class WorkerRunner {
           })),
         },
       );
+      const existingNitpickrThreads = this.#githubAdapter
+        .listNitpickrReviewThreads
+        ? await this.#githubAdapter.listNitpickrReviewThreads({
+            installationId: payload.installationId,
+            repository: payload.repository,
+            pullNumber: payload.pullNumber,
+          })
+        : [];
+      if (reviewScope === "commit_delta") {
+        const staleThreadIds = findStaleThreadIds({
+          comparedPaths: reviewPlan.files.map((file) => file.path),
+          currentFingerprints: new Set(
+            draftPublishedComments.map((comment) => comment.fingerprint),
+          ),
+          threads: existingNitpickrThreads,
+        });
+        for (const threadId of staleThreadIds) {
+          try {
+            if (this.#githubAdapter.resolveReviewThread) {
+              await this.#githubAdapter.resolveReviewThread({
+                installationId: payload.installationId,
+                threadId,
+              });
+              resolvedThreadCount += 1;
+            }
+          } catch (error) {
+            this.#logger.warn(
+              "Failed to resolve stale nitpickr review thread.",
+              {
+                jobId: job.id,
+                reviewRunId: startedReviewRunId,
+                threadId,
+                error: toErrorMessage(error),
+              },
+            );
+          }
+        }
+        if (resolvedThreadCount > 0) {
+          await this.#reviewLifecycle.markPublishedCommentsResolved?.(
+            staleThreadIds,
+          );
+        }
+      }
       const publishedReview = await (async () => {
         try {
           return await this.#publisher.publish({
@@ -552,7 +765,15 @@ export class WorkerRunner {
             installationId: payload.installationId,
             repository: payload.repository,
             pullNumber: payload.pullNumber,
-            result: result as ReviewEngineResult,
+            publishMode:
+              reviewScope === "commit_delta" ? "commit_summary" : "pr_summary",
+            reviewedCommitSha: context.changeRequest.headSha,
+            commitSummaryCounts: {
+              newFindings: publishableResult.findings.length,
+              resolvedThreads: resolvedThreadCount,
+              stillRelevantFindings: publishableResult.findings.length,
+            },
+            result: publishableResult as ReviewEngineResult,
             files: reviewPlan.files.map((file) => ({
               path: file.path,
               patch: file.patch,
@@ -562,6 +783,18 @@ export class WorkerRunner {
           throw classifyReviewError("publish", error);
         }
       })();
+      const nitpickrThreads = this.#githubAdapter.listNitpickrReviewThreads
+        ? await this.#githubAdapter.listNitpickrReviewThreads({
+            installationId: payload.installationId,
+            repository: payload.repository,
+            pullNumber: payload.pullNumber,
+          })
+        : [];
+      const publishedComments =
+        await enrichPublishedCommentsWithProviderMetadata(
+          draftPublishedComments,
+          nitpickrThreads,
+        );
 
       await this.#reviewLifecycle.completeReview({
         reviewRunId: startedReviewRunId,
@@ -646,7 +879,7 @@ export class WorkerRunner {
         jobId: job.id,
         reviewRunId: startedReviewRunId,
         publishedReviewId: publishedReview.reviewId,
-        findingCount: result.findings.length,
+        findingCount: publishableResult.findings.length,
       });
     } catch (error) {
       if (reviewRunId !== null) {

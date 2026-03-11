@@ -53,7 +53,9 @@ describe("PostgresReviewLifecycleStore", () => {
         actorLogin: "ruben",
       },
       mode: "quick",
+      scope: "full_pr",
       headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      comparedFromSha: null,
       status: "running",
       budgets: {
         maxFiles: 50,
@@ -88,6 +90,7 @@ describe("PostgresReviewLifecycleStore", () => {
           repositoryId: "github:99",
           path: "src/queue/queue-scheduler.ts",
           line: 24,
+          findingType: "safe_suggestion",
           severity: "medium",
           category: "performance",
           title: "Avoid rescanning running jobs",
@@ -106,6 +109,10 @@ describe("PostgresReviewLifecycleStore", () => {
           path: "src/queue/queue-scheduler.ts",
           line: 24,
           body: "**Avoid rescanning running jobs**",
+          providerThreadId: "thread_1",
+          providerCommentId: "comment_1",
+          fingerprint: "fp_1",
+          resolvedAt: null,
           createdAt: "2026-03-09T10:05:00.000Z",
         },
       ],
@@ -114,7 +121,11 @@ describe("PostgresReviewLifecycleStore", () => {
     expect(client.calls[0]?.query).toContain("update review_runs");
     expect(client.calls[1]?.query).toContain("insert into review_findings");
     expect(client.calls[1]?.query).toContain("suggested_change");
+    expect(client.calls[1]?.query).toContain("finding_type");
     expect(client.calls[2]?.query).toContain("insert into published_comments");
+    expect(client.calls[2]?.query).toContain("provider_thread_id");
+    expect(client.calls[2]?.query).toContain("provider_comment_id");
+    expect(client.calls[2]?.query).toContain("fingerprint");
   });
 
   it("supersedes previous review runs for the same change request", async () => {
@@ -144,6 +155,79 @@ describe("PostgresReviewLifecycleStore", () => {
 
     expect(client.calls[0]?.query).toContain("update review_runs");
     expect(client.calls[0]?.params).toContain("failed");
+  });
+
+  it("loads the latest completed review run for a change request", async () => {
+    const client = new FakePostgresClient();
+    client.unsafe = async <T extends Record<string, unknown>>(
+      query: string,
+      params?: readonly unknown[],
+    ): Promise<T[]> => {
+      client.calls.push({ query, params });
+      return [
+        {
+          id: "review_run_0",
+          tenant_id: "github-installation:123456",
+          repository_id: "github:99",
+          change_request_id: "github:99:42",
+          trigger: JSON.stringify({
+            type: "pr_opened",
+            actorLogin: "ruben",
+          }),
+          mode: "quick",
+          scope: "full_pr",
+          head_sha: "cccccccccccccccccccccccccccccccccccccccc",
+          compared_from_sha: null,
+          status: "published",
+          budgets: JSON.stringify({
+            maxFiles: 50,
+            maxHunks: 200,
+            maxTokens: 120000,
+            maxComments: 20,
+            maxDurationMs: 300000,
+          }),
+          created_at: "2026-03-09T09:50:00.000Z",
+          updated_at: "2026-03-09T09:51:00.000Z",
+          completed_at: "2026-03-09T09:51:00.000Z",
+        } as unknown as T,
+      ];
+    };
+    const store = new PostgresReviewLifecycleStore(client);
+
+    const run = await store.findLatestCompletedReviewRun("github:99:42");
+
+    expect(run).toMatchObject({
+      id: "review_run_0",
+      scope: "full_pr",
+      headSha: "cccccccccccccccccccccccccccccccccccccccc",
+      comparedFromSha: null,
+    });
+    expect(client.calls[0]?.query).toContain("from review_runs");
+    expect(client.calls[0]?.query).toContain("completed_at desc");
+  });
+
+  it("marks published comments resolved by provider thread id", async () => {
+    const client = new FakePostgresClient();
+    client.unsafe = async <T extends Record<string, unknown>>(
+      query: string,
+      params?: readonly unknown[],
+    ): Promise<T[]> => {
+      client.calls.push({ query, params });
+      return [{ resolved_count: 2 } as unknown as T];
+    };
+    const store = new PostgresReviewLifecycleStore(client);
+
+    const count = await store.markPublishedCommentsResolved({
+      providerThreadIds: ["thread_1", "thread_2"],
+      resolvedAt: "2026-03-09T10:10:00.000Z",
+    });
+
+    expect(count).toBe(2);
+    expect(client.calls[0]?.query).toContain("update published_comments");
+    expect(client.calls[0]?.params).toEqual([
+      ["thread_1", "thread_2"],
+      "2026-03-09T10:10:00.000Z",
+    ]);
   });
 
   it("saves discussion events", async () => {

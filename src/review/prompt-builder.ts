@@ -13,6 +13,12 @@ export interface PromptBuilderInput {
       deletions: number;
     }>;
   };
+  contextFiles?: Array<{
+    path: string;
+    patch: string | null;
+    additions: number;
+    deletions: number;
+  }>;
   instructionText: string;
   memory: Array<{
     summary: string;
@@ -39,7 +45,8 @@ export class PromptBuilder {
         'Prefer `diagram.type = "sequence"` for pull request review flows.',
         'Use `diagram.type = "flowchart"` only when a single component\'s internal logic is the main story.',
         "Do not return raw Mermaid text. Return a structured diagram object instead.",
-        "Each finding must contain path, line, severity, category, title, body, fixPrompt.",
+        "Each finding must contain path, line, findingType, severity, category, title, body, fixPrompt.",
+        "findingType must be one of: 'bug' | 'safe_suggestion' | 'question' | 'teaching_note'.",
         "A finding may also include suggestedChange for a small, high-confidence inline replacement.",
         "Severity must be one of: 'low' | 'medium' | 'high' | 'critical'.",
         "Category must be one of: 'correctness' | 'performance' | 'security' | 'maintainability' | 'testing' | 'style'.",
@@ -72,6 +79,17 @@ export class PromptBuilder {
               )
               .join("\n"),
         "",
+        "Current PR context:",
+        input.contextFiles === undefined || input.contextFiles.length === 0
+          ? "Only the primary review scope is available."
+          : input.contextFiles
+              .map(
+                (file) =>
+                  `${file.path} (+${file.additions}/-${file.deletions})`,
+              )
+              .join("\n"),
+        "",
+        "Primary review scope:",
         "Changed files:",
         ...input.chunk.files.map((file) =>
           [

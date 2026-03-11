@@ -64,7 +64,9 @@ export const migrations = [
       change_request_id text not null references change_requests (id),
       trigger jsonb not null,
       mode text not null,
+      scope text not null default 'full_pr',
       head_sha text not null,
+      compared_from_sha text,
       status text not null,
       budgets jsonb not null,
       summary text,
@@ -85,6 +87,7 @@ export const migrations = [
       repository_id text not null,
       path text not null,
       line integer not null,
+      finding_type text not null default 'bug',
       severity text not null,
       category text not null,
       title text not null,
@@ -103,6 +106,10 @@ export const migrations = [
       path text not null,
       line integer not null,
       body text not null,
+      provider_thread_id text,
+      provider_comment_id text,
+      fingerprint text,
+      resolved_at timestamptz,
       created_at timestamptz not null
     );
 
@@ -132,6 +139,30 @@ export const migrations = [
   `
     alter table review_runs
     add column if not exists check_run_id text;
+  `,
+  `
+    alter table review_runs
+    add column if not exists scope text not null default 'full_pr';
+
+    alter table review_runs
+    add column if not exists compared_from_sha text;
+  `,
+  `
+    alter table review_findings
+    add column if not exists finding_type text not null default 'bug';
+  `,
+  `
+    alter table published_comments
+    add column if not exists provider_thread_id text;
+
+    alter table published_comments
+    add column if not exists provider_comment_id text;
+
+    alter table published_comments
+    add column if not exists fingerprint text;
+
+    alter table published_comments
+    add column if not exists resolved_at timestamptz;
   `,
   `
     create table if not exists app_runtime_config (

@@ -4,7 +4,7 @@ import { parseBootstrapConfig as parseCliBootstrapConfig } from "../config/app-c
 import { createPostgresClient } from "../runtime/postgres.js";
 import { DoctorCommand } from "./doctor-command.js";
 import { EvalReviewsCommand } from "./eval-reviews-command.js";
-import { MigrateCommand } from "./migrate-command.js";
+import { runMigrationsWithAdvisoryLock } from "./migrate-command.js";
 import { SetupCommand } from "./setup-command.js";
 
 async function main(): Promise<void> {
@@ -49,8 +49,7 @@ async function main(): Promise<void> {
     const config = parseCliBootstrapConfig(env);
     const sql = createPostgresClient(config.databaseUrl);
     try {
-      const migrate = new MigrateCommand(sql);
-      await migrate.run();
+      await runMigrationsWithAdvisoryLock(sql);
     } finally {
       await sql.end();
     }

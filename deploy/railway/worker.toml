@@ -1,0 +1,7 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+preDeployCommand = "node dist/src/cli/index.js migrate"
+startCommand = "node dist/src/worker/index.js"

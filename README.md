@@ -15,6 +15,28 @@ This repository is moving from usable alpha toward a reliability-focused beta:
 
 ## Quickstart
 
+### Hosted on Railway
+
+1. Create a Railway project with:
+   - one PostgreSQL database
+   - one `api` service from this repo
+   - one `worker` service from this repo
+2. Set the API config-as-code path to [deploy/railway/api.toml](/Users/rubenspessoa/Documents/Workspace/nitpickr/deploy/railway/api.toml).
+3. Set the worker config-as-code path to [deploy/railway/worker.toml](/Users/rubenspessoa/Documents/Workspace/nitpickr/deploy/railway/worker.toml).
+4. Configure the shared env vars:
+   - `DATABASE_URL`
+   - `NITPICKR_BASE_URL`
+   - `NITPICKR_SECRET_KEY`
+   - `OPENAI_API_KEY`
+   - `GITHUB_APP_ID`
+   - `GITHUB_PRIVATE_KEY`
+   - `GITHUB_WEBHOOK_SECRET`
+5. Point the GitHub App webhook to `https://YOUR_PUBLIC_RAILWAY_DOMAIN/webhooks/github`.
+6. Merge to `main` and let Railway auto-deploy both services.
+7. Verify [docs/railway-deploy.md](/Users/rubenspessoa/Documents/Workspace/nitpickr/docs/railway-deploy.md) end to end.
+
+### Local Docker Compose
+
 1. Install dependencies with `pnpm install`.
 2. Generate starter config with `pnpm cli setup`.
 3. Edit `.env` and fill in:
@@ -52,6 +74,8 @@ Create a GitHub App and configure:
   - Issue comment
 
 If you are running locally, expose the API with a public HTTPS tunnel such as `cloudflared` or `ngrok` and use that URL for `NITPICKR_WEBHOOK_URL`.
+
+For a stable always-on deployment, prefer Railway and follow [docs/railway-deploy.md](/Users/rubenspessoa/Documents/Workspace/nitpickr/docs/railway-deploy.md).
 
 Manual review mentions are configured with `GITHUB_BOT_LOGINS`. By default the generated config accepts both `@nitpickr` and `@getnitpickr`.
 

@@ -13,3 +13,4 @@
 - Provider errors can come as `Error`, plain strings, or plain objects; fallback logic should inspect structured payloads, not only message substrings.
 - Avoid permissive numeric parsing (`parseInt` alone) in reliability paths; enforce full-format validation first to prevent false-positive status handling.
 - For parser hardening, prefer linear state-machine extraction over repeated candidate parse loops with ad-hoc caps; this improves both performance and determinism.
+- In fallback-critical scanners, wrap parse invocations defensively and add tests for braces inside JSON string values to avoid aborting on malformed candidates or miscounting delimiters.

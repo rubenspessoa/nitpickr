@@ -211,7 +211,15 @@ function parseJsonPayloadFromText(text: string): unknown | null {
     }
   };
 
-  const direct = tryParseObject(text.trim());
+  const safeTryParseObject = (candidate: string): unknown | null => {
+    try {
+      return tryParseObject(candidate);
+    } catch {
+      return null;
+    }
+  };
+
+  const direct = safeTryParseObject(text.trim());
   if (direct) {
     return direct;
   }
@@ -223,9 +231,6 @@ function parseJsonPayloadFromText(text: string): unknown | null {
 
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
-    if (character === undefined) {
-      continue;
-    }
 
     if (inString) {
       if (escaped) {
@@ -264,7 +269,7 @@ function parseJsonPayloadFromText(text: string): unknown | null {
     depth -= 1;
     if (depth === 0 && objectStart >= 0) {
       const candidate = text.slice(objectStart, index + 1).trim();
-      const parsed = tryParseObject(candidate);
+      const parsed = safeTryParseObject(candidate);
       if (parsed) {
         return parsed;
       }

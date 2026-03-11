@@ -450,6 +450,59 @@ describe("ReviewPublisher", () => {
     expect(client.calls[1]?.comments).toHaveLength(0);
   });
 
+  it("falls back when JSON string values include brace characters", async () => {
+    const client = new FakePublishReviewClient();
+    client.publishFailures = [
+      new Error(
+        'GitHub request failed with status 422: {"status":"422","message":"value with } and { braces","errors":["Path could not be resolved"]}',
+      ),
+    ];
+    const publisher = new ReviewPublisher(client);
+
+    const published = await publisher.publish({
+      reviewRunId: "review_run_422_braces",
+      installationId: "123456",
+      repository: {
+        owner: "rubenspessoa",
+        name: "nitpickr",
+      },
+      pullNumber: 42,
+      publishMode: "pr_summary",
+      result: {
+        summary: "Queue fairness improved.",
+        mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+        findings: [
+          {
+            path: "src/queue/queue-scheduler.ts",
+            line: 18,
+            findingType: "bug",
+            severity: "high",
+            category: "correctness",
+            title: "Stable ordering breaks",
+            body: "Equal priorities do not preserve insertion order.",
+            fixPrompt:
+              "Refactor the queue to preserve insertion order for equal priorities.",
+          },
+        ],
+      },
+      files: [
+        {
+          path: "src/queue/queue-scheduler.ts",
+          patch: [
+            "@@ -17,1 +17,2 @@",
+            " context",
+            "+inserted",
+            "+stable ordering",
+          ].join("\n"),
+        },
+      ],
+    });
+
+    expect(published.reviewId).toBe("review_1");
+    expect(client.calls).toHaveLength(2);
+    expect(client.calls[1]?.comments).toHaveLength(0);
+  });
+
   it("does not swallow unrelated publish errors", async () => {
     const client = new FakePublishReviewClient();
     client.publishFailures = [

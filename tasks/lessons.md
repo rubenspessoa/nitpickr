@@ -18,3 +18,4 @@
 - Security and operability must both be preserved in diagnostics: log sanitized/truncated error context, not raw untrusted payload messages.
 - If a helper affects reliability and diagnostics, keep it module-level and test it directly; this reduces churn in behavior-driven tests and speeds review iterations.
 - Diagnostic serializers must treat `BigInt`, cycles, and huge objects as first-class inputs: bound traversal, cap serialized size, and prefer named policy constants over inline magic numbers.
+- When shortening diagnostic text for logs, preserve explicit truncation sentinels in the visible output so operators can distinguish hard truncation from naturally short messages.

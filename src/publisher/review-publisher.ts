@@ -96,6 +96,9 @@ const categoryEmoji: Record<PublishedFinding["category"], string> = {
 const DIAGNOSTIC_MAX_SERIALIZED_LENGTH = 1_000;
 const DIAGNOSTIC_MAX_STRING_LENGTH = 200;
 const DIAGNOSTIC_OBJECT_BUDGET = 200;
+const DIAGNOSTIC_SANITIZED_MAX_LENGTH = 200;
+const DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER = "...[truncated]";
+const DIAGNOSTIC_OBJECT_TRUNCATION_MARKER = "[Truncated]";
 
 function escapeMarkdownTableCell(value: string): string {
   return value.replace(/\|/g, "\\|").trim();
@@ -222,7 +225,7 @@ function toDiagnosticErrorSourceText(value: unknown): string {
 
         if (typeof entry === "string") {
           return entry.length > DIAGNOSTIC_MAX_STRING_LENGTH
-            ? `${entry.slice(0, DIAGNOSTIC_MAX_STRING_LENGTH)}...[truncated]`
+            ? `${entry.slice(0, DIAGNOSTIC_MAX_STRING_LENGTH)}${DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER}`
             : entry;
         }
 
@@ -236,7 +239,7 @@ function toDiagnosticErrorSourceText(value: unknown): string {
         visited.add(entry);
 
         if (remainingObjectBudget <= 0) {
-          return "[Truncated]";
+          return DIAGNOSTIC_OBJECT_TRUNCATION_MARKER;
         }
         remainingObjectBudget -= 1;
 
@@ -246,7 +249,7 @@ function toDiagnosticErrorSourceText(value: unknown): string {
       if (typeof serialized === "string") {
         return serialized.length <= DIAGNOSTIC_MAX_SERIALIZED_LENGTH
           ? serialized
-          : `${serialized.slice(0, DIAGNOSTIC_MAX_SERIALIZED_LENGTH)}...[truncated]`;
+          : `${serialized.slice(0, DIAGNOSTIC_MAX_SERIALIZED_LENGTH)}${DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER}`;
       }
     } catch {
       // Fall back to String(...) below.
@@ -261,10 +264,32 @@ export function sanitizeDiagnosticErrorMessage(value: unknown): string {
   const sanitized = raw
     .replace(/\s+/g, " ")
     .replace(/[^\x20-\x7E]/g, "")
-    .trim()
-    .slice(0, 200);
+    .trim();
 
-  return sanitized.length > 0 ? sanitized : "unavailable";
+  if (sanitized.length === 0) {
+    return "unavailable";
+  }
+
+  if (sanitized.length <= DIAGNOSTIC_SANITIZED_MAX_LENGTH) {
+    return sanitized;
+  }
+
+  for (const marker of [
+    DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER,
+    DIAGNOSTIC_OBJECT_TRUNCATION_MARKER,
+  ]) {
+    if (!sanitized.includes(marker)) {
+      continue;
+    }
+
+    const prefixLength = DIAGNOSTIC_SANITIZED_MAX_LENGTH - marker.length;
+    if (prefixLength <= 0) {
+      return marker.slice(0, DIAGNOSTIC_SANITIZED_MAX_LENGTH);
+    }
+    return `${sanitized.slice(0, prefixLength)}${marker}`;
+  }
+
+  return sanitized.slice(0, DIAGNOSTIC_SANITIZED_MAX_LENGTH);
 }
 
 function parseJsonPayloadFromText(text: string): unknown | null {

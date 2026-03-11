@@ -199,6 +199,10 @@
 - Updated `tests/publisher/review-publisher.test.ts`:
   - added circular-object sanitizer coverage
   - added `BigInt` serialization regression coverage
+- Follow-up after next nitpickr pass:
+  - ensured sanitizer preserves truncation sentinels when trimming to 200 chars
+  - added regression tests for serialized-length truncation marker preservation
+  - added regression tests for object-budget truncation marker preservation
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

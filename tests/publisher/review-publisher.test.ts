@@ -97,6 +97,31 @@ describe("ReviewPublisher", () => {
       expect(/^[\x20-\x7E]+$/.test(message)).toBe(true);
     });
 
+    it("preserves serialized-length truncation markers", () => {
+      const oversizedPayload = Object.fromEntries(
+        Array.from({ length: 80 }, (_value, index) => [
+          `field_${index}`,
+          `value_${index}_${"x".repeat(24)}`,
+        ]),
+      );
+
+      const message = sanitizeDiagnosticErrorMessage(oversizedPayload);
+
+      expect(message).toContain("...[truncated]");
+      expect(message.length).toBeLessThanOrEqual(200);
+    });
+
+    it("preserves object-budget truncation markers", () => {
+      const budgetExhaustingPayload = {
+        values: Array.from({ length: 210 }, () => ({})),
+      };
+
+      const message = sanitizeDiagnosticErrorMessage(budgetExhaustingPayload);
+
+      expect(message).toContain("[Truncated]");
+      expect(message.length).toBeLessThanOrEqual(200);
+    });
+
     it("returns a fallback when sanitization yields an empty string", () => {
       const message = sanitizeDiagnosticErrorMessage("🚨💥");
       expect(message).toBe("unavailable");

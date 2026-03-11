@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { ReadinessStatus } from "../health/readiness-service.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
 import type { SetupStatus } from "../setup/runtime-config-service.js";
-import type { GitHubWebhookService } from "./github-webhook-service.js";
+import type { GitHubWebhookHandler } from "./github-webhook-service.js";
 
 const webhookPayloadSchema = z.object({}).passthrough();
 const githubWebhookHeadersSchema = z.object({
@@ -32,8 +32,6 @@ function renderSetupPage(setupStatus: SetupStatus): string {
   </body>
 </html>`;
 }
-
-type GitHubWebhookHandler = Pick<GitHubWebhookService, "handle">;
 
 export interface ApiServerDependencies {
   logger?: Logger;
@@ -150,6 +148,25 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
       return reply.status(400).send({
         accepted: false,
         message: "Missing required GitHub webhook headers.",
+      });
+    }
+
+    const signatureValid = await webhookHandler.verifySignature(
+      rawBody,
+      headerResult.data.signature,
+    );
+
+    if (signatureValid === "setup_required") {
+      return reply.status(503).send({
+        accepted: false,
+        message: "Nitpickr setup is incomplete.",
+      });
+    }
+
+    if (!signatureValid) {
+      return reply.status(401).send({
+        accepted: false,
+        message: "Invalid GitHub webhook signature.",
       });
     }
 

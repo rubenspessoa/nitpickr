@@ -12,7 +12,7 @@ import type {
 import type { WebhookEventService } from "./webhook-event-service.js";
 
 const webhookRequestSchema = z.object({
-  deliveryId: z.string().min(1).optional(),
+  deliveryId: z.string().min(1),
   eventName: z.string().min(1),
   signature: z.string().min(1),
   rawBody: z.string(),
@@ -25,19 +25,30 @@ export interface GitHubWebhookResult {
   message: string;
 }
 
+export interface GitHubWebhookRequest {
+  deliveryId: string;
+  eventName: string;
+  signature: string;
+  rawBody: string;
+  payload: unknown;
+}
+
+export type GitHubWebhookSignatureVerificationResult =
+  | boolean
+  | "setup_required";
+
+export interface GitHubWebhookHandler {
+  verifySignature(
+    rawBody: string,
+    signature: string,
+  ): Promise<GitHubWebhookSignatureVerificationResult>;
+  handle(input: GitHubWebhookRequest): Promise<GitHubWebhookResult>;
+}
+
 type WebhookEventTracker = Pick<
   WebhookEventService,
   "beginDelivery" | "markFailed" | "markIgnored" | "markQueued"
 >;
-
-const noopWebhookEventTracker: WebhookEventTracker = {
-  async beginDelivery() {
-    return "new";
-  },
-  async markFailed() {},
-  async markIgnored() {},
-  async markQueued() {},
-};
 
 function buildReviewJobInput(
   event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
@@ -62,7 +73,7 @@ function buildReviewJobInput(
   };
 }
 
-export class GitHubWebhookService {
+export class GitHubWebhookService implements GitHubWebhookHandler {
   readonly #adapter: Pick<
     GitHubAdapter,
     "verifyWebhookSignature" | "normalizeWebhookEvent" | "reactToMention"
@@ -77,20 +88,19 @@ export class GitHubWebhookService {
       "verifyWebhookSignature" | "normalizeWebhookEvent" | "reactToMention"
     >,
     queueScheduler: Pick<QueueScheduler, "enqueue">,
+    webhookEventService: WebhookEventTracker,
     logger: Logger = noopLogger,
-    webhookEventService?: WebhookEventTracker,
   ) {
     this.#adapter = adapter;
     this.#queueScheduler = queueScheduler;
     this.#logger = logger.child({
       component: "github-webhook",
     });
-    if (!webhookEventService) {
-      this.#logger.warn(
-        "GitHub webhook event tracking is disabled; using noop tracker.",
-      );
-    }
-    this.#webhookEventService = webhookEventService ?? noopWebhookEventTracker;
+    this.#webhookEventService = webhookEventService;
+  }
+
+  async verifySignature(rawBody: string, signature: string): Promise<boolean> {
+    return this.#adapter.verifyWebhookSignature(rawBody, signature);
   }
 
   async #updateWebhookEventStatus(
@@ -145,13 +155,7 @@ export class GitHubWebhookService {
     }
   }
 
-  async handle(input: {
-    deliveryId?: string;
-    eventName: string;
-    signature: string;
-    rawBody: string;
-    payload: unknown;
-  }): Promise<GitHubWebhookResult> {
+  async handle(input: GitHubWebhookRequest): Promise<GitHubWebhookResult> {
     const parsed = webhookRequestSchema.parse(input);
     const valid = this.#adapter.verifyWebhookSignature(
       parsed.rawBody,
@@ -168,25 +172,23 @@ export class GitHubWebhookService {
       };
     }
 
-    if (parsed.deliveryId) {
-      const delivery = await this.#webhookEventService.beginDelivery({
-        deliveryId: parsed.deliveryId,
-        provider: "github",
-        eventName: parsed.eventName,
-        payload: parsed.payload,
-      });
+    const delivery = await this.#webhookEventService.beginDelivery({
+      deliveryId: parsed.deliveryId,
+      provider: "github",
+      eventName: parsed.eventName,
+      payload: parsed.payload,
+    });
 
-      if (delivery === "duplicate") {
-        this.#logger.info("Ignored duplicate GitHub webhook delivery.", {
-          deliveryId: parsed.deliveryId,
-          eventName: parsed.eventName,
-        });
-        return {
-          statusCode: 202,
-          accepted: false,
-          message: "Duplicate GitHub webhook delivery ignored.",
-        };
-      }
+    if (delivery === "duplicate") {
+      this.#logger.info("Ignored duplicate GitHub webhook delivery.", {
+        deliveryId: parsed.deliveryId,
+        eventName: parsed.eventName,
+      });
+      return {
+        statusCode: 202,
+        accepted: false,
+        message: "Duplicate GitHub webhook delivery ignored.",
+      };
     }
 
     try {

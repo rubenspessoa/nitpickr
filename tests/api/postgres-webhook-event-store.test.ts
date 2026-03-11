@@ -68,6 +68,7 @@ describe("PostgresWebhookEventStore", () => {
       status: "received",
       payload: { action: "created" },
     });
+    client.queueResponse([{ delivery_id: "delivery-2" }]);
     await store.updateEvent({
       deliveryId: "delivery-2",
       status: "queued",
@@ -76,6 +77,19 @@ describe("PostgresWebhookEventStore", () => {
 
     expect(client.calls[0]?.query).toContain("insert into webhook_events");
     expect(client.calls[1]?.query).toContain("update webhook_events");
+  });
+
+  it("throws when updateEvent targets an unknown delivery id", async () => {
+    const client = new FakePostgresClient();
+    client.queueResponse([]);
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(() =>
+      store.updateEvent({
+        deliveryId: "missing-delivery",
+        status: "queued",
+      }),
+    ).rejects.toThrow(/missing-delivery/i);
   });
 
   it("rejects empty identifiers before querying", async () => {

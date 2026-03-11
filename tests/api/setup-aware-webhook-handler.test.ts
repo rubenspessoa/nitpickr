@@ -6,6 +6,7 @@ describe("createSetupAwareGitHubWebhookHandler", () => {
   it("returns setup_required until an operational runtime exists, then reuses the created service", async () => {
     let getOperationalRuntimeCalls = 0;
     let handleCalls = 0;
+    let verifySignatureCalls = 0;
 
     const handler = createSetupAwareGitHubWebhookHandler({
       logger: {
@@ -22,7 +23,7 @@ describe("createSetupAwareGitHubWebhookHandler", () => {
         webhookEventService: {},
         async getOperationalRuntime() {
           getOperationalRuntimeCalls += 1;
-          if (getOperationalRuntimeCalls === 1) {
+          if (getOperationalRuntimeCalls <= 2) {
             return null;
           }
 
@@ -32,6 +33,10 @@ describe("createSetupAwareGitHubWebhookHandler", () => {
         },
       } as never,
       createWebhookService: () => ({
+        async verifySignature() {
+          verifySignatureCalls += 1;
+          return true;
+        },
         async handle() {
           handleCalls += 1;
           return {
@@ -43,8 +48,13 @@ describe("createSetupAwareGitHubWebhookHandler", () => {
       }),
     });
 
+    await expect(handler.verifySignature("{}", "sha256=test")).resolves.toBe(
+      "setup_required",
+    );
+
     await expect(
       handler.handle({
+        deliveryId: "delivery-1",
         eventName: "pull_request",
         signature: "sha256=test",
         rawBody: "{}",
@@ -56,8 +66,13 @@ describe("createSetupAwareGitHubWebhookHandler", () => {
       message: "Nitpickr setup is incomplete.",
     });
 
+    await expect(handler.verifySignature("{}", "sha256=test")).resolves.toBe(
+      true,
+    );
+
     await expect(
       handler.handle({
+        deliveryId: "delivery-2",
         eventName: "pull_request",
         signature: "sha256=test",
         rawBody: "{}",
@@ -70,13 +85,15 @@ describe("createSetupAwareGitHubWebhookHandler", () => {
     });
 
     await handler.handle({
+      deliveryId: "delivery-3",
       eventName: "pull_request",
       signature: "sha256=test",
       rawBody: "{}",
       payload: {},
     });
 
-    expect(getOperationalRuntimeCalls).toBe(2);
+    expect(getOperationalRuntimeCalls).toBe(3);
     expect(handleCalls).toBe(2);
+    expect(verifySignatureCalls).toBe(1);
   });
 });

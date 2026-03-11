@@ -155,8 +155,8 @@ describe("GitHubWebhookService", () => {
     const service = new GitHubWebhookService(
       adapter,
       queue,
-      logger,
       webhookEvents,
+      logger,
     );
 
     const result = await service.handle({
@@ -202,8 +202,8 @@ describe("GitHubWebhookService", () => {
     const service = new GitHubWebhookService(
       adapter,
       queue,
-      logger,
       webhookEvents,
+      logger,
     );
 
     const result = await service.handle({
@@ -236,8 +236,8 @@ describe("GitHubWebhookService", () => {
     const service = new GitHubWebhookService(
       adapter,
       queue,
-      logger,
       webhookEvents,
+      logger,
     );
 
     const result = await service.handle({
@@ -269,8 +269,8 @@ describe("GitHubWebhookService", () => {
     const service = new GitHubWebhookService(
       adapter,
       queue,
-      logger,
       webhookEvents,
+      logger,
     );
 
     const result = await service.handle({
@@ -306,8 +306,8 @@ describe("GitHubWebhookService", () => {
     const service = new GitHubWebhookService(
       adapter,
       queue,
-      logger,
       webhookEvents,
+      logger,
     );
 
     const result = await service.handle({
@@ -342,8 +342,8 @@ describe("GitHubWebhookService", () => {
     const service = new GitHubWebhookService(
       adapter,
       queue,
-      logger,
       webhookEvents,
+      logger,
     );
 
     const result = await service.handle({
@@ -369,8 +369,8 @@ describe("GitHubWebhookService", () => {
     const service = new GitHubWebhookService(
       adapter,
       queue,
-      logger,
       webhookEvents,
+      logger,
     );
 
     adapter.normalizeWebhookEvent = () => {
@@ -409,27 +409,26 @@ describe("GitHubWebhookService", () => {
     });
   });
 
-  it("logs a warning when webhook event tracking falls back to noop mode", async () => {
+  it("requires a delivery id for webhook processing", async () => {
     const adapter = new FakeGitHubAdapter();
     const queue = new FakeQueueScheduler();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const webhookEvents = new FakeWebhookEventService();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
 
-    const result = await service.handle({
-      deliveryId: "delivery-noop",
-      eventName: "pull_request",
-      signature: "sha256=test",
-      rawBody: "{}",
-      payload: {},
-    });
-
-    expect(result.statusCode).toBe(202);
-    expect(logger.entries).toContainEqual({
-      level: "warn",
-      message: "GitHub webhook event tracking is disabled; using noop tracker.",
-      fields: {
-        component: "github-webhook",
-      },
-    });
+    await expect(() =>
+      service.handle({
+        deliveryId: "",
+        eventName: "pull_request",
+        signature: "sha256=test",
+        rawBody: "{}",
+        payload: {},
+      }),
+    ).rejects.toThrow(/deliveryId/i);
   });
 });

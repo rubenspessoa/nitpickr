@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { GitHubWebhookService } from "../../src/api/github-webhook-service.js";
 import { createApiServer } from "../../src/api/server.js";
+import {
+  WebhookEventService,
+  type WebhookEventStore,
+} from "../../src/api/webhook-event-service.js";
 import { defaultRepositoryConfig } from "../../src/config/repository-config-loader.js";
 import {
   type MemoryEntry,
@@ -176,6 +180,52 @@ class InMemoryMemoryStore implements MemoryStore {
         entry.tenantId === input.tenantId &&
         entry.repositoryId === input.repositoryId,
     );
+  }
+}
+
+class InMemoryWebhookEventStore implements WebhookEventStore {
+  readonly events = new Map<
+    string,
+    {
+      deliveryId: string;
+      provider: "github";
+      eventName: string;
+      status: "received" | "ignored" | "queued" | "processed" | "failed";
+    }
+  >();
+
+  async getByDeliveryId(deliveryId: string) {
+    return this.events.get(deliveryId) ?? null;
+  }
+
+  async createEvent(input: {
+    deliveryId: string;
+    provider: "github";
+    eventName: string;
+    status: "received" | "ignored" | "queued" | "processed" | "failed";
+    payload: unknown;
+  }): Promise<void> {
+    this.events.set(input.deliveryId, {
+      deliveryId: input.deliveryId,
+      provider: input.provider,
+      eventName: input.eventName,
+      status: input.status,
+    });
+  }
+
+  async updateEvent(input: {
+    deliveryId: string;
+    status: "received" | "ignored" | "queued" | "processed" | "failed";
+  }): Promise<void> {
+    const current = this.events.get(input.deliveryId);
+    if (!current) {
+      throw new Error(`Unknown delivery ${input.deliveryId}`);
+    }
+
+    this.events.set(input.deliveryId, {
+      ...current,
+      status: input.status,
+    });
   }
 }
 
@@ -433,9 +483,13 @@ function createHarness() {
       webhookUrl: "https://nitpickr.example.com/webhooks/github",
     },
   });
+  const webhookEventStore = new InMemoryWebhookEventStore();
+  const webhookEventService = new WebhookEventService(webhookEventStore);
   const webhookService = new GitHubWebhookService(
     githubAdapter,
     queueScheduler,
+    webhookEventService,
+    undefined,
   );
   const server = createApiServer({
     githubWebhookService: webhookService,

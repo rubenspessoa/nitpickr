@@ -126,7 +126,9 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
     }
 
     try {
-      await this.#client.executeParameterized(
+      const rows = await this.#client.executeParameterized<{
+        delivery_id: string;
+      }>(
         `
           update webhook_events
           set status = $2,
@@ -136,6 +138,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
               payload = coalesce($6::jsonb, payload),
               updated_at = now()
           where delivery_id = $1
+          returning delivery_id
         `,
         [
           input.deliveryId,
@@ -146,6 +149,12 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
           input.payload === undefined ? null : toJsonPayload(input.payload),
         ],
       );
+
+      if (rows.length === 0) {
+        throw new Error(
+          `Webhook event with deliveryId ${input.deliveryId} was not found.`,
+        );
+      }
     } catch (error) {
       throw wrapWebhookEventStoreError("Failed to update webhook event", error);
     }

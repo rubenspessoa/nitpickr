@@ -1,6 +1,6 @@
 import { cwd, env, exit } from "node:process";
 
-import { parseBootstrapConfig } from "../config/app-config.js";
+import { parseBootstrapConfig as parseCliBootstrapConfig } from "../config/app-config.js";
 import { createPostgresClient } from "../runtime/postgres.js";
 import { DoctorCommand } from "./doctor-command.js";
 import { MigrateCommand } from "./migrate-command.js";
@@ -35,7 +35,9 @@ async function main(): Promise<void> {
   }
 
   if (command === "migrate") {
-    const config = parseBootstrapConfig(env);
+    // CLI bootstrap commands intentionally use bootstrap-only config because
+    // migrations run before runtime secrets are guaranteed to exist.
+    const config = parseCliBootstrapConfig(env);
     const sql = createPostgresClient(config.databaseUrl);
     try {
       const migrate = new MigrateCommand(sql);

@@ -1,7 +1,7 @@
 import { type Logger, noopLogger } from "../logging/logger.js";
 import type { buildRuntime } from "../runtime/build-runtime.js";
 import {
-  type GitHubWebhookResult,
+  type GitHubWebhookHandler,
   GitHubWebhookService,
 } from "./github-webhook-service.js";
 
@@ -18,12 +18,12 @@ export function createSetupAwareGitHubWebhookHandler(input: {
   >;
   createWebhookService?: (
     operationalRuntime: NonNullable<OperationalRuntime>,
-  ) => Pick<GitHubWebhookService, "handle">;
-}): Pick<GitHubWebhookService, "handle"> {
+  ) => GitHubWebhookHandler;
+}): GitHubWebhookHandler {
   const logger = (input.logger ?? noopLogger).child({
     component: "setup-aware-webhook-handler",
   });
-  let cachedService: Pick<GitHubWebhookService, "handle"> | null = null;
+  let cachedService: GitHubWebhookHandler | null = null;
 
   const createWebhookService =
     input.createWebhookService ??
@@ -31,11 +31,24 @@ export function createSetupAwareGitHubWebhookHandler(input: {
       new GitHubWebhookService(
         operationalRuntime.githubAdapter,
         input.runtime.queueScheduler,
-        logger,
         input.runtime.webhookEventService,
+        logger,
       ));
 
   return {
+    async verifySignature(rawBody, signature) {
+      if (cachedService) {
+        return cachedService.verifySignature(rawBody, signature);
+      }
+
+      const operationalRuntime = await input.runtime.getOperationalRuntime();
+      if (!operationalRuntime) {
+        return "setup_required";
+      }
+
+      cachedService = createWebhookService(operationalRuntime);
+      return cachedService.verifySignature(rawBody, signature);
+    },
     async handle(request) {
       if (cachedService) {
         return cachedService.handle(request);

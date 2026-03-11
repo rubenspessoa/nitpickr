@@ -45,6 +45,9 @@ describe("createApiServer", () => {
   it("accepts GitHub webhooks through Fastify", async () => {
     const server = createApiServer({
       githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
         async handle() {
           return {
             statusCode: 202,
@@ -79,6 +82,9 @@ describe("createApiServer", () => {
   it("returns readiness and setup status", async () => {
     const server = createApiServer({
       githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
         async handle() {
           return {
             statusCode: 202,
@@ -182,6 +188,9 @@ describe("createApiServer", () => {
     const server = createApiServer({
       logger,
       githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
         async handle() {
           throw new Error("boom");
         },
@@ -218,6 +227,9 @@ describe("createApiServer", () => {
   it("rejects malformed GitHub webhook payloads before processing", async () => {
     const server = createApiServer({
       githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
         async handle() {
           return {
             statusCode: 202,
@@ -249,6 +261,9 @@ describe("createApiServer", () => {
   it("rejects webhook requests that are missing required GitHub headers", async () => {
     const server = createApiServer({
       githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
         async handle() {
           return {
             statusCode: 202,
@@ -281,6 +296,9 @@ describe("createApiServer", () => {
     let receivedPayload: unknown = null;
     const server = createApiServer({
       githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
         async handle(input) {
           receivedPayload = input.payload;
           return {
@@ -329,6 +347,46 @@ describe("createApiServer", () => {
           files: ["src/api/server.ts"],
         },
       ],
+    });
+  });
+
+  it("rejects invalid GitHub webhook signatures before invoking the handler", async () => {
+    let handleCalled = false;
+    const server = createApiServer({
+      githubWebhookService: {
+        async verifySignature() {
+          return false;
+        },
+        async handle() {
+          handleCalled = true;
+          return {
+            statusCode: 202,
+            accepted: true,
+            message: "queued",
+          };
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "x-github-delivery": "delivery-invalid",
+        "x-github-event": "pull_request",
+        "x-hub-signature-256": "sha256=bad",
+        "content-type": "application/json",
+      },
+      payload: JSON.stringify({
+        action: "opened",
+      }),
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(handleCalled).toBe(false);
+    expect(response.json()).toEqual({
+      accepted: false,
+      message: "Invalid GitHub webhook signature.",
     });
   });
 });

@@ -3,6 +3,9 @@ import { z } from "zod";
 const logLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 const nodeEnvironmentSchema = z.enum(["development", "test", "production"]);
 const promptOptimizationModeSchema = z.enum(["off", "balanced"]);
+export type PromptOptimizationMode = z.infer<
+  typeof promptOptimizationModeSchema
+>;
 
 const bootstrapEnvironmentSchema = z.object({
   NODE_ENV: nodeEnvironmentSchema.optional(),
@@ -77,7 +80,7 @@ export interface BootstrapConfig {
     workerStaleAfterMs: number;
   };
   review: {
-    promptOptimizationMode: "off" | "balanced";
+    promptOptimizationMode: PromptOptimizationMode;
   };
   repositoryAllowlist: string[] | null;
   discordWebhookUrl: string | null;
@@ -117,7 +120,7 @@ export interface AppConfig {
     workerStaleAfterMs: number;
   };
   review: {
-    promptOptimizationMode: "off" | "balanced";
+    promptOptimizationMode: PromptOptimizationMode;
   };
   repositoryAllowlist: string[] | null;
   discordWebhookUrl: string | null;
@@ -291,6 +294,7 @@ export function parseBootstrapConfig(
       ),
     },
     review: {
+      // Balanced is the safe default: reduce token usage while preserving core context.
       promptOptimizationMode:
         parsed.NITPICKR_PROMPT_OPTIMIZATION_MODE ?? "balanced",
     },

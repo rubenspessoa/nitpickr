@@ -60,12 +60,10 @@ function buildOmissionMarker(omittedChars: number): string {
   return `... [omitted ${omittedChars} chars] ...`;
 }
 
-function minimumPatchCharactersForOmission(inputLength: number): number {
+function minimumPatchCharactersForOmission(): number {
   const minimumEdgeCharacters = 8;
-  return (
-    buildOmissionMarker(Math.max(1, inputLength)).length +
-    minimumEdgeCharacters * 2
-  );
+  const stableMarkerLength = buildOmissionMarker(1_000).length;
+  return stableMarkerLength + minimumEdgeCharacters * 2;
 }
 
 function patchChars(patch: string | null): number {
@@ -99,7 +97,7 @@ function truncateTextHead(input: string, maxCharacters: number): string {
   }
 
   const omittedChars = input.length - maxCharacters;
-  const marker = `\n... [omitted ${omittedChars} chars]`;
+  const marker = buildOmissionMarker(omittedChars);
   if (marker.length >= maxCharacters) {
     return input.slice(0, maxCharacters);
   }
@@ -118,7 +116,7 @@ function truncatePatchWithOmission(
     return "";
   }
 
-  let marker = buildOmissionMarker(Math.max(1, input.length - 2));
+  let marker = buildOmissionMarker(Math.max(1, input.length - maxCharacters));
   for (let index = 0; index < 6; index += 1) {
     const available = maxCharacters - marker.length;
     if (available < 2) {
@@ -189,9 +187,7 @@ function compactPrimaryFiles(
     }
 
     const maxLength = maxLengths[index] ?? 0;
-    const minimumTruncatedPatchCharacters = minimumPatchCharactersForOmission(
-      file.patch.length,
-    );
+    const minimumTruncatedPatchCharacters = minimumPatchCharactersForOmission();
     if (file.patch.length <= minimumTruncatedPatchCharacters) {
       return Math.min(maxLength, file.patch.length);
     }
@@ -320,8 +316,13 @@ function isMemoryRelevantToChunk(
   memoryPath: string,
   chunkPaths: Set<string>,
 ): boolean {
+  const normalizedMemoryPath = memoryPath.replaceAll("\\", "/");
   for (const path of chunkPaths) {
-    if (path === memoryPath || path.startsWith(`${memoryPath}/`)) {
+    const normalizedPath = path.replaceAll("\\", "/");
+    if (
+      normalizedPath === normalizedMemoryPath ||
+      normalizedPath.startsWith(`${normalizedMemoryPath}/`)
+    ) {
       return true;
     }
   }

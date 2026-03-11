@@ -73,6 +73,14 @@ describe("parseAppConfig", () => {
 });
 
 describe("parseBootstrapConfig", () => {
+  it("defaults prompt optimization mode to balanced when unset", () => {
+    const config = parseBootstrapConfig({
+      DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
+    });
+
+    expect(config.review.promptOptimizationMode).toBe("balanced");
+  });
+
   it("uses a non-empty default bot login list when unset", () => {
     const config = parseBootstrapConfig({
       DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
@@ -100,6 +108,15 @@ describe("parseBootstrapConfig", () => {
       "rubenspessoa/demo",
     ]);
     expect(config.review.promptOptimizationMode).toBe("off");
+  });
+
+  it("accepts balanced prompt optimization mode", () => {
+    const config = parseBootstrapConfig({
+      DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
+      NITPICKR_PROMPT_OPTIMIZATION_MODE: "balanced",
+    });
+
+    expect(config.review.promptOptimizationMode).toBe("balanced");
   });
 
   it("derives a base URL from the legacy webhook URL", () => {

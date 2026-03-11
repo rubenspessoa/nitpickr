@@ -82,3 +82,32 @@
 - Updated `tests/review/openai-review-model.test.ts`:
   - validates temperature is sent on the first request
   - validates fallback retry omits temperature and succeeds
+
+# PR #3 Review Thread Sweep
+
+## Plan
+
+- [x] Triage all open PR review threads and separate code fixes from reply-only clarifications.
+- [x] Implement config, optimizer, and test hardening updates from accepted findings.
+- [x] Re-run lint, typecheck, and test suite before resolving threads.
+- [ ] Resolve addressed GitHub review threads and reply to remaining open questions.
+
+## Results
+
+- Updated `src/config/app-config.ts`:
+  - introduced `PromptOptimizationMode` type derived from Zod schema
+  - reused the derived type in bootstrap/app config interfaces
+  - documented why `balanced` remains the default mode
+- Updated `src/review/prompt-payload-optimizer.ts`:
+  - stabilized minimum omission marker sizing so truncation logic does not grow with full input length
+  - unified text truncation marker formatting through `buildOmissionMarker`
+  - clarified truncation marker initialization heuristic in patch truncation
+  - normalized path separators for chunk-memory relevance matching
+- Updated tests:
+  - `tests/config/app-config.test.ts` now explicitly covers default `balanced` and explicit `balanced` value
+  - `tests/review/prompt-payload-optimizer.test.ts` now avoids brittle path indexing, verifies context compaction structure, adds Windows-path memory relevance coverage, and relaxes over-tight numeric expectations
+  - `tests/worker/worker-runner.test.ts` now uses shape-safe scope/mode assertions and non-identical before/after prompt usage fixtures
+- Verification completed:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test` (`51` files, `252` tests)

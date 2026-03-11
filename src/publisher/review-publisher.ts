@@ -211,16 +211,23 @@ function parseJsonPayloadFromText(text: string): unknown | null {
     }
   };
 
+  let parseErrorLogged = false;
   const safeTryParseObject = (candidate: string): unknown | null => {
     try {
       return tryParseObject(candidate);
-    } catch {
+    } catch (error) {
+      if (!parseErrorLogged) {
+        parseErrorLogged = true;
+        console.debug("parseJsonPayloadFromText parse error", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       return null;
     }
   };
 
   const direct = safeTryParseObject(text.trim());
-  if (direct) {
+  if (direct !== null) {
     return direct;
   }
 
@@ -270,7 +277,7 @@ function parseJsonPayloadFromText(text: string): unknown | null {
     if (depth === 0 && objectStart >= 0) {
       const candidate = text.slice(objectStart, index + 1).trim();
       const parsed = safeTryParseObject(candidate);
-      if (parsed) {
+      if (parsed !== null) {
         return parsed;
       }
 

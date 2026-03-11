@@ -163,6 +163,8 @@
   - requires purely numeric status strings before interpreting them as HTTP status codes
   - switched to a linear brace-aware JSON object scanner to avoid bounded reverse-scan misses and unbounded parse loops
   - added defensive `safeTryParseObject` calls in the scan loop so unexpected parser exceptions do not abort fallback detection
+  - tightened direct/candidate return checks to explicit `!== null` semantics
+  - removed redundant scanner undefined-character guard for clarity
 - Updated `tests/publisher/review-publisher.test.ts`:
   - added regression test for non-Error `{ status: "422", errors: [...] }` throw shape to ensure fallback still triggers
   - added regression test covering non-JSON brace content before a valid JSON payload in the same error string

@@ -77,6 +77,23 @@ describe("PostgresWebhookEventStore", () => {
     ).rejects.toThrow(/unsupported webhook event provider/i);
   });
 
+  it("rejects unsupported status values from persisted rows", async () => {
+    const client = new FakePostgresClient();
+    client.queueResponse([
+      {
+        delivery_id: "delivery-bad-status-row",
+        provider: "github",
+        event_name: "pull_request",
+        status: "bogus",
+      },
+    ]);
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(() =>
+      store.getByDeliveryId("delivery-bad-status-row"),
+    ).rejects.toThrow(/unsupported webhook event status/i);
+  });
+
   it("supports all configured webhook providers", async () => {
     const client = new FakePostgresClient();
     client.queueResponse([

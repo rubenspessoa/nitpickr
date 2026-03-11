@@ -264,6 +264,41 @@ describe("GitHubWebhookService", () => {
     });
   });
 
+  it("catches synchronous mention reaction failures without rejecting the webhook", async () => {
+    const adapter = new FakeGitHubAdapter();
+    adapter.reactToMention = () => {
+      throw new Error("sync reaction failed");
+    };
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-sync-reaction",
+      eventName: "issue_comment",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(202);
+    expect(logger.entries).toContainEqual({
+      level: "warn",
+      message: "Failed to react to GitHub bot mention.",
+      fields: {
+        component: "github-webhook",
+        eventName: "issue_comment",
+        error: "sync reaction failed",
+      },
+    });
+  });
+
   it("rejects invalid signatures", async () => {
     const adapter = new FakeGitHubAdapter();
     adapter.signatureValid = false;

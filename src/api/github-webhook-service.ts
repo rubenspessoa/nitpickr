@@ -54,6 +54,17 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+function buildChangeRequestId(
+  repositoryId: string | undefined,
+  pullNumber: number | undefined,
+): string | undefined {
+  if (!repositoryId || pullNumber === undefined) {
+    return undefined;
+  }
+
+  return `${repositoryId}:${pullNumber}`;
+}
+
 function buildReviewJobInput(
   event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
 ): EnqueueJobInput {
@@ -201,9 +212,8 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
     }
 
     try {
-      const reaction = await this.#adapter.reactToMention(
-        parsed.eventName,
-        parsed.payload,
+      const reaction = await Promise.resolve().then(() =>
+        this.#adapter.reactToMention(parsed.eventName, parsed.payload),
       );
       if (reaction) {
         this.#logger.info("Reacted to GitHub bot mention.", {
@@ -259,9 +269,13 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
 
     try {
       await this.#queueScheduler.enqueue(buildReviewJobInput(normalized));
+      const changeRequestId = buildChangeRequestId(
+        normalized.repository.repositoryId,
+        normalized.pullNumber,
+      );
       await this.#updateWebhookEventStatus(parsed.deliveryId, "queued", {
         repositoryId: normalized.repository.repositoryId,
-        changeRequestId: `${normalized.repository.repositoryId}:${normalized.pullNumber}`,
+        ...(changeRequestId ? { changeRequestId } : {}),
       });
       this.#logger.info("Queued GitHub review job.", {
         eventName: parsed.eventName,
@@ -276,9 +290,13 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
         message: "Review job queued.",
       };
     } catch (error) {
+      const changeRequestId = buildChangeRequestId(
+        normalized.repository.repositoryId,
+        normalized.pullNumber,
+      );
       await this.#updateWebhookEventStatus(parsed.deliveryId, "failed", {
         repositoryId: normalized.repository.repositoryId,
-        changeRequestId: `${normalized.repository.repositoryId}:${normalized.pullNumber}`,
+        ...(changeRequestId ? { changeRequestId } : {}),
         errorMessage: toErrorMessage(
           error,
           "Unknown webhook queueing failure.",

@@ -94,7 +94,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
       deliveryId: String(row.delivery_id),
       provider: parseProvider(row.provider),
       eventName: String(row.event_name),
-      status: String(row.status) as WebhookEventStatus,
+      status: parseStatus(row.status),
     };
   }
 

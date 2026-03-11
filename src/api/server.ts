@@ -51,6 +51,14 @@ export function parseWebhookPayload(body: unknown): {
   rawBody: string;
   payload: Record<string, unknown>;
 } {
+  if (
+    body !== undefined &&
+    typeof body !== "string" &&
+    (typeof body !== "object" || body === null || Array.isArray(body))
+  ) {
+    throw new Error("Invalid GitHub webhook payload.");
+  }
+
   let rawBody: string;
   try {
     rawBody = normalizeRawWebhookBody(body);

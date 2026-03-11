@@ -21,3 +21,4 @@
 - When shortening diagnostic text for logs, preserve explicit truncation sentinels in the visible output so operators can distinguish hard truncation from naturally short messages.
 - When tests depend on policy constants (markers/limits), export those constants from the module under test and import them in assertions to avoid literal drift.
 - If policy constants become shared across tests and modules, move them into a tiny dedicated constants module to avoid coupling tests to a larger implementation file.
+- When extracting shared constants, move the full policy group together (limits + markers + budgets) to avoid follow-up churn from partial extraction.

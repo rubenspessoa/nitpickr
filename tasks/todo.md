@@ -207,6 +207,7 @@
   - switched truncation assertions to import constants instead of hard-coded literals
   - extracted diagnostic constants into `src/publisher/diagnostic-constants.ts`
   - updated publisher and tests to import constants from the dedicated diagnostics module
+  - moved `DIAGNOSTIC_MAX_SERIALIZED_LENGTH`, `DIAGNOSTIC_MAX_STRING_LENGTH`, and `DIAGNOSTIC_OBJECT_BUDGET` into the same diagnostics constants module
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

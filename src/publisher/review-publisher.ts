@@ -1,6 +1,9 @@
 import { fingerprintFinding } from "../review/finding-fingerprint.js";
 import {
   DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER,
+  DIAGNOSTIC_MAX_SERIALIZED_LENGTH,
+  DIAGNOSTIC_MAX_STRING_LENGTH,
+  DIAGNOSTIC_OBJECT_BUDGET,
   DIAGNOSTIC_OBJECT_TRUNCATION_MARKER,
   DIAGNOSTIC_SANITIZED_MAX_LENGTH,
 } from "./diagnostic-constants.js";
@@ -97,10 +100,6 @@ const categoryEmoji: Record<PublishedFinding["category"], string> = {
   testing: "🧪",
   style: "🎨",
 };
-
-const DIAGNOSTIC_MAX_SERIALIZED_LENGTH = 1_000;
-const DIAGNOSTIC_MAX_STRING_LENGTH = 200;
-const DIAGNOSTIC_OBJECT_BUDGET = 200;
 
 function escapeMarkdownTableCell(value: string): string {
   return value.replace(/\|/g, "\\|").trim();

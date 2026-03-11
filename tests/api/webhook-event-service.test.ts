@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  WebhookEventAlreadyExistsError,
   type WebhookEventRecord,
   WebhookEventService,
   type WebhookEventStore,
@@ -22,6 +23,10 @@ class InMemoryWebhookEventStore implements WebhookEventStore {
     status: WebhookEventRecord["status"];
     payload: unknown;
   }): Promise<void> {
+    if (this.events.has(input.deliveryId)) {
+      throw new WebhookEventAlreadyExistsError(input.deliveryId);
+    }
+
     this.events.set(input.deliveryId, {
       deliveryId: input.deliveryId,
       provider: input.provider,
@@ -62,6 +67,29 @@ describe("WebhookEventService", () => {
     await expect(
       service.beginDelivery({
         deliveryId: "delivery-1",
+        provider: "github",
+        eventName: "pull_request",
+        payload: {},
+      }),
+    ).resolves.toBe("duplicate");
+  });
+
+  it("treats duplicate insert races as duplicates", async () => {
+    const service = new WebhookEventService({
+      async getByDeliveryId() {
+        throw new Error("should not be called");
+      },
+      async createEvent() {
+        throw new WebhookEventAlreadyExistsError("delivery-race");
+      },
+      async updateEvent() {
+        throw new Error("not needed");
+      },
+    });
+
+    await expect(
+      service.beginDelivery({
+        deliveryId: "delivery-race",
         provider: "github",
         eventName: "pull_request",
         payload: {},

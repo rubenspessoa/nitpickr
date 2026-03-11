@@ -20,10 +20,9 @@ const githubWebhookHeadersSchema = z.object({
   signature: z.string().min(1),
   deliveryId: z.string().min(1),
 });
-const invalidWebhookPayloadMessage = "Invalid GitHub webhook payload.";
-const invalidWebhookHeadersMessage = "Missing required GitHub webhook headers.";
-const invalidWebhookContentTypeMessage =
-  "GitHub webhooks must use Content-Type: application/json.";
+const invalidWebhookRequestMessage = "Invalid GitHub webhook request.";
+const invalidWebhookAuthenticationMessage =
+  "GitHub webhook authentication failed.";
 
 function buildDefaultSetupStatus(): SetupStatus {
   return {
@@ -209,17 +208,13 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
 
     if (!hasJsonContentType(request.headers["content-type"])) {
       // Reject malformed client input without logging headers or payloads.
-      return sendClientWebhookError(
-        reply,
-        415,
-        invalidWebhookContentTypeMessage,
-      );
+      return sendClientWebhookError(reply, 415, invalidWebhookRequestMessage);
     }
 
     const rateLimit = await webhookRateLimiter.consume(request.ip);
     if (!rateLimit.allowed) {
       if (rateLimit.retryAfterSeconds !== undefined) {
-        void reply.header("retry-after", String(rateLimit.retryAfterSeconds));
+        reply.header("retry-after", String(rateLimit.retryAfterSeconds));
       }
 
       return reply.status(429).send({
@@ -236,7 +231,7 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
       payload = parsedPayload.payload;
     } catch {
       // Reject malformed client input without logging headers or payloads.
-      return sendClientWebhookError(reply, 400, invalidWebhookPayloadMessage);
+      return sendClientWebhookError(reply, 400, invalidWebhookRequestMessage);
     }
     const headerResult = githubWebhookHeadersSchema.safeParse({
       deliveryId: request.headers["x-github-delivery"],
@@ -246,7 +241,7 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
 
     if (!headerResult.success) {
       // Reject malformed client input without logging headers or payloads.
-      return sendClientWebhookError(reply, 400, invalidWebhookHeadersMessage);
+      return sendClientWebhookError(reply, 400, invalidWebhookRequestMessage);
     }
 
     const signatureValid = await webhookHandler.verifySignature(
@@ -264,7 +259,7 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
     if (!signatureValid) {
       return reply.status(401).send({
         accepted: false,
-        message: "Invalid GitHub webhook signature.",
+        message: invalidWebhookAuthenticationMessage,
       });
     }
 

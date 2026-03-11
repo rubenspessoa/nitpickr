@@ -5,6 +5,7 @@ import {
   WebhookEventNotFoundError,
   WebhookEventStoreError,
 } from "../../src/api/postgres-webhook-event-store.js";
+import { WebhookEventAlreadyExistsError } from "../../src/api/webhook-event-service.js";
 
 interface QueryCall {
   query: string;
@@ -213,6 +214,29 @@ describe("PostgresWebhookEventStore", () => {
 
     await expect(writeAttempt).rejects.toThrow(/create webhook event/i);
     await expect(writeAttempt).rejects.toBeInstanceOf(WebhookEventStoreError);
+  });
+
+  it("maps duplicate key violations to a typed already-exists error", async () => {
+    const client = new FakePostgresClient();
+    client.queueError(
+      Object.assign(
+        new Error("duplicate key value violates unique constraint"),
+        {
+          code: "23505",
+        },
+      ),
+    );
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(() =>
+      store.createEvent({
+        deliveryId: "delivery-duplicate",
+        provider: "github",
+        eventName: "pull_request",
+        status: "received",
+        payload: {},
+      }),
+    ).rejects.toBeInstanceOf(WebhookEventAlreadyExistsError);
   });
 
   it("does not leak raw database error details to callers", async () => {

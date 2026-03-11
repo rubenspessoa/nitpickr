@@ -1,4 +1,5 @@
 import {
+  WebhookEventAlreadyExistsError,
   type WebhookEventRecord,
   type WebhookEventStatus,
   type WebhookEventStore,
@@ -42,6 +43,16 @@ function toJsonPayload(value: unknown): string {
 
 function wrapWebhookEventStoreError(message: string, error: unknown): Error {
   return new WebhookEventStoreError(message, error);
+}
+
+function isDuplicateKeyError(error: unknown): error is { code: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    (error as { code: string }).code === "23505"
+  );
 }
 
 function parseProvider(value: unknown): WebhookProvider {
@@ -138,6 +149,10 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
         ],
       );
     } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        throw new WebhookEventAlreadyExistsError(input.deliveryId);
+      }
+
       throw wrapWebhookEventStoreError("Failed to create webhook event", error);
     }
   }

@@ -370,7 +370,7 @@ describe("createApiServer", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
       accepted: false,
-      message: "Invalid GitHub webhook payload.",
+      message: "Invalid GitHub webhook request.",
     });
   });
 
@@ -404,7 +404,7 @@ describe("createApiServer", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
       accepted: false,
-      message: "Missing required GitHub webhook headers.",
+      message: "Invalid GitHub webhook request.",
     });
   });
 
@@ -444,7 +444,7 @@ describe("createApiServer", () => {
     expect(handleCalled).toBe(false);
     expect(response.json()).toEqual({
       accepted: false,
-      message: "GitHub webhooks must use Content-Type: application/json.",
+      message: "Invalid GitHub webhook request.",
     });
   });
 
@@ -614,7 +614,7 @@ describe("createApiServer", () => {
     expect(handleCalled).toBe(false);
     expect(response.json()).toEqual({
       accepted: false,
-      message: "Invalid GitHub webhook signature.",
+      message: "GitHub webhook authentication failed.",
     });
   });
 });

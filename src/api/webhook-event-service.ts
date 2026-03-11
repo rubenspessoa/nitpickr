@@ -58,6 +58,13 @@ export interface WebhookEventStore {
   }): Promise<void>;
 }
 
+export class WebhookEventAlreadyExistsError extends Error {
+  constructor(deliveryId: string) {
+    super(`Webhook event with deliveryId ${deliveryId} already exists.`);
+    this.name = "WebhookEventAlreadyExistsError";
+  }
+}
+
 export class WebhookEventService {
   readonly #store: WebhookEventStore;
 
@@ -71,19 +78,22 @@ export class WebhookEventService {
     eventName: string;
     payload: unknown;
   }): Promise<"new" | "duplicate"> {
-    const existing = await this.#store.getByDeliveryId(input.deliveryId);
-    if (existing) {
-      return "duplicate";
-    }
+    try {
+      await this.#store.createEvent({
+        deliveryId: input.deliveryId,
+        provider: input.provider,
+        eventName: input.eventName,
+        status: "received",
+        payload: input.payload,
+      });
+      return "new";
+    } catch (error) {
+      if (error instanceof WebhookEventAlreadyExistsError) {
+        return "duplicate";
+      }
 
-    await this.#store.createEvent({
-      deliveryId: input.deliveryId,
-      provider: input.provider,
-      eventName: input.eventName,
-      status: "received",
-      payload: input.payload,
-    });
-    return "new";
+      throw error;
+    }
   }
 
   async markIgnored(input: {

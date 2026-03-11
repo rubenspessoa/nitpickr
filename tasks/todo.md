@@ -166,10 +166,12 @@
   - tightened direct/candidate return checks to explicit `!== null` semantics
   - removed redundant scanner undefined-character guard for clarity
   - restored sanitized/truncated parse diagnostics (`errorMessage`, capped to 200 chars) without logging raw payload content
+  - extracted sanitizer to module scope as `sanitizeDiagnosticErrorMessage` for reuse and focused testing
 - Updated `tests/publisher/review-publisher.test.ts`:
   - added regression test for non-Error `{ status: "422", errors: [...] }` throw shape to ensure fallback still triggers
   - added regression test covering non-JSON brace content before a valid JSON payload in the same error string
   - added regression test for braces inside JSON string values so string-content braces are not treated as structural boundaries
+  - added focused sanitizer tests for `Error`, object input, non-ASCII filtering, truncation, and fallback behavior
 - Verification completed:
   - `pnpm test tests/review/prompt-payload-optimizer.test.ts tests/publisher/review-publisher.test.ts`
   - `pnpm typecheck`

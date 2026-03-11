@@ -197,16 +197,39 @@ function collectErrorTextsFromPayload(payload: unknown): {
   };
 }
 
-function parseJsonPayloadFromText(text: string): unknown | null {
-  const toDiagnosticErrorMessage = (value: unknown): string => {
-    const raw = value instanceof Error ? value.message : String(value);
-    return raw
-      .replace(/\s+/g, " ")
-      .replace(/[^\x20-\x7E]/g, "")
-      .trim()
-      .slice(0, 200);
-  };
+function toDiagnosticErrorSourceText(value: unknown): string {
+  if (value instanceof Error) {
+    return value.message;
+  }
 
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    const serialized = JSON.stringify(value);
+    if (typeof serialized === "string") {
+      return serialized;
+    }
+  } catch {
+    // Fall back to String(...) below.
+  }
+
+  return String(value);
+}
+
+export function sanitizeDiagnosticErrorMessage(value: unknown): string {
+  const raw = toDiagnosticErrorSourceText(value);
+  const sanitized = raw
+    .replace(/\s+/g, " ")
+    .replace(/[^\x20-\x7E]/g, "")
+    .trim()
+    .slice(0, 200);
+
+  return sanitized.length > 0 ? sanitized : "unavailable";
+}
+
+function parseJsonPayloadFromText(text: string): unknown | null {
   const tryParseObject = (candidate: string): unknown | null => {
     if (!candidate.startsWith("{")) {
       return null;
@@ -228,7 +251,7 @@ function parseJsonPayloadFromText(text: string): unknown | null {
       if (!parseErrorLogged) {
         parseErrorLogged = true;
         console.debug("parseJsonPayloadFromText parse error", {
-          errorMessage: toDiagnosticErrorMessage(error),
+          errorMessage: sanitizeDiagnosticErrorMessage(error),
           errorType: error instanceof Error ? error.name : typeof error,
         });
       }

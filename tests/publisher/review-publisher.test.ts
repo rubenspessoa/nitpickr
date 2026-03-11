@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type PublishReviewClient,
   ReviewPublisher,
+  sanitizeDiagnosticErrorMessage,
 } from "../../src/publisher/review-publisher.js";
 
 class FakePublishReviewClient implements PublishReviewClient {
@@ -58,6 +59,40 @@ class FakePublishReviewClient implements PublishReviewClient {
 }
 
 describe("ReviewPublisher", () => {
+  describe("sanitizeDiagnosticErrorMessage", () => {
+    it("sanitizes Error messages and collapses whitespace", () => {
+      const message = sanitizeDiagnosticErrorMessage(
+        new Error("  parse failed\nwith details 💥 "),
+      );
+
+      expect(message).toBe("parse failed with details");
+    });
+
+    it("sanitizes plain object values via JSON serialization", () => {
+      const message = sanitizeDiagnosticErrorMessage({
+        status: 422,
+        errors: ["Path could not be resolved"],
+      });
+
+      expect(message).toContain('"status":422');
+      expect(message).toContain('"Path could not be resolved"');
+      expect(/^[\x20-\x7E]+$/.test(message)).toBe(true);
+    });
+
+    it("sanitizes strings with non-ascii characters and truncates to 200 chars", () => {
+      const source = `${"émoji 🚨 ".repeat(40)}tail`;
+      const message = sanitizeDiagnosticErrorMessage(source);
+
+      expect(message.length).toBeLessThanOrEqual(200);
+      expect(/^[\x20-\x7E]+$/.test(message)).toBe(true);
+    });
+
+    it("returns a fallback when sanitization yields an empty string", () => {
+      const message = sanitizeDiagnosticErrorMessage("🚨💥");
+      expect(message).toBe("unavailable");
+    });
+  });
+
   it("renders a summary body with findings and mermaid output", () => {
     const publisher = new ReviewPublisher(new FakePublishReviewClient());
 

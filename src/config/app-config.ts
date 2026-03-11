@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const logLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 const nodeEnvironmentSchema = z.enum(["development", "test", "production"]);
+const promptOptimizationModeSchema = z.enum(["off", "balanced"]);
 
 const bootstrapEnvironmentSchema = z.object({
   NODE_ENV: nodeEnvironmentSchema.optional(),
@@ -21,6 +22,7 @@ const bootstrapEnvironmentSchema = z.object({
   NITPICKR_WORKER_HEARTBEAT_INTERVAL_MS: z.string().optional(),
   NITPICKR_READY_WORKER_STALE_AFTER_MS: z.string().optional(),
   NITPICKR_REPOSITORY_ALLOWLIST: z.string().min(1).optional(),
+  NITPICKR_PROMPT_OPTIMIZATION_MODE: promptOptimizationModeSchema.optional(),
   DISCORD_WEBHOOK_URL: z.string().url().optional(),
 });
 
@@ -74,6 +76,9 @@ export interface BootstrapConfig {
   ready: {
     workerStaleAfterMs: number;
   };
+  review: {
+    promptOptimizationMode: "off" | "balanced";
+  };
   repositoryAllowlist: string[] | null;
   discordWebhookUrl: string | null;
 }
@@ -110,6 +115,9 @@ export interface AppConfig {
   };
   ready: {
     workerStaleAfterMs: number;
+  };
+  review: {
+    promptOptimizationMode: "off" | "balanced";
   };
   repositoryAllowlist: string[] | null;
   discordWebhookUrl: string | null;
@@ -282,6 +290,10 @@ export function parseBootstrapConfig(
         20_000,
       ),
     },
+    review: {
+      promptOptimizationMode:
+        parsed.NITPICKR_PROMPT_OPTIMIZATION_MODE ?? "balanced",
+    },
     repositoryAllowlist: parseRepositoryAllowlist(
       parsed.NITPICKR_REPOSITORY_ALLOWLIST,
     ),
@@ -328,6 +340,7 @@ export function buildAppConfig(
     worker: bootstrap.worker,
     jobs: bootstrap.jobs,
     ready: bootstrap.ready,
+    review: bootstrap.review,
     repositoryAllowlist: bootstrap.repositoryAllowlist,
     discordWebhookUrl: bootstrap.discordWebhookUrl,
   };

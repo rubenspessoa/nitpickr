@@ -284,6 +284,60 @@ describe("ReviewEngine", () => {
     );
   });
 
+  it("emits prompt usage diagnostics and compacts balanced commit-delta payloads", async () => {
+    const model = new FakeReviewModel([
+      {
+        summary: "Summary",
+        findings: [],
+      },
+    ]);
+
+    const engine = new ReviewEngine(model);
+    const result = await engine.reviewWithDiagnostics({
+      changeRequest: {
+        title: "Optimize prompts",
+        number: 99,
+      },
+      scope: "commit_delta",
+      optimizationMode: "balanced",
+      files: [
+        {
+          path: "src/queue/a.ts",
+          additions: 2,
+          deletions: 1,
+          patch: "@@ -1,1 +1,2 @@\n+optimized",
+        },
+      ],
+      contextFiles: [
+        {
+          path: "src/context/a.ts",
+          additions: 30,
+          deletions: 5,
+          patch: "@@ -1,1 +1,200 @@\n+".padEnd(500, "x"),
+        },
+      ],
+      instructionText: "instruction ".repeat(500),
+      memory: new Array(12).fill(0).map((_, index) => ({
+        summary: `memory-${index}-${"x".repeat(400)}`,
+      })),
+      commentBudget: 5,
+    });
+
+    expect(
+      result.promptUsage.beforeCompaction.contextPatchChars,
+    ).toBeGreaterThan(0);
+    expect(result.promptUsage.afterCompaction.contextPatchChars).toBe(0);
+    expect(result.promptUsage.afterCompaction.instructionChars).toBeLessThan(
+      result.promptUsage.beforeCompaction.instructionChars,
+    );
+    expect(result.promptUsage.afterCompaction.memoryChars).toBeLessThan(
+      result.promptUsage.beforeCompaction.memoryChars,
+    );
+    expect(
+      result.promptUsage.afterCompaction.estimatedPromptTokens,
+    ).toBeLessThan(result.promptUsage.beforeCompaction.estimatedPromptTokens);
+  });
+
   it("deduplicates repeated findings and keeps ordering stable", async () => {
     const model = new FakeReviewModel([
       {

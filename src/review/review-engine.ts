@@ -13,6 +13,12 @@ import {
 } from "./evidence-gate.js";
 import { fingerprintFinding } from "./finding-fingerprint.js";
 import { PromptBuilder } from "./prompt-builder.js";
+import {
+  type PromptOptimizationMode,
+  PromptPayloadOptimizer,
+  type PromptUsageSnapshot,
+  type ReviewScope,
+} from "./prompt-payload-optimizer.js";
 
 const defaultMermaidDiagram = renderDiagramSpec(defaultDiagramSpec);
 const defaultSummary = "nitpickr completed the review.";
@@ -505,6 +511,8 @@ export interface ReviewEngineInput {
     path?: string;
   }>;
   commentBudget: number;
+  scope?: ReviewScope;
+  optimizationMode?: PromptOptimizationMode;
   feedbackSignals?: ReviewFeedbackSignal[];
   publishableFindingTypes?: ReviewFinding["findingType"][];
 }
@@ -518,6 +526,10 @@ export interface ReviewEngineResult {
 export interface ReviewEngineDiagnosticsResult {
   result: ReviewEngineResult;
   rejectedFindings: EvidenceGateRejectedFinding<ReviewFinding>[];
+  promptUsage: {
+    beforeCompaction: PromptUsageSnapshot;
+    afterCompaction: PromptUsageSnapshot;
+  };
 }
 
 export interface ReviewEngineOptions {
@@ -671,24 +683,73 @@ function renderMergedDiagram(
 export class ReviewEngine {
   readonly #model: ReviewModel;
   readonly #promptBuilder: PromptBuilder;
+  readonly #promptPayloadOptimizer: PromptPayloadOptimizer;
   readonly #maxPatchCharactersPerChunk: number;
 
   constructor(model: ReviewModel, options: ReviewEngineOptions = {}) {
     this.#model = model;
     this.#promptBuilder = new PromptBuilder();
+    this.#promptPayloadOptimizer = new PromptPayloadOptimizer();
     this.#maxPatchCharactersPerChunk =
-      options.maxPatchCharactersPerChunk ?? 12000;
+      options.maxPatchCharactersPerChunk ?? 16000;
   }
 
-  async review(input: ReviewEngineInput): Promise<ReviewEngineResult> {
+  async #reviewInternal(input: ReviewEngineInput): Promise<{
+    result: ReviewEngineResult;
+    promptUsage: {
+      beforeCompaction: PromptUsageSnapshot;
+      afterCompaction: PromptUsageSnapshot;
+    };
+  }> {
     if (input.files.length === 0) {
       throw new Error("Review input must contain at least one file.");
     }
 
-    const chunks = splitIntoChunks(
+    const scope = input.scope ?? "full_pr";
+    const optimizationMode = input.optimizationMode ?? "balanced";
+    const unoptimizedChunks = splitIntoChunks(
       input.files,
       this.#maxPatchCharactersPerChunk,
     );
+    const beforeCompaction = this.#promptPayloadOptimizer.estimatePromptUsage({
+      chunks: unoptimizedChunks,
+      ...(input.contextFiles === undefined
+        ? {}
+        : { contextFiles: input.contextFiles }),
+      instructionText: input.instructionText,
+      chunkMemory: unoptimizedChunks.map(() => input.memory),
+    });
+
+    const optimized = this.#promptPayloadOptimizer.optimize({
+      scope,
+      mode: optimizationMode,
+      files: input.files,
+      ...(input.contextFiles === undefined
+        ? {}
+        : { contextFiles: input.contextFiles }),
+      instructionText: input.instructionText,
+      memory: input.memory,
+    });
+
+    const chunks = splitIntoChunks(
+      optimized.files,
+      this.#maxPatchCharactersPerChunk,
+    );
+    const chunkMemories = chunks.map((files) =>
+      this.#promptPayloadOptimizer.selectChunkMemory({
+        mode: optimizationMode,
+        files,
+        memory: optimized.memory,
+      }),
+    );
+    const afterCompaction = this.#promptPayloadOptimizer.estimatePromptUsage({
+      chunks,
+      ...(optimized.contextFiles === undefined
+        ? {}
+        : { contextFiles: optimized.contextFiles }),
+      instructionText: optimized.instructionText,
+      chunkMemory: chunkMemories,
+    });
 
     const responses = await Promise.all(
       chunks.map(async (files, index) => {
@@ -699,12 +760,12 @@ export class ReviewEngine {
             total: chunks.length,
             files,
           },
-          instructionText: input.instructionText,
-          memory: input.memory,
+          instructionText: optimized.instructionText,
+          memory: chunkMemories[index] ?? [],
           commentBudget: input.commentBudget,
-          ...(input.contextFiles === undefined
+          ...(optimized.contextFiles === undefined
             ? {}
-            : { contextFiles: input.contextFiles }),
+            : { contextFiles: optimized.contextFiles }),
         });
 
         const response = await this.#model.generateStructuredReview(prompt);
@@ -717,18 +778,29 @@ export class ReviewEngine {
     ).slice(0, input.commentBudget);
 
     return {
-      summary: responses.map((response) => response.summary).join("\n\n"),
-      mermaid: renderMergedDiagram(responses),
-      findings: mergedFindings,
+      result: {
+        summary: responses.map((response) => response.summary).join("\n\n"),
+        mermaid: renderMergedDiagram(responses),
+        findings: mergedFindings,
+      },
+      promptUsage: {
+        beforeCompaction,
+        afterCompaction,
+      },
     };
+  }
+
+  async review(input: ReviewEngineInput): Promise<ReviewEngineResult> {
+    const reviewed = await this.#reviewInternal(input);
+    return reviewed.result;
   }
 
   async reviewWithDiagnostics(
     input: ReviewEngineInput,
   ): Promise<ReviewEngineDiagnosticsResult> {
-    const result = await this.review(input);
+    const reviewed = await this.#reviewInternal(input);
     const gatedFindings = gateAndRankFindings({
-      findings: result.findings,
+      findings: reviewed.result.findings,
       files: input.files,
       ...(input.contextFiles === undefined
         ? {}
@@ -743,10 +815,11 @@ export class ReviewEngine {
 
     return {
       result: {
-        ...result,
+        ...reviewed.result,
         findings: gatedFindings.acceptedFindings.slice(0, input.commentBudget),
       },
       rejectedFindings: gatedFindings.rejectedFindings,
+      promptUsage: reviewed.promptUsage,
     };
   }
 }

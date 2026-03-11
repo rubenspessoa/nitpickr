@@ -26,6 +26,7 @@ describe("parseAppConfig", () => {
     expect(config.github.apiBaseUrl).toBe("https://api.github.com");
     expect(config.openAi.baseUrl).toBe("https://api.openai.com/v1");
     expect(config.github.botLogins).toEqual(["nitpickr", "getnitpickr"]);
+    expect(config.review.promptOptimizationMode).toBe("balanced");
   });
 
   it("parses custom provider base URLs", () => {
@@ -87,6 +88,7 @@ describe("parseBootstrapConfig", () => {
       NITPICKR_SECRET_KEY: "super-secret-key",
       DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/a/b",
       NITPICKR_REPOSITORY_ALLOWLIST: "rubenspessoa/nitpickr,rubenspessoa/demo",
+      NITPICKR_PROMPT_OPTIMIZATION_MODE: "off",
     });
 
     expect(config.baseUrl).toBe("https://nitpickr.up.railway.app");
@@ -97,6 +99,7 @@ describe("parseBootstrapConfig", () => {
       "rubenspessoa/nitpickr",
       "rubenspessoa/demo",
     ]);
+    expect(config.review.promptOptimizationMode).toBe("off");
   });
 
   it("derives a base URL from the legacy webhook URL", () => {
@@ -106,6 +109,15 @@ describe("parseBootstrapConfig", () => {
     });
 
     expect(config.baseUrl).toBe("https://nitpickr.example.com");
+  });
+
+  it("rejects invalid prompt optimization mode values", () => {
+    expect(() =>
+      parseBootstrapConfig({
+        DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
+        NITPICKR_PROMPT_OPTIMIZATION_MODE: "aggressive",
+      }),
+    ).toThrow(/NITPICKR_PROMPT_OPTIMIZATION_MODE/i);
   });
 });
 

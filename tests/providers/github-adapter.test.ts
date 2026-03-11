@@ -556,6 +556,59 @@ describe("GitHubAdapter", () => {
     );
   });
 
+  it("captures interaction arguments from review-thread replies", () => {
+    const adapter = new GitHubAdapter({
+      apiClient: new FakeGitHubApiClient(),
+      appConfig: {
+        appId: 123456,
+        privateKey: "test",
+        webhookSecret: "super-secret",
+        webhookUrl: "https://nitpickr.example.com/webhooks/github",
+        botLogins: ["nitpickr", "getnitpickr"],
+      },
+    });
+
+    const event = adapter.normalizeWebhookEvent("pull_request_review_comment", {
+      action: "created",
+      installation: {
+        id: 123456,
+      },
+      repository: {
+        id: 99,
+        name: "nitpickr",
+        owner: {
+          login: "rubenspessoa",
+        },
+        default_branch: "main",
+      },
+      pull_request: {
+        number: 42,
+      },
+      comment: {
+        id: 7002,
+        body: "fix add an explicit guard before parsing",
+        in_reply_to_id: 6001,
+        path: "src/api/server.ts",
+        line: 27,
+        user: {
+          login: "maintainer",
+        },
+      },
+    });
+
+    expect(event).toEqual(
+      expect.objectContaining({
+        kind: "interaction_requested",
+        pullNumber: 42,
+        command: "fix",
+        replyTargetCommentId: 6001,
+        source: expect.objectContaining({
+          argumentText: "add an explicit guard before parsing",
+        }),
+      }),
+    );
+  });
+
   it("ignores unsupported comment commands", () => {
     const adapter = new GitHubAdapter({
       apiClient: new FakeGitHubApiClient(),

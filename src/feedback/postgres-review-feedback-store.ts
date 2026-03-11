@@ -71,51 +71,62 @@ export class PostgresReviewFeedbackStore implements ReviewFeedbackStore {
   }
 
   async save(entries: ReviewFeedbackRecord[]): Promise<void> {
-    for (const entry of entries) {
-      await this.#client.unsafe(
-        `
-          insert into review_feedback_events (
-            id,
-            tenant_id,
-            repository_id,
-            scope_key,
-            provider_comment_id,
-            fingerprint,
-            path,
-            category,
-            finding_type,
-            kind,
-            count,
-            created_at,
-            updated_at
-          )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-          on conflict (repository_id, scope_key) do update set
-            provider_comment_id = excluded.provider_comment_id,
-            fingerprint = excluded.fingerprint,
-            path = excluded.path,
-            category = excluded.category,
-            finding_type = excluded.finding_type,
-            count = excluded.count,
-            updated_at = excluded.updated_at
-        `,
-        [
-          entry.id,
-          entry.tenantId,
-          entry.repositoryId,
-          entry.scopeKey,
-          entry.providerCommentId,
-          entry.fingerprint,
-          entry.path,
-          entry.category,
-          entry.findingType,
-          entry.kind,
-          entry.count,
-          entry.createdAt,
-          entry.updatedAt,
-        ],
-      );
+    if (entries.length === 0) {
+      return;
     }
+
+    const values = entries
+      .map((_, index) => {
+        const offset = index * 13;
+        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`;
+      })
+      .join(",\n          ");
+    const params = entries.flatMap((entry) => [
+      entry.id,
+      entry.tenantId,
+      entry.repositoryId,
+      entry.scopeKey,
+      entry.providerCommentId,
+      entry.fingerprint,
+      entry.path,
+      entry.category,
+      entry.findingType,
+      entry.kind,
+      entry.count,
+      entry.createdAt,
+      entry.updatedAt,
+    ]);
+
+    await this.#client.unsafe(
+      `
+        insert into review_feedback_events (
+          id,
+          tenant_id,
+          repository_id,
+          scope_key,
+          provider_comment_id,
+          fingerprint,
+          path,
+          category,
+          finding_type,
+          kind,
+          count,
+          created_at,
+          updated_at
+        )
+        values ${values}
+        on conflict (repository_id, scope_key) do update set
+          provider_comment_id = excluded.provider_comment_id,
+          fingerprint = excluded.fingerprint,
+          path = excluded.path,
+          category = excluded.category,
+          finding_type = excluded.finding_type,
+          kind = excluded.kind,
+          count = excluded.count,
+          updated_at = excluded.updated_at
+      `,
+      params,
+    );
   }
 
   async listByRepository(input: {

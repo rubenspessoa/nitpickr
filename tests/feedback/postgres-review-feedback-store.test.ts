@@ -43,14 +43,34 @@ describe("PostgresReviewFeedbackStore", () => {
         createdAt: "2026-03-11T12:00:00.000Z",
         updatedAt: "2026-03-11T12:00:00.000Z",
       },
+      {
+        id: "feedback_2",
+        tenantId: "tenant_1",
+        repositoryId: "repo_1",
+        scopeKey: "reaction_negative:comment_1",
+        providerCommentId: "comment_1",
+        fingerprint: "src/api/server.ts:27:correctness:guard_the_parse",
+        path: "src/api/server.ts",
+        category: "correctness",
+        findingType: "bug",
+        kind: "reaction_negative",
+        count: 1,
+        createdAt: "2026-03-11T12:00:00.000Z",
+        updatedAt: "2026-03-11T12:00:00.000Z",
+      },
     ]);
 
+    expect(client.calls).toHaveLength(1);
     expect(client.calls[0]?.query).toContain(
       "insert into review_feedback_events",
     );
+    expect(client.calls[0]?.query).toContain("values ($1, $2, $3");
+    expect(client.calls[0]?.query).toContain("($14, $15, $16");
     expect(client.calls[0]?.query).toContain(
       "on conflict (repository_id, scope_key) do update set",
     );
+    expect(client.calls[0]?.query).toContain("kind = excluded.kind");
+    expect(client.calls[0]?.params).toHaveLength(26);
   });
 
   it("lists repository-scoped feedback records", async () => {

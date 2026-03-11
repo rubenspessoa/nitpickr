@@ -9,6 +9,7 @@ export type ReviewFeedbackKind =
   | "fixed_after_comment"
   | "resolved_without_code_change"
   | "ignored";
+type ReviewFindingType = ReviewFinding["findingType"];
 
 export interface ReviewFeedbackRecord {
   id: string;
@@ -19,7 +20,7 @@ export interface ReviewFeedbackRecord {
   fingerprint: string | null;
   path: string | null;
   category: ReviewFinding["category"] | null;
-  findingType: ReviewFinding["findingType"] | null;
+  findingType: ReviewFindingType | null;
   kind: ReviewFeedbackKind;
   count: number;
   createdAt: string;
@@ -43,7 +44,7 @@ export interface ReviewFeedbackOutcomeEvent {
   fingerprint?: string;
   path?: string;
   category?: ReviewFinding["category"];
-  findingType?: ReviewFinding["findingType"];
+  findingType?: ReviewFindingType;
   kind: Exclude<ReviewFeedbackKind, "reaction_positive" | "reaction_negative">;
 }
 
@@ -67,7 +68,7 @@ function matchesPath(recordPath: string | null, reviewPath: string): boolean {
   return reviewPath === recordPath || reviewPath.startsWith(`${recordPath}/`);
 }
 
-function assertNever(value: never): never {
+function throwUnhandledFeedbackKind(value: never): never {
   throw new Error(`Unhandled feedback kind: ${String(value)}`);
 }
 
@@ -83,9 +84,9 @@ function scoreForRecord(record: ReviewFeedbackRecord): number {
       return -Math.max(record.count * 3, 3);
     case "ignored":
       return -Math.max(record.count * 2, 2);
-    default:
-      return assertNever(record.kind);
   }
+
+  return throwUnhandledFeedbackKind(record.kind);
 }
 
 function buildReactionScopeKey(
@@ -129,25 +130,38 @@ function buildSignalAggregationKey(record: ReviewFeedbackRecord): string {
     ].join(":");
   }
 
-  return `record:${record.id}`;
+  return `scope:${record.scopeKey}:record:${record.id}`;
 }
 
 function createAggregatedSignal(
   record: ReviewFeedbackRecord,
 ): AggregatedSignal {
-  return {
-    ...(record.fingerprint === null ? {} : { fingerprint: record.fingerprint }),
-    ...(record.path === null ? {} : { path: record.path }),
-    ...(record.category === null ? {} : { category: record.category }),
-    ...(record.findingType === null ? {} : { findingType: record.findingType }),
+  const signal: AggregatedSignal = {
     score: 0,
   };
+
+  if (record.fingerprint !== null) {
+    signal.fingerprint = record.fingerprint;
+  }
+  if (record.path !== null) {
+    signal.path = record.path;
+  }
+  if (record.category !== null) {
+    signal.category = record.category;
+  }
+  if (record.findingType !== null) {
+    signal.findingType = record.findingType;
+  }
+
+  return signal;
 }
 
 function compareSignals(
   left: AggregatedSignal,
   right: AggregatedSignal,
 ): number {
+  // Prefer suppressing signals first, then stronger absolute scores,
+  // then fall back to a stable identity sort for deterministic output.
   if ((right.suppress ?? false) !== (left.suppress ?? false)) {
     return Number(right.suppress ?? false) - Number(left.suppress ?? false);
   }

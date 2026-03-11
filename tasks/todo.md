@@ -139,3 +139,31 @@
   - `pnpm typecheck`
   - `pnpm test tests/publisher/review-publisher.test.ts`
   - `pnpm test` (`51` files, `254` tests)
+
+# PR #3 Follow-up Thread Sweep
+
+## Plan
+
+- [x] Re-triage new unresolved nitpickr threads after the latest push.
+- [x] Fix omission-marker and truncation edge-case correctness issues.
+- [x] Harden 422 fallback error-shape parsing and add non-Error payload test coverage.
+- [x] Re-run lint, typecheck, and full test suite.
+- [ ] Resolve all addressed PR threads.
+
+## Results
+
+- Updated `src/review/prompt-payload-optimizer.ts`:
+  - minimum omission budget now includes the newline-prefixed marker shape
+  - `truncateTextHead` now preserves trailing content when marker alone would exceed the target budget
+  - path comparison now uses Node path utilities for normalization before matching memory scope
+- Updated `src/publisher/review-publisher.ts`:
+  - replaced brittle single-string checks with structured error inspection
+  - supports `Error`, string, and plain-object payloads
+  - parses JSON payload fragments from error messages to detect status and error entries robustly
+- Updated `tests/publisher/review-publisher.test.ts`:
+  - added regression test for non-Error `{ status: "422", errors: [...] }` throw shape to ensure fallback still triggers
+- Verification completed:
+  - `pnpm test tests/review/prompt-payload-optimizer.test.ts tests/publisher/review-publisher.test.ts`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm test` (`51` files, `255` tests)

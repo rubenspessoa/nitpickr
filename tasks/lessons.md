@@ -9,3 +9,5 @@
 - When fixing PR review feedback in bulk, run one deterministic sweep (code + tests + verification) before resolving threads; avoid resolving early and leaving follow-up reopen churn.
 - In shared library code, prefer compatibility-safe string normalization (`replace(/.../g, ...)`) over newer helpers when runtime constraints may vary between local, CI, and deployment targets.
 - External provider validation should not take down the full review lifecycle; for known non-critical publish validation failures, degrade gracefully (summary-only) and keep the run completing.
+- For truncation helpers, verify edge-case invariants explicitly (e.g., "truncate head" must preserve tail when markers consume budget) to avoid silent semantic inversions.
+- Provider errors can come as `Error`, plain strings, or plain objects; fallback logic should inspect structured payloads, not only message substrings.

@@ -1,3 +1,5 @@
+import { normalize as normalizePath, posix, win32 } from "node:path";
+
 export type ReviewScope = "full_pr" | "commit_delta";
 export type PromptOptimizationMode = "off" | "balanced";
 
@@ -65,9 +67,9 @@ function buildOmissionMarker(omittedChars: number): string {
 function minimumPatchCharactersForOmission(): number {
   const minimumEdgeCharacters = 8;
   // Use a stable reference so the minimum does not scale with full file size.
-  const stableMarkerLength = buildOmissionMarker(
+  const stableMarkerLength = `\n${buildOmissionMarker(
     omissionMarkerReferenceChars,
-  ).length;
+  )}`.length;
   return stableMarkerLength + minimumEdgeCharacters * 2;
 }
 
@@ -104,10 +106,16 @@ function truncateTextHead(input: string, maxCharacters: number): string {
   const omittedChars = input.length - maxCharacters;
   const marker = `\n${buildOmissionMarker(omittedChars)}`;
   if (marker.length >= maxCharacters) {
-    return input.slice(0, maxCharacters);
+    return input.slice(input.length - maxCharacters);
   }
 
   return `${input.slice(0, maxCharacters - marker.length)}${marker}`;
+}
+
+function normalizeComparablePath(pathValue: string): string {
+  const normalized = normalizePath(pathValue);
+  const posixStyle = normalized.split(win32.sep).join(posix.sep);
+  return posix.normalize(posixStyle);
 }
 
 function truncatePatchWithOmission(
@@ -321,9 +329,9 @@ function isMemoryRelevantToChunk(
   memoryPath: string,
   chunkPaths: Set<string>,
 ): boolean {
-  const normalizedMemoryPath = memoryPath.replace(/\\/g, "/");
+  const normalizedMemoryPath = normalizeComparablePath(memoryPath);
   for (const path of chunkPaths) {
-    const normalizedPath = path.replace(/\\/g, "/");
+    const normalizedPath = normalizeComparablePath(path);
     if (
       normalizedPath === normalizedMemoryPath ||
       normalizedPath.startsWith(`${normalizedMemoryPath}/`)

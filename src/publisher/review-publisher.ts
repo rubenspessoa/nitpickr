@@ -129,15 +129,148 @@ function buildSummaryMarker(): string {
   return "<!-- nitpickr:summary -->";
 }
 
+function parseStatusCode(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function pushText(values: string[], value: unknown): void {
+  if (typeof value !== "string") {
+    return;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length > 0) {
+    values.push(trimmed);
+  }
+}
+
+function collectErrorTextsFromPayload(payload: unknown): {
+  statusCode: number | null;
+  texts: string[];
+} {
+  if (typeof payload !== "object" || payload === null) {
+    return {
+      statusCode: null,
+      texts: [],
+    };
+  }
+
+  const record = payload as Record<string, unknown>;
+  const texts: string[] = [];
+  pushText(texts, record.message);
+
+  const errors = record.errors;
+  if (typeof errors === "string") {
+    pushText(texts, errors);
+  } else if (Array.isArray(errors)) {
+    for (const entry of errors) {
+      if (typeof entry === "string") {
+        pushText(texts, entry);
+        continue;
+      }
+
+      if (typeof entry === "object" && entry !== null) {
+        const errorRecord = entry as Record<string, unknown>;
+        pushText(texts, errorRecord.message);
+      }
+    }
+  }
+
+  return {
+    statusCode: parseStatusCode(record.status),
+    texts,
+  };
+}
+
+function parseJsonPayloadFromText(text: string): unknown | null {
+  const candidates = [text.trim()];
+  const jsonStart = text.indexOf("{");
+  if (jsonStart >= 0) {
+    candidates.push(text.slice(jsonStart).trim());
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate.startsWith("{") || !candidate.endsWith("}")) {
+      continue;
+    }
+
+    try {
+      return JSON.parse(candidate) as unknown;
+    } catch {
+      // Keep trying the next candidate.
+    }
+  }
+
+  return null;
+}
+
 function isInlineCommentResolutionError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
+  const candidateTexts: string[] = [];
+  let statusIs422 = false;
+
+  const inspect = (value: unknown): void => {
+    if (value instanceof Error) {
+      pushText(candidateTexts, value.message);
+      const parsedPayload = parseJsonPayloadFromText(value.message);
+      if (parsedPayload) {
+        const extracted = collectErrorTextsFromPayload(parsedPayload);
+        if (extracted.statusCode === 422) {
+          statusIs422 = true;
+        }
+        candidateTexts.push(...extracted.texts);
+      }
+
+      const cause = (value as Error & { cause?: unknown }).cause;
+      if (cause !== undefined) {
+        inspect(cause);
+      }
+      return;
+    }
+
+    if (typeof value === "string") {
+      pushText(candidateTexts, value);
+      const parsedPayload = parseJsonPayloadFromText(value);
+      if (parsedPayload) {
+        const extracted = collectErrorTextsFromPayload(parsedPayload);
+        if (extracted.statusCode === 422) {
+          statusIs422 = true;
+        }
+        candidateTexts.push(...extracted.texts);
+      }
+      return;
+    }
+
+    const extracted = collectErrorTextsFromPayload(value);
+    if (extracted.statusCode === 422) {
+      statusIs422 = true;
+    }
+    candidateTexts.push(...extracted.texts);
+  };
+
+  inspect(error);
+
+  if (!statusIs422) {
+    statusIs422 = candidateTexts.some((text) =>
+      /status\s*:?\s*422/i.test(text),
+    );
+  }
+
+  if (!statusIs422) {
     return false;
   }
 
-  const message = error.message.toLowerCase();
-  if (!message.includes("status 422")) {
-    return false;
-  }
+  const message = candidateTexts.join("\n").toLowerCase();
 
   return (
     message.includes("path could not be resolved") ||

@@ -216,23 +216,60 @@ function parseJsonPayloadFromText(text: string): unknown | null {
     return direct;
   }
 
-  const jsonStart = text.indexOf("{");
-  if (jsonStart < 0) {
-    return null;
-  }
+  let depth = 0;
+  let objectStart = -1;
+  let inString = false;
+  let escaped = false;
 
-  const maxJsonEndScanAttempts = 128;
-  let attempts = 0;
-  for (
-    let jsonEnd = text.lastIndexOf("}");
-    jsonEnd > jsonStart && attempts < maxJsonEndScanAttempts;
-    jsonEnd = text.lastIndexOf("}", jsonEnd - 1)
-  ) {
-    attempts += 1;
-    const candidate = text.slice(jsonStart, jsonEnd + 1).trim();
-    const parsed = tryParseObject(candidate);
-    if (parsed) {
-      return parsed;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === undefined) {
+      continue;
+    }
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (character === "{") {
+      if (depth === 0) {
+        objectStart = index;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (character !== "}" || depth === 0) {
+      continue;
+    }
+
+    depth -= 1;
+    if (depth === 0 && objectStart >= 0) {
+      const candidate = text.slice(objectStart, index + 1).trim();
+      const parsed = tryParseObject(candidate);
+      if (parsed) {
+        return parsed;
+      }
+
+      objectStart = -1;
     }
   }
 

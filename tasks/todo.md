@@ -161,8 +161,10 @@
   - supports `Error`, string, and plain-object payloads
   - parses JSON payload fragments from error messages even when trailing text follows the JSON object
   - requires purely numeric status strings before interpreting them as HTTP status codes
+  - switched to a linear brace-aware JSON object scanner to avoid bounded reverse-scan misses and unbounded parse loops
 - Updated `tests/publisher/review-publisher.test.ts`:
   - added regression test for non-Error `{ status: "422", errors: [...] }` throw shape to ensure fallback still triggers
+  - added regression test covering non-JSON brace content before a valid JSON payload in the same error string
 - Verification completed:
   - `pnpm test tests/review/prompt-payload-optimizer.test.ts tests/publisher/review-publisher.test.ts`
   - `pnpm typecheck`

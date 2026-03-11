@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER,
   DIAGNOSTIC_OBJECT_TRUNCATION_MARKER,
+  DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_DEPRECATED,
   DIAGNOSTIC_SANITIZED_MAX_LENGTH,
 } from "../../src/publisher/diagnostic-constants.js";
 import {
@@ -129,6 +130,26 @@ describe("ReviewPublisher", () => {
 
       expect(message).toContain(DIAGNOSTIC_OBJECT_TRUNCATION_MARKER);
       expect(message.length).toBeLessThanOrEqual(
+        DIAGNOSTIC_SANITIZED_MAX_LENGTH,
+      );
+    });
+
+    it("recognizes canonical and deprecated object truncation marker variants", () => {
+      const canonicalSource = `${"x".repeat(250)}${DIAGNOSTIC_OBJECT_TRUNCATION_MARKER}`;
+      const deprecatedSource = `${"x".repeat(250)}${DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_DEPRECATED}`;
+
+      const canonicalMessage = sanitizeDiagnosticErrorMessage(canonicalSource);
+      const deprecatedMessage =
+        sanitizeDiagnosticErrorMessage(deprecatedSource);
+
+      expect(canonicalMessage).toContain(DIAGNOSTIC_OBJECT_TRUNCATION_MARKER);
+      expect(deprecatedMessage).toContain(
+        DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_DEPRECATED,
+      );
+      expect(canonicalMessage.length).toBeLessThanOrEqual(
+        DIAGNOSTIC_SANITIZED_MAX_LENGTH,
+      );
+      expect(deprecatedMessage.length).toBeLessThanOrEqual(
         DIAGNOSTIC_SANITIZED_MAX_LENGTH,
       );
     });

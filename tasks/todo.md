@@ -217,6 +217,8 @@
   - clarified changelog wording to foreground backward compatibility
   - exported a marker `Set` companion for compatibility-friendly membership checks
   - kept sanitizer marker iteration on the ordered variants array for readability and deterministic ordering
+  - added sanitizer regression coverage for canonical + deprecated truncation marker variants
+  - cleaned up lessons wording typo flagged during PR review
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

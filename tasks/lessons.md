@@ -23,3 +23,4 @@
 - If policy constants become shared across tests and modules, move them into a tiny dedicated constants module to avoid coupling tests to a larger implementation file.
 - When extracting shared constants, move the full policy group together (limits + markers + budgets) to avoid follow-up churn from partial extraction.
 - For shared policy constants, add a short module header and enforce consistent marker casing to cut style churn in follow-up review passes.
+- When normalizing marker formats, keep backward-compatible aliases if logs or external tooling may depend on previous literal strings.

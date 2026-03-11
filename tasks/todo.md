@@ -210,6 +210,8 @@
   - moved `DIAGNOSTIC_MAX_SERIALIZED_LENGTH`, `DIAGNOSTIC_MAX_STRING_LENGTH`, and `DIAGNOSTIC_OBJECT_BUDGET` into the same diagnostics constants module
   - added a diagnostics constants header comment documenting units/relationships
   - unified truncation casing to lowercase marker format (`[truncated]`)
+  - added deprecated uppercase marker alias for backward compatibility (`DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_DEPRECATED`)
+  - documented casing-change impact as a breaking change that needs release-note visibility
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

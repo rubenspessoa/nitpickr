@@ -218,6 +218,7 @@
   - exported a marker `Set` companion for compatibility-friendly membership checks
   - kept sanitizer marker iteration on the ordered variants array for readability and deterministic ordering
   - added sanitizer regression coverage for canonical + deprecated truncation marker variants
+  - documented sanitizer contract: preserve detected deprecated marker literals in output instead of normalizing to canonical during truncation
   - cleaned up lessons wording typo flagged during PR review
 - Verification completed:
   - `pnpm lint`

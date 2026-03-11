@@ -4,6 +4,7 @@ import {
   DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER,
   DIAGNOSTIC_OBJECT_TRUNCATION_MARKER,
   DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_DEPRECATED,
+  DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_VARIANTS,
   DIAGNOSTIC_SANITIZED_MAX_LENGTH,
 } from "../../src/publisher/diagnostic-constants.js";
 import {
@@ -66,6 +67,12 @@ class FakePublishReviewClient implements PublishReviewClient {
 
 describe("ReviewPublisher", () => {
   describe("sanitizeDiagnosticErrorMessage", () => {
+    it("registers the deprecated truncation marker variant", () => {
+      expect(DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_VARIANTS).toContain(
+        DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_DEPRECATED,
+      );
+    });
+
     it("sanitizes Error messages and collapses whitespace", () => {
       const message = sanitizeDiagnosticErrorMessage(
         new Error("  parse failed\nwith details 💥 "),

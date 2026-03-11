@@ -1,4 +1,4 @@
-import { normalize as normalizePath, posix, win32 } from "node:path";
+import { normalize as normalizePath, posix } from "node:path";
 
 export type ReviewScope = "full_pr" | "commit_delta";
 export type PromptOptimizationMode = "off" | "balanced";
@@ -114,7 +114,7 @@ function truncateTextHead(input: string, maxCharacters: number): string {
 
 function normalizeComparablePath(pathValue: string): string {
   const normalized = normalizePath(pathValue);
-  const posixStyle = normalized.split(win32.sep).join(posix.sep);
+  const posixStyle = normalized.replace(/\\/g, posix.sep);
   return posix.normalize(posixStyle);
 }
 

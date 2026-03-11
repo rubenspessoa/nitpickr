@@ -159,7 +159,8 @@
 - Updated `src/publisher/review-publisher.ts`:
   - replaced brittle single-string checks with structured error inspection
   - supports `Error`, string, and plain-object payloads
-  - parses JSON payload fragments from error messages to detect status and error entries robustly
+  - parses JSON payload fragments from error messages even when trailing text follows the JSON object
+  - requires purely numeric status strings before interpreting them as HTTP status codes
 - Updated `tests/publisher/review-publisher.test.ts`:
   - added regression test for non-Error `{ status: "422", errors: [...] }` throw shape to ensure fallback still triggers
 - Verification completed:

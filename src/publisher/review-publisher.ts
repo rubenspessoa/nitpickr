@@ -135,6 +135,10 @@ function parseStatusCode(value: unknown): number | null {
   }
 
   if (typeof value === "string") {
+    if (!/^\d+$/.test(value.trim())) {
+      return null;
+    }
+
     const parsed = Number.parseInt(value, 10);
     if (Number.isInteger(parsed)) {
       return parsed;
@@ -194,21 +198,38 @@ function collectErrorTextsFromPayload(payload: unknown): {
 }
 
 function parseJsonPayloadFromText(text: string): unknown | null {
-  const candidates = [text.trim()];
-  const jsonStart = text.indexOf("{");
-  if (jsonStart >= 0) {
-    candidates.push(text.slice(jsonStart).trim());
-  }
-
-  for (const candidate of candidates) {
-    if (!candidate.startsWith("{") || !candidate.endsWith("}")) {
-      continue;
+  const tryParseObject = (candidate: string): unknown | null => {
+    if (!candidate.startsWith("{")) {
+      return null;
     }
 
     try {
-      return JSON.parse(candidate) as unknown;
+      const parsed = JSON.parse(candidate) as unknown;
+      return typeof parsed === "object" && parsed !== null ? parsed : null;
     } catch {
-      // Keep trying the next candidate.
+      return null;
+    }
+  };
+
+  const direct = tryParseObject(text.trim());
+  if (direct) {
+    return direct;
+  }
+
+  const jsonStart = text.indexOf("{");
+  if (jsonStart < 0) {
+    return null;
+  }
+
+  for (
+    let jsonEnd = text.lastIndexOf("}");
+    jsonEnd > jsonStart;
+    jsonEnd = text.lastIndexOf("}", jsonEnd - 1)
+  ) {
+    const candidate = text.slice(jsonStart, jsonEnd + 1).trim();
+    const parsed = tryParseObject(candidate);
+    if (parsed) {
+      return parsed;
     }
   }
 

@@ -35,6 +35,7 @@ const runtimeSecretEnvironmentSchema = z.object({
 
 type BootstrapEnvironment = z.infer<typeof bootstrapEnvironmentSchema>;
 export type BotLogins = [string, ...string[]];
+const defaultBotLogins: BotLogins = ["nitpickr", "getnitpickr"];
 
 export interface RuntimeSecrets {
   openAiApiKey: string;
@@ -144,7 +145,7 @@ function toBotLogins(entries: string[]): BotLogins {
 
 function parseBotLogins(value: string | undefined): BotLogins {
   if (value === undefined) {
-    return ["nitpickr", "getnitpickr"];
+    return defaultBotLogins;
   }
 
   const parsed = value

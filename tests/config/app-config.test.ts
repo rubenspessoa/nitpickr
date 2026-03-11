@@ -72,6 +72,14 @@ describe("parseAppConfig", () => {
 });
 
 describe("parseBootstrapConfig", () => {
+  it("uses a non-empty default bot login list when unset", () => {
+    const config = parseBootstrapConfig({
+      DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
+    });
+
+    expect(config.github.botLogins).toEqual(["nitpickr", "getnitpickr"]);
+  });
+
   it("parses Railway-style bootstrap settings", () => {
     const config = parseBootstrapConfig({
       DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",

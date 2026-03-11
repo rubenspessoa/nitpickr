@@ -209,15 +209,30 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
 
     // Register the delivery before any reactions, normalization, or queue
     // work so duplicates are rejected before the handler produces side effects.
-    const delivery = await this.#webhookEventService.beginDelivery({
-      deliveryId: parsed.deliveryId,
-      provider: "github",
-      eventName: parsed.eventName,
-      payload: parsed.payload,
-    });
+    let delivery: Awaited<ReturnType<WebhookEventTracker["beginDelivery"]>>;
+    try {
+      delivery = await this.#webhookEventService.beginDelivery({
+        deliveryId: parsed.deliveryId,
+        provider: "github",
+        eventName: parsed.eventName,
+        payload: parsed.payload,
+      });
+    } catch (error) {
+      this.#logger.error("GitHub webhook delivery registration failed.", {
+        deliveryId: parsed.deliveryId,
+        eventName: parsed.eventName,
+        alertable: true,
+        monitoringKey: "webhook_delivery_registration_failure",
+        error: toErrorMessage(error, "Unknown delivery registration failure."),
+      });
+      return {
+        statusCode: 500,
+        accepted: false,
+        message: "Failed to process GitHub webhook event.",
+      };
+    }
 
     if (delivery === "duplicate") {
-      await this.#updateWebhookEventStatus(parsed.deliveryId, "ignored");
       this.#logger.warn("Ignored duplicate GitHub webhook delivery.", {
         deliveryId: parsed.deliveryId,
         eventName: parsed.eventName,

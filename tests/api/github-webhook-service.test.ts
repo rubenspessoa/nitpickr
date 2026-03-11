@@ -80,8 +80,12 @@ class FakeWebhookEventService {
   failed: string[] = [];
   duplicates = new Set<string>();
   markFailedError: Error | null = null;
+  beginDeliveryError: Error | null = null;
 
   async beginDelivery(input: { deliveryId: string }) {
+    if (this.beginDeliveryError) {
+      throw this.beginDeliveryError;
+    }
     this.received.push(input.deliveryId);
     return this.duplicates.has(input.deliveryId) ? "duplicate" : "new";
   }
@@ -397,7 +401,7 @@ describe("GitHubWebhookService", () => {
     expect(result.accepted).toBe(false);
     expect(result.message).toBe("Duplicate GitHub webhook delivery ignored.");
     expect(queue.calls).toEqual([]);
-    expect(webhookEvents.ignored).toEqual(["delivery-dup"]);
+    expect(webhookEvents.ignored).toEqual([]);
     expect(adapter.reactToMentionCalls).toBe(0);
     expect(adapter.normalizeWebhookEventCalls).toBe(0);
     expect(logger.entries).toContainEqual({
@@ -407,6 +411,49 @@ describe("GitHubWebhookService", () => {
         component: "github-webhook",
         deliveryId: "delivery-dup",
         eventName: "pull_request",
+      },
+    });
+  });
+
+  it("returns a controlled failure when delivery registration throws", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    webhookEvents.beginDeliveryError = new Error("db unavailable");
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-store-fail",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result).toEqual({
+      statusCode: 500,
+      accepted: false,
+      message: "Failed to process GitHub webhook event.",
+    });
+    expect(queue.calls).toEqual([]);
+    expect(adapter.reactToMentionCalls).toBe(0);
+    expect(adapter.normalizeWebhookEventCalls).toBe(0);
+    expect(logger.entries).toContainEqual({
+      level: "error",
+      message: "GitHub webhook delivery registration failed.",
+      fields: {
+        component: "github-webhook",
+        deliveryId: "delivery-store-fail",
+        eventName: "pull_request",
+        error: "db unavailable",
+        alertable: true,
+        monitoringKey: "webhook_delivery_registration_failure",
       },
     });
   });

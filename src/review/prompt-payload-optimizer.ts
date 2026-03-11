@@ -56,13 +56,18 @@ const sharedPromptBudgets: SharedPromptBudgets = {
   maxMemoryCharsPerChunk: 2_000,
 };
 
+const omissionMarkerReferenceChars = 1_000;
+
 function buildOmissionMarker(omittedChars: number): string {
   return `... [omitted ${omittedChars} chars] ...`;
 }
 
 function minimumPatchCharactersForOmission(): number {
   const minimumEdgeCharacters = 8;
-  const stableMarkerLength = buildOmissionMarker(1_000).length;
+  // Use a stable reference so the minimum does not scale with full file size.
+  const stableMarkerLength = buildOmissionMarker(
+    omissionMarkerReferenceChars,
+  ).length;
   return stableMarkerLength + minimumEdgeCharacters * 2;
 }
 
@@ -97,7 +102,7 @@ function truncateTextHead(input: string, maxCharacters: number): string {
   }
 
   const omittedChars = input.length - maxCharacters;
-  const marker = buildOmissionMarker(omittedChars);
+  const marker = `\n${buildOmissionMarker(omittedChars)}`;
   if (marker.length >= maxCharacters) {
     return input.slice(0, maxCharacters);
   }
@@ -316,9 +321,9 @@ function isMemoryRelevantToChunk(
   memoryPath: string,
   chunkPaths: Set<string>,
 ): boolean {
-  const normalizedMemoryPath = memoryPath.replaceAll("\\", "/");
+  const normalizedMemoryPath = memoryPath.replace(/\\/g, "/");
   for (const path of chunkPaths) {
-    const normalizedPath = path.replaceAll("\\", "/");
+    const normalizedPath = path.replace(/\\/g, "/");
     if (
       normalizedPath === normalizedMemoryPath ||
       normalizedPath.startsWith(`${normalizedMemoryPath}/`)

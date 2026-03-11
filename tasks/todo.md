@@ -165,6 +165,7 @@
   - added defensive `safeTryParseObject` calls in the scan loop so unexpected parser exceptions do not abort fallback detection
   - tightened direct/candidate return checks to explicit `!== null` semantics
   - removed redundant scanner undefined-character guard for clarity
+  - restored sanitized/truncated parse diagnostics (`errorMessage`, capped to 200 chars) without logging raw payload content
 - Updated `tests/publisher/review-publisher.test.ts`:
   - added regression test for non-Error `{ status: "422", errors: [...] }` throw shape to ensure fallback still triggers
   - added regression test covering non-JSON brace content before a valid JSON payload in the same error string

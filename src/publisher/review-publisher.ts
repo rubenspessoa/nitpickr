@@ -198,6 +198,15 @@ function collectErrorTextsFromPayload(payload: unknown): {
 }
 
 function parseJsonPayloadFromText(text: string): unknown | null {
+  const toDiagnosticErrorMessage = (value: unknown): string => {
+    const raw = value instanceof Error ? value.message : String(value);
+    return raw
+      .replace(/\s+/g, " ")
+      .replace(/[^\x20-\x7E]/g, "")
+      .trim()
+      .slice(0, 200);
+  };
+
   const tryParseObject = (candidate: string): unknown | null => {
     if (!candidate.startsWith("{")) {
       return null;
@@ -219,7 +228,7 @@ function parseJsonPayloadFromText(text: string): unknown | null {
       if (!parseErrorLogged) {
         parseErrorLogged = true;
         console.debug("parseJsonPayloadFromText parse error", {
-          error: "JSON parse failure while scanning provider payload.",
+          errorMessage: toDiagnosticErrorMessage(error),
           errorType: error instanceof Error ? error.name : typeof error,
         });
       }

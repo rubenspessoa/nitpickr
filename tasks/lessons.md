@@ -15,3 +15,4 @@
 - For parser hardening, prefer linear state-machine extraction over repeated candidate parse loops with ad-hoc caps; this improves both performance and determinism.
 - In fallback-critical scanners, wrap parse invocations defensively and add tests for braces inside JSON string values to avoid aborting on malformed candidates or miscounting delimiters.
 - In parser helpers, prefer explicit null checks over truthiness checks even when current return types are object-only; this keeps behavior safe against future refactors.
+- Security and operability must both be preserved in diagnostics: log sanitized/truncated error context, not raw untrusted payload messages.

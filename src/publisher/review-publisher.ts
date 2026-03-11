@@ -129,6 +129,22 @@ function buildSummaryMarker(): string {
   return "<!-- nitpickr:summary -->";
 }
 
+function isInlineCommentResolutionError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  if (!message.includes("status 422")) {
+    return false;
+  }
+
+  return (
+    message.includes("path could not be resolved") ||
+    message.includes("line could not be resolved")
+  );
+}
+
 function shortSha(sha: string | undefined): string | null {
   if (!sha) {
     return null;
@@ -384,12 +400,31 @@ export class ReviewPublisher {
               findings: input.result.findings,
             });
 
-    return this.#client.publishPullRequestReview({
-      installationId: input.installationId,
-      repository: input.repository,
-      pullNumber: input.pullNumber,
-      body,
-      comments: toProviderReviewComments(comments),
-    });
+    const providerComments = toProviderReviewComments(comments);
+
+    try {
+      return await this.#client.publishPullRequestReview({
+        installationId: input.installationId,
+        repository: input.repository,
+        pullNumber: input.pullNumber,
+        body,
+        comments: providerComments,
+      });
+    } catch (error) {
+      if (
+        providerComments.length > 0 &&
+        isInlineCommentResolutionError(error)
+      ) {
+        return this.#client.publishPullRequestReview({
+          installationId: input.installationId,
+          repository: input.repository,
+          pullNumber: input.pullNumber,
+          body,
+          comments: [],
+        });
+      }
+
+      throw error;
+    }
   }
 }

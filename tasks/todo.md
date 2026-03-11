@@ -115,3 +115,27 @@
   - `pnpm lint`
   - `pnpm typecheck`
   - `pnpm test` (`51` files, `252` tests)
+
+# Publish 422 Resilience (Path/Line Resolution)
+
+## Plan
+
+- [x] Confirm the failing class from logs and identify the publish-path failure point.
+- [x] Add publisher fallback behavior for GitHub 422 inline-comment resolution failures.
+- [x] Add regression tests for fallback behavior and non-fallback error handling.
+- [x] Run lint, typecheck, and tests; document verification.
+
+## Results
+
+- Updated `src/publisher/review-publisher.ts`:
+  - added targeted detection for GitHub 422 errors that indicate unresolved review comment `path`/`line`
+  - added one retry path that republishes the same review body without inline comments when that specific error happens
+  - kept existing behavior for all non-target errors (they still fail fast)
+- Updated `tests/publisher/review-publisher.test.ts`:
+  - added regression test covering fallback to summary-only publish after a 422 path/line resolution rejection
+  - added regression test ensuring unrelated 422 validation errors are not swallowed
+- Verification completed:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test tests/publisher/review-publisher.test.ts`
+  - `pnpm test` (`51` files, `254` tests)

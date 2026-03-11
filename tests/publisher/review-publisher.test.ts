@@ -22,6 +22,7 @@ class FakePublishReviewClient implements PublishReviewClient {
     }>;
   }> = [];
   existingReviews: Array<{ reviewId: string; body: string }> = [];
+  publishFailures: Error[] = [];
 
   async listPullRequestReviews(): Promise<
     Array<{
@@ -48,6 +49,10 @@ class FakePublishReviewClient implements PublishReviewClient {
     }>;
   }): Promise<{ reviewId: string }> {
     this.calls.push(input);
+    const nextFailure = this.publishFailures.shift();
+    if (nextFailure) {
+      throw nextFailure;
+    }
     return { reviewId: "review_1" };
   }
 }
@@ -228,6 +233,112 @@ describe("ReviewPublisher", () => {
     expect(client.calls[0]?.body).toContain("Queue fairness improved.");
     expect(client.calls[0]?.comments[0]?.side).toBe("RIGHT");
     expect(client.calls[0]?.comments[0]).not.toHaveProperty("fingerprint");
+  });
+
+  it("falls back to summary-only publish when GitHub rejects inline comment path/line resolution", async () => {
+    const client = new FakePublishReviewClient();
+    client.publishFailures = [
+      new Error(
+        'GitHub request failed with status 422: {"message":"Unprocessable Entity","errors":["Path could not be resolved, and Line could not be resolved"],"status":"422"}',
+      ),
+    ];
+    const publisher = new ReviewPublisher(client);
+
+    const published = await publisher.publish({
+      reviewRunId: "review_run_422",
+      installationId: "123456",
+      repository: {
+        owner: "rubenspessoa",
+        name: "nitpickr",
+      },
+      pullNumber: 42,
+      publishMode: "pr_summary",
+      result: {
+        summary: "Queue fairness improved.",
+        mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+        findings: [
+          {
+            path: "src/queue/queue-scheduler.ts",
+            line: 18,
+            findingType: "bug",
+            severity: "high",
+            category: "correctness",
+            title: "Stable ordering breaks",
+            body: "Equal priorities do not preserve insertion order.",
+            fixPrompt:
+              "Refactor the queue to preserve insertion order for equal priorities.",
+          },
+        ],
+      },
+      files: [
+        {
+          path: "src/queue/queue-scheduler.ts",
+          patch: [
+            "@@ -17,1 +17,2 @@",
+            " context",
+            "+inserted",
+            "+stable ordering",
+          ].join("\n"),
+        },
+      ],
+    });
+
+    expect(published.reviewId).toBe("review_1");
+    expect(client.calls).toHaveLength(2);
+    expect(client.calls[0]?.comments).toHaveLength(1);
+    expect(client.calls[1]?.comments).toHaveLength(0);
+  });
+
+  it("does not swallow unrelated publish errors", async () => {
+    const client = new FakePublishReviewClient();
+    client.publishFailures = [
+      new Error(
+        'GitHub request failed with status 422: {"message":"Unprocessable Entity","errors":["Validation failed"],"status":"422"}',
+      ),
+    ];
+    const publisher = new ReviewPublisher(client);
+
+    await expect(() =>
+      publisher.publish({
+        reviewRunId: "review_run_error",
+        installationId: "123456",
+        repository: {
+          owner: "rubenspessoa",
+          name: "nitpickr",
+        },
+        pullNumber: 42,
+        publishMode: "pr_summary",
+        result: {
+          summary: "Queue fairness improved.",
+          mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+          findings: [
+            {
+              path: "src/queue/queue-scheduler.ts",
+              line: 18,
+              findingType: "bug",
+              severity: "high",
+              category: "correctness",
+              title: "Stable ordering breaks",
+              body: "Equal priorities do not preserve insertion order.",
+              fixPrompt:
+                "Refactor the queue to preserve insertion order for equal priorities.",
+            },
+          ],
+        },
+        files: [
+          {
+            path: "src/queue/queue-scheduler.ts",
+            patch: [
+              "@@ -17,1 +17,2 @@",
+              " context",
+              "+inserted",
+              "+stable ordering",
+            ].join("\n"),
+          },
+        ],
+      }),
+    ).rejects.toThrow(/Validation failed/i);
+    expect(client.calls).toHaveLength(1);
   });
 
   it("reuses an existing review when the same review run was already published", async () => {

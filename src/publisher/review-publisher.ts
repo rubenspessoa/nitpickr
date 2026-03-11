@@ -198,6 +198,8 @@ function collectErrorTextsFromPayload(payload: unknown): {
 }
 
 function toDiagnosticErrorSourceText(value: unknown): string {
+  const maxSerializedLength = 1_000;
+
   if (value instanceof Error) {
     return value.message;
   }
@@ -206,13 +208,41 @@ function toDiagnosticErrorSourceText(value: unknown): string {
     return value;
   }
 
-  try {
-    const serialized = JSON.stringify(value);
-    if (typeof serialized === "string") {
-      return serialized;
+  if (typeof value === "object" && value !== null) {
+    const visited = new WeakSet<object>();
+    let objectBudget = 200;
+
+    try {
+      const serialized = JSON.stringify(value, (_key, entry) => {
+        if (typeof entry === "string") {
+          return entry.length > 200
+            ? `${entry.slice(0, 200)}...[truncated]`
+            : entry;
+        }
+
+        if (typeof entry === "object" && entry !== null) {
+          if (visited.has(entry)) {
+            return "[Circular]";
+          }
+          visited.add(entry);
+
+          if (objectBudget <= 0) {
+            return "[Truncated]";
+          }
+          objectBudget -= 1;
+        }
+
+        return entry;
+      });
+
+      if (typeof serialized === "string") {
+        return serialized.length <= maxSerializedLength
+          ? serialized
+          : `${serialized.slice(0, maxSerializedLength)}...[truncated]`;
+      }
+    } catch {
+      // Fall back to String(...) below.
     }
-  } catch {
-    // Fall back to String(...) below.
   }
 
   return String(value);
@@ -243,6 +273,7 @@ function parseJsonPayloadFromText(text: string): unknown | null {
     }
   };
 
+  // Function-scoped sentinel to avoid duplicate logs during a single scan.
   let parseErrorLogged = false;
   const safeTryParseObject = (candidate: string): unknown | null => {
     try {

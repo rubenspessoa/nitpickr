@@ -91,6 +91,17 @@ describe("ReviewPublisher", () => {
       const message = sanitizeDiagnosticErrorMessage("🚨💥");
       expect(message).toBe("unavailable");
     });
+
+    it("handles circular objects without throwing", () => {
+      const payload: Record<string, unknown> = { status: 422 };
+      payload.self = payload;
+
+      const message = sanitizeDiagnosticErrorMessage(payload);
+
+      expect(message).toContain('"self":"[Circular]"');
+      expect(message.length).toBeLessThanOrEqual(200);
+      expect(/^[\x20-\x7E]+$/.test(message)).toBe(true);
+    });
   });
 
   it("renders a summary body with findings and mermaid output", () => {

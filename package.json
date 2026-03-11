@@ -19,7 +19,8 @@
     "start:api": "node dist/src/api/index.js",
     "start:worker": "node dist/src/worker/index.js",
     "migrate": "tsx src/cli/index.ts migrate",
-    "cli": "tsx src/cli/index.ts"
+    "cli": "tsx src/cli/index.ts",
+    "eval:reviews": "tsx src/cli/index.ts eval:reviews"
   },
   "dependencies": {
     "fastify": "^5.2.1",

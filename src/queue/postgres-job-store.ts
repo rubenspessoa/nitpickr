@@ -10,7 +10,11 @@ const queueJobStatusSchema = z.enum([
   "canceled",
 ]);
 
-const queueJobTypeSchema = z.enum(["review_requested", "memory_ingest"]);
+const queueJobTypeSchema = z.enum([
+  "review_requested",
+  "interaction_requested",
+  "memory_ingest",
+]);
 
 const queueJobRowSchema = z
   .object({

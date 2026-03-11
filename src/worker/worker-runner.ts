@@ -1,4 +1,5 @@
 import { type ReviewRun, parseReviewTrigger } from "../domain/types.js";
+import type { ReviewFeedbackService } from "../feedback/review-feedback-service.js";
 import type { InstructionBundle } from "../instructions/instruction-loader.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
 import type { MemoryEntry, MemoryService } from "../memory/memory-service.js";
@@ -15,6 +16,11 @@ import type {
 } from "../review/review-engine.js";
 import type { ReviewLifecycleService } from "../review/review-lifecycle-service.js";
 import type { ReviewPlanner } from "../review/review-planner.js";
+import {
+  type ReviewerChatCommand,
+  ReviewerChatService,
+  parseInlineCommentContext,
+} from "../review/reviewer-chat-service.js";
 
 const REVIEW_DURATION_BUDGET_MS = 300_000;
 
@@ -221,6 +227,24 @@ function findStaleThreadIds(input: {
     .map((thread) => thread.threadId);
 }
 
+function categoryFromFingerprint(
+  fingerprint: string,
+): ReviewEngineResult["findings"][number]["category"] {
+  const category = fingerprint.split(":")[2];
+
+  switch (category) {
+    case "correctness":
+    case "performance":
+    case "security":
+    case "maintainability":
+    case "testing":
+    case "style":
+      return category;
+    default:
+      return "maintainability";
+  }
+}
+
 type ReviewStatusPhase = "pending" | "published" | "skipped" | "failed";
 
 const noopStatusPublisher: Pick<
@@ -329,6 +353,160 @@ function parseMemoryJobPayload(payload: QueueJob["payload"]): {
   };
 }
 
+function parseInteractionJobPayload(payload: QueueJob["payload"]): {
+  installationId: string;
+  repository: {
+    owner: string;
+    name: string;
+  };
+  pullNumber: number;
+  actorLogin: string;
+  command: ReviewerChatCommand;
+  replyTargetCommentId: number | null;
+  source:
+    | {
+        kind: "issue_comment";
+        commentId: number;
+        body: string;
+        argumentText: string | null;
+      }
+    | {
+        kind: "review_comment";
+        commentId: number;
+        body: string;
+        argumentText: string | null;
+        path: string | null;
+        line: number | null;
+      };
+} {
+  const installationId = payload.installationId;
+  const repository = payload.repository as Record<string, unknown> | undefined;
+  const pullNumber = payload.pullNumber;
+  const actorLogin = payload.actorLogin;
+  const command = payload.command;
+  const source = payload.source as Record<string, unknown> | undefined;
+
+  if (
+    typeof installationId !== "string" ||
+    installationId.trim().length === 0
+  ) {
+    throw new Error("interaction job installationId must not be empty.");
+  }
+  if (
+    typeof repository !== "object" ||
+    repository === null ||
+    typeof repository.owner !== "string" ||
+    repository.owner.trim().length === 0 ||
+    typeof repository.name !== "string" ||
+    repository.name.trim().length === 0
+  ) {
+    throw new Error("interaction job repository must be present.");
+  }
+  if (
+    typeof pullNumber !== "number" ||
+    !Number.isInteger(pullNumber) ||
+    pullNumber <= 0
+  ) {
+    throw new Error("interaction job pullNumber must be positive.");
+  }
+  if (typeof actorLogin !== "string" || actorLogin.trim().length === 0) {
+    throw new Error("interaction job actorLogin must not be empty.");
+  }
+  if (
+    command !== "why" &&
+    command !== "teach" &&
+    command !== "reconsider" &&
+    command !== "fix" &&
+    command !== "learn" &&
+    command !== "status"
+  ) {
+    throw new Error("interaction job command is invalid.");
+  }
+  if (
+    typeof source !== "object" ||
+    source === null ||
+    typeof source.kind !== "string"
+  ) {
+    throw new Error("interaction job source must be present.");
+  }
+
+  if (source.kind === "issue_comment") {
+    if (
+      typeof source.commentId !== "number" ||
+      !Number.isInteger(source.commentId) ||
+      source.commentId <= 0 ||
+      typeof source.body !== "string"
+    ) {
+      throw new Error("interaction issue comment source is invalid.");
+    }
+
+    return {
+      installationId,
+      repository: {
+        owner: repository.owner,
+        name: repository.name,
+      },
+      pullNumber,
+      actorLogin,
+      command,
+      replyTargetCommentId:
+        typeof payload.replyTargetCommentId === "number" &&
+        Number.isInteger(payload.replyTargetCommentId) &&
+        payload.replyTargetCommentId > 0
+          ? payload.replyTargetCommentId
+          : null,
+      source: {
+        kind: "issue_comment",
+        commentId: source.commentId,
+        body: source.body,
+        argumentText:
+          typeof source.argumentText === "string" ? source.argumentText : null,
+      },
+    };
+  }
+
+  if (
+    source.kind === "review_comment" &&
+    typeof source.commentId === "number" &&
+    Number.isInteger(source.commentId) &&
+    source.commentId > 0 &&
+    typeof source.body === "string"
+  ) {
+    return {
+      installationId,
+      repository: {
+        owner: repository.owner,
+        name: repository.name,
+      },
+      pullNumber,
+      actorLogin,
+      command,
+      replyTargetCommentId:
+        typeof payload.replyTargetCommentId === "number" &&
+        Number.isInteger(payload.replyTargetCommentId) &&
+        payload.replyTargetCommentId > 0
+          ? payload.replyTargetCommentId
+          : null,
+      source: {
+        kind: "review_comment",
+        commentId: source.commentId,
+        body: source.body,
+        argumentText:
+          typeof source.argumentText === "string" ? source.argumentText : null,
+        path: typeof source.path === "string" ? source.path : null,
+        line:
+          typeof source.line === "number" &&
+          Number.isInteger(source.line) &&
+          source.line > 0
+            ? source.line
+            : null,
+      },
+    };
+  }
+
+  throw new Error("interaction job source is invalid.");
+}
+
 export interface InstructionBundleLoader {
   loadForReview(
     context: GitHubChangeRequestContext,
@@ -346,7 +524,9 @@ export interface WorkerRunnerDependencies {
       Pick<
         GitHubAdapter,
         | "comparePullRequestRange"
+        | "createIssueComment"
         | "listNitpickrReviewThreads"
+        | "replyToReviewComment"
         | "resolveReviewThread"
       >
     >;
@@ -355,7 +535,12 @@ export interface WorkerRunnerDependencies {
     MemoryService,
     "getRelevantMemories" | "ingestDiscussion"
   >;
+  feedbackService?: Pick<
+    ReviewFeedbackService,
+    "getSignals" | "recordOutcome" | "syncCommentReactions"
+  >;
   reviewPlanner: Pick<ReviewPlanner, "plan">;
+  reviewerChatService?: Pick<ReviewerChatService, "respond">;
   reviewLifecycle: Pick<
     ReviewLifecycleService,
     "startReview" | "completeReview" | "failReview"
@@ -366,7 +551,8 @@ export interface WorkerRunnerDependencies {
         "getLatestCompletedReview" | "markPublishedCommentsResolved"
       >
     >;
-  reviewEngine: Pick<ReviewEngine, "review">;
+  reviewEngine: Pick<ReviewEngine, "review"> &
+    Partial<Pick<ReviewEngine, "reviewWithDiagnostics">>;
   publisher: Pick<ReviewPublisher, "buildInlineComments" | "publish">;
   statusPublisher?: Pick<
     ReviewStatusPublisher,
@@ -380,7 +566,9 @@ export class WorkerRunner {
   readonly #githubAdapter: WorkerRunnerDependencies["githubAdapter"];
   readonly #instructionBundleLoader: WorkerRunnerDependencies["instructionBundleLoader"];
   readonly #memoryService: WorkerRunnerDependencies["memoryService"];
+  readonly #feedbackService: WorkerRunnerDependencies["feedbackService"];
   readonly #reviewPlanner: WorkerRunnerDependencies["reviewPlanner"];
+  readonly #reviewerChatService: Pick<ReviewerChatService, "respond">;
   readonly #reviewLifecycle: WorkerRunnerDependencies["reviewLifecycle"];
   readonly #reviewEngine: WorkerRunnerDependencies["reviewEngine"];
   readonly #publisher: WorkerRunnerDependencies["publisher"];
@@ -397,7 +585,10 @@ export class WorkerRunner {
     this.#githubAdapter = input.githubAdapter;
     this.#instructionBundleLoader = input.instructionBundleLoader;
     this.#memoryService = input.memoryService;
+    this.#feedbackService = input.feedbackService;
     this.#reviewPlanner = input.reviewPlanner;
+    this.#reviewerChatService =
+      input.reviewerChatService ?? new ReviewerChatService();
     this.#reviewLifecycle = input.reviewLifecycle;
     this.#reviewEngine = input.reviewEngine;
     this.#publisher = input.publisher;
@@ -433,6 +624,8 @@ export class WorkerRunner {
     try {
       if (job.type === "memory_ingest") {
         await this.#processMemoryJob(job);
+      } else if (job.type === "interaction_requested") {
+        await this.#processInteractionJob(job);
       } else {
         await this.#processReviewJob(job);
       }
@@ -630,20 +823,53 @@ export class WorkerRunner {
         paths: reviewPlan.files.map((file) => file.path),
         limit: Math.max(reviewPlan.commentBudget, 1),
       });
+      const existingNitpickrThreads = this.#githubAdapter
+        .listNitpickrReviewThreads
+        ? await this.#githubAdapter.listNitpickrReviewThreads({
+            installationId: payload.installationId,
+            repository: payload.repository,
+            pullNumber: payload.pullNumber,
+          })
+        : [];
+      if (this.#feedbackService && existingNitpickrThreads.length > 0) {
+        await this.#feedbackService.syncCommentReactions({
+          tenantId: job.tenantId,
+          repositoryId: job.repositoryId,
+          comments: existingNitpickrThreads.map((thread) => ({
+            providerCommentId: thread.providerCommentId,
+            fingerprint: thread.fingerprint,
+            path: thread.path,
+            category: categoryFromFingerprint(thread.fingerprint),
+            positiveCount: thread.reactionSummary.positiveCount,
+            negativeCount: thread.reactionSummary.negativeCount,
+          })),
+        });
+      }
+      const feedbackSignals = this.#feedbackService
+        ? await this.#feedbackService.getSignals({
+            tenantId: job.tenantId,
+            repositoryId: job.repositoryId,
+            paths: reviewPlan.files.map((file) => file.path),
+            limit: Math.max(reviewPlan.commentBudget * 2, 10),
+          })
+        : [];
 
-      const rawResult =
+      const diagnostics =
         reviewPlan.files.length === 0
           ? {
-              summary:
-                reviewPlan.skipReason ??
-                "No reviewable files matched the current repository configuration.",
-              mermaid:
-                "flowchart TD\nA[Pull Request] --> B[No Reviewable Files]",
-              findings: [],
+              result: {
+                summary:
+                  reviewPlan.skipReason ??
+                  "No reviewable files matched the current repository configuration.",
+                mermaid:
+                  "flowchart TD\nA[Pull Request] --> B[No Reviewable Files]",
+                findings: [],
+              },
+              rejectedFindings: [],
             }
           : await (async () => {
               try {
-                return await this.#reviewEngine.review({
+                const reviewInput = {
                   changeRequest: {
                     title: context.changeRequest.title,
                     number: context.changeRequest.number,
@@ -664,6 +890,15 @@ export class WorkerRunner {
                         },
                   ),
                   commentBudget: reviewPlan.commentBudget,
+                  ...(feedbackSignals.length === 0 ? {} : { feedbackSignals }),
+                  ...(isAutomaticTrigger(payload.trigger)
+                    ? {
+                        publishableFindingTypes: [
+                          "bug" as const,
+                          "safe_suggestion" as const,
+                        ],
+                      }
+                    : {}),
                   ...(reviewScope === "commit_delta"
                     ? {
                         contextFiles: context.files.map((file) => ({
@@ -674,21 +909,40 @@ export class WorkerRunner {
                         })),
                       }
                     : {}),
-                });
+                };
+
+                if (this.#reviewEngine.reviewWithDiagnostics) {
+                  return await this.#reviewEngine.reviewWithDiagnostics(
+                    reviewInput,
+                  );
+                }
+
+                return {
+                  result: await this.#reviewEngine.review(reviewInput),
+                  rejectedFindings: [],
+                };
               } catch (error) {
                 throw classifyReviewError("review", error);
               }
             })();
+      const rawResult = diagnostics.result;
       const result = prependSummaryReason(
         reviewPlan.allowSuggestedChanges
           ? rawResult
           : stripSuggestedChanges(rawResult),
         reviewPlan.summaryOnlyReason,
       );
-      const publishableResult = selectPublishableResult(
-        result,
-        payload.trigger,
-      );
+      const publishableResult = this.#reviewEngine.reviewWithDiagnostics
+        ? result
+        : selectPublishableResult(result, payload.trigger);
+
+      if (diagnostics.rejectedFindings.length > 0) {
+        this.#logger.info("Suppressed findings after evidence gating.", {
+          jobId: job.id,
+          reviewRunId: startedReviewRunId,
+          suppressedFindingCount: diagnostics.rejectedFindings.length,
+        });
+      }
 
       if (reviewPlan.files.length === 0) {
         this.#logger.info(
@@ -715,14 +969,6 @@ export class WorkerRunner {
           })),
         },
       );
-      const existingNitpickrThreads = this.#githubAdapter
-        .listNitpickrReviewThreads
-        ? await this.#githubAdapter.listNitpickrReviewThreads({
-            installationId: payload.installationId,
-            repository: payload.repository,
-            pullNumber: payload.pullNumber,
-          })
-        : [];
       if (reviewScope === "commit_delta") {
         const staleThreadIds = findStaleThreadIds({
           comparedPaths: reviewPlan.files.map((file) => file.path),
@@ -756,6 +1002,20 @@ export class WorkerRunner {
           await this.#reviewLifecycle.markPublishedCommentsResolved?.(
             staleThreadIds,
           );
+          if (this.#feedbackService) {
+            await this.#feedbackService.recordOutcome({
+              tenantId: job.tenantId,
+              repositoryId: job.repositoryId,
+              events: existingNitpickrThreads
+                .filter((thread) => staleThreadIds.includes(thread.threadId))
+                .map((thread) => ({
+                  fingerprint: thread.fingerprint,
+                  path: thread.path,
+                  category: categoryFromFingerprint(thread.fingerprint),
+                  kind: "fixed_after_comment" as const,
+                })),
+            });
+          }
         }
       }
       const publishedReview = await (async () => {
@@ -935,6 +1195,97 @@ export class WorkerRunner {
 
       throw error;
     }
+  }
+
+  async #processInteractionJob(job: QueueJob): Promise<void> {
+    const payload = parseInteractionJobPayload(job.payload);
+    const latestReview = this.#reviewLifecycle.getLatestCompletedReview
+      ? await this.#reviewLifecycle.getLatestCompletedReview(
+          job.changeRequestId ?? `${job.repositoryId}:${payload.pullNumber}`,
+        )
+      : null;
+    const nitpickrThreads = this.#githubAdapter.listNitpickrReviewThreads
+      ? await this.#githubAdapter.listNitpickrReviewThreads({
+          installationId: payload.installationId,
+          repository: payload.repository,
+          pullNumber: payload.pullNumber,
+        })
+      : [];
+    const referencedThread =
+      payload.replyTargetCommentId === null
+        ? null
+        : (nitpickrThreads.find(
+            (thread) =>
+              thread.providerCommentId === String(payload.replyTargetCommentId),
+          ) ?? null);
+    const threadContext =
+      referencedThread === null
+        ? null
+        : (() => {
+            const parsed = parseInlineCommentContext(referencedThread.body);
+            return {
+              providerCommentId: referencedThread.providerCommentId,
+              path: referencedThread.path,
+              line: referencedThread.line,
+              fingerprint: referencedThread.fingerprint,
+              title: parsed.title,
+              body: parsed.body,
+              fixPrompt: parsed.fixPrompt,
+            };
+          })();
+
+    const reply = await this.#reviewerChatService.respond({
+      command: payload.command,
+      actorLogin: payload.actorLogin,
+      argumentText: payload.source.argumentText,
+      latestReview,
+      thread: threadContext,
+    });
+
+    if (reply.memoryDiscussions.length > 0) {
+      await this.#memoryService.ingestDiscussion({
+        tenantId: job.tenantId,
+        repositoryId: job.repositoryId,
+        discussions: reply.memoryDiscussions,
+      });
+    }
+    if (this.#feedbackService && reply.feedbackEvents.length > 0) {
+      await this.#feedbackService.recordOutcome({
+        tenantId: job.tenantId,
+        repositoryId: job.repositoryId,
+        events: reply.feedbackEvents,
+      });
+    }
+
+    if (payload.source.kind === "issue_comment") {
+      if (!this.#githubAdapter.createIssueComment) {
+        throw new Error("GitHub issue comment replies are unavailable.");
+      }
+      await this.#githubAdapter.createIssueComment({
+        installationId: payload.installationId,
+        repository: payload.repository,
+        pullNumber: payload.pullNumber,
+        body: reply.body,
+      });
+    } else {
+      if (!this.#githubAdapter.replyToReviewComment) {
+        throw new Error("GitHub review comment replies are unavailable.");
+      }
+      await this.#githubAdapter.replyToReviewComment({
+        installationId: payload.installationId,
+        repository: payload.repository,
+        pullNumber: payload.pullNumber,
+        commentId: payload.replyTargetCommentId ?? payload.source.commentId,
+        body: reply.body,
+      });
+    }
+
+    this.#logger.info("Processed reviewer interaction job.", {
+      jobId: job.id,
+      repositoryId: job.repositoryId,
+      command: payload.command,
+      sourceKind: payload.source.kind,
+    });
   }
 
   async #processMemoryJob(job: QueueJob): Promise<void> {

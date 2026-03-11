@@ -1,3 +1,4 @@
+import { fingerprintFinding } from "../review/finding-fingerprint.js";
 import { targetReviewCommentLine } from "./review-comment-targeter.js";
 
 export interface PublishedFinding {
@@ -51,6 +52,20 @@ export interface PublishReviewClient {
   }>;
 }
 
+function toProviderReviewComments(comments: PublishedInlineComment[]): Array<{
+  path: string;
+  line: number;
+  side: "RIGHT";
+  body: string;
+}> {
+  return comments.map((comment) => ({
+    path: comment.path,
+    line: comment.line,
+    side: comment.side,
+    body: comment.body,
+  }));
+}
+
 export interface PublishedInlineComment {
   path: string;
   line: number;
@@ -84,15 +99,6 @@ function escapeMarkdownTableCell(value: string): string {
 
 function renderSignal(finding: PublishedFinding): string {
   return `${severityEmoji[finding.severity]} ${categoryEmoji[finding.category]}`;
-}
-
-function fingerprintFinding(finding: PublishedFinding): string {
-  return [
-    finding.path.trim().toLowerCase(),
-    finding.line,
-    finding.category,
-    finding.title.trim().toLowerCase().replace(/\s+/g, "_"),
-  ].join(":");
 }
 
 function renderGitHubSuggestion(suggestedChange: string | undefined): string[] {
@@ -383,7 +389,7 @@ export class ReviewPublisher {
       repository: input.repository,
       pullNumber: input.pullNumber,
       body,
-      comments,
+      comments: toProviderReviewComments(comments),
     });
   }
 }

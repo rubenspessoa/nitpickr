@@ -61,6 +61,7 @@ async function main(): Promise<void> {
       githubAdapter: operationalRuntime.githubAdapter,
       instructionBundleLoader: operationalRuntime.instructionBundleLoader,
       memoryService: runtime.memoryService,
+      feedbackService: runtime.feedbackService,
       reviewPlanner: runtime.reviewPlanner,
       reviewLifecycle: runtime.reviewLifecycle,
       reviewEngine: operationalRuntime.reviewEngine,

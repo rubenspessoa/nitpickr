@@ -395,6 +395,11 @@ class FakeGitHubApi implements GitHubApiClient {
     line: number;
     fingerprint: string;
     isResolved: boolean;
+    body: string;
+    reactionSummary: {
+      positiveCount: number;
+      negativeCount: number;
+    };
   }> = [];
   resolvedThreadIds: string[] = [];
 
@@ -463,6 +468,10 @@ class FakeGitHubApi implements GitHubApiClient {
   }) {
     this.reactions.push(input);
   }
+
+  async createIssueComment() {}
+
+  async replyToReviewComment() {}
 }
 
 class CapturingReviewModel implements ReviewModel {
@@ -736,8 +745,6 @@ describe("review flow integration", () => {
         path: "src/api/server.ts",
         line: 12,
         side: "RIGHT",
-        fingerprint:
-          "src/api/server.ts:13:maintainability:clarify_request_parsing",
         body: expect.stringContaining("Clarify request parsing"),
       },
     ]);
@@ -898,6 +905,18 @@ describe("review flow integration", () => {
         fingerprint:
           "src/api/server.ts:12:maintainability:clarify_request_parsing",
         isResolved: false,
+        body: [
+          "🛠️ **Clarify request parsing**",
+          "**Where:** `src/api/server.ts:12`",
+          "",
+          "Clarify the guard path before queueing work.",
+          "",
+          "<!-- nitpickr:fingerprint:src/api/server.ts:12:maintainability:clarify_request_parsing -->",
+        ].join("\n"),
+        reactionSummary: {
+          positiveCount: 0,
+          negativeCount: 0,
+        },
       },
     ];
     harness.reviewLifecycleStore.reviewRuns.set("review_run_previous", {
@@ -1023,7 +1042,6 @@ describe("review flow integration", () => {
         path: "src/api/server.ts",
         line: 11,
         side: "RIGHT",
-        fingerprint: "src/api/server.ts:13:correctness:guard_malformed_json",
         body: expect.stringContaining("Guard malformed JSON"),
       },
     ]);

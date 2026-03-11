@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { BotLogins } from "../../config/app-config.js";
 import { type ReviewTrigger, parseChangeRequest } from "../../domain/types.js";
+import type { ReviewerChatCommand } from "../../review/reviewer-chat-service.js";
 
 const repositorySchema = z.object({
   id: z.number().int().positive(),
@@ -59,6 +60,27 @@ const issueCommentEventSchema = z.object({
   comment: z.object({
     id: z.number().int().positive(),
     body: z.string().min(1),
+    user: z.object({
+      login: z.string().min(1),
+    }),
+  }),
+});
+
+const pullRequestReviewCommentEventSchema = z.object({
+  action: z.enum(["created", "edited"]),
+  installation: z.object({
+    id: z.number().int().positive(),
+  }),
+  repository: repositorySchema,
+  pull_request: z.object({
+    number: z.number().int().positive(),
+  }),
+  comment: z.object({
+    id: z.number().int().positive(),
+    body: z.string().min(1),
+    in_reply_to_id: z.number().int().positive().nullable().optional(),
+    path: z.string().min(1).nullable().optional(),
+    line: z.number().int().positive().nullable().optional(),
     user: z.object({
       login: z.string().min(1),
     }),
@@ -157,6 +179,11 @@ export interface GitHubApiClient {
       line: number;
       fingerprint: string;
       isResolved: boolean;
+      body: string;
+      reactionSummary: {
+        positiveCount: number;
+        negativeCount: number;
+      };
     }>
   >;
   resolveReviewThread(input: {
@@ -170,9 +197,89 @@ export interface GitHubApiClient {
     commentId: number;
     content: "eyes";
   }): Promise<void>;
+  createIssueComment(input: {
+    installationId: string;
+    owner: string;
+    repo: string;
+    issueNumber: number;
+    body: string;
+  }): Promise<void>;
+  replyToReviewComment(input: {
+    installationId: string;
+    owner: string;
+    repo: string;
+    pullNumber: number;
+    commentId: number;
+    body: string;
+  }): Promise<void>;
 }
 
 type NormalizedReviewMode = "quick" | "full" | "summary";
+
+interface ParsedInteractionCommand {
+  command: ReviewerChatCommand;
+  argumentText: string | null;
+}
+
+const manualCommandDefinitions: Array<{
+  canonicalCommand:
+    | "review"
+    | "full_review"
+    | "summary"
+    | "recheck"
+    | "ignore_this";
+  triggerCommand:
+    | "review"
+    | "full_review"
+    | "summary"
+    | "recheck"
+    | "ignore_this";
+  mode: NormalizedReviewMode;
+}> = [
+  {
+    canonicalCommand: "review",
+    triggerCommand: "review",
+    mode: "quick",
+  },
+  {
+    canonicalCommand: "full_review",
+    triggerCommand: "full_review",
+    mode: "full",
+  },
+  {
+    canonicalCommand: "summary",
+    triggerCommand: "summary",
+    mode: "summary",
+  },
+  {
+    canonicalCommand: "recheck",
+    triggerCommand: "recheck",
+    mode: "quick",
+  },
+  {
+    canonicalCommand: "ignore_this",
+    triggerCommand: "ignore_this",
+    mode: "quick",
+  },
+];
+
+const interactionCommands = [
+  "why",
+  "teach",
+  "reconsider",
+  "fix",
+  "learn",
+  "status",
+] as const;
+
+const supportedCommandSuffixes = [
+  "review",
+  "full review",
+  "summary",
+  "recheck",
+  "ignore this",
+  ...interactionCommands,
+] as const;
 
 interface NormalizedRepositoryRef {
   installationId: string;
@@ -192,6 +299,30 @@ export type GitHubNormalizedEvent =
       trigger: ReviewTrigger;
       mode: NormalizedReviewMode;
       actorLogin: string;
+    }
+  | {
+      kind: "interaction_requested";
+      installationId: string;
+      repository: NormalizedRepositoryRef;
+      pullNumber: number;
+      actorLogin: string;
+      command: ReviewerChatCommand;
+      replyTargetCommentId?: number;
+      source:
+        | {
+            kind: "issue_comment";
+            commentId: number;
+            body: string;
+            argumentText: string | null;
+          }
+        | {
+            kind: "review_comment";
+            commentId: number;
+            body: string;
+            argumentText: string | null;
+            path: string | null;
+            line: number | null;
+          };
     }
   | {
       kind: "ignored";
@@ -244,13 +375,11 @@ function normalizeRepository(
   };
 }
 
-function parseManualCommand(
+function extractMentionCommand(
   body: string,
   botLogins: string[],
-  actorLogin: string,
-): { trigger: ReviewTrigger; mode: NormalizedReviewMode } | null {
+): string | null {
   const normalized = body.trim().toLowerCase().replace(/\s+/g, " ");
-  let commandText: string | undefined;
 
   for (const botLogin of botLogins) {
     const escapedBotLogin = botLogin
@@ -261,75 +390,81 @@ function parseManualCommand(
     );
     const match = mentionPattern.exec(normalized);
     if (match?.[1]) {
-      commandText = match[1].trim().replace(/^\/+/, "");
-      break;
+      return match[1].trim().replace(/^\/+/, "");
     }
   }
 
+  return null;
+}
+
+function canonicalizeCommand(commandText: string | null): string | null {
   if (!commandText) {
     return null;
   }
 
-  const canonicalCommand = commandText
-    ?.replace(/[-\s]+/g, "_")
-    .replace(/_+/g, "_");
+  return commandText.replace(/[-\s]+/g, "_").replace(/_+/g, "_");
+}
 
-  if (canonicalCommand === "review") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "review",
-        actorLogin,
-      },
-      mode: "quick",
-    };
+function parseManualCommand(
+  body: string,
+  botLogins: string[],
+  actorLogin: string,
+): { trigger: ReviewTrigger; mode: NormalizedReviewMode } | null {
+  const canonicalCommand = canonicalizeCommand(
+    extractMentionCommand(body, botLogins),
+  );
+  const definition = manualCommandDefinitions.find(
+    (candidate) => candidate.canonicalCommand === canonicalCommand,
+  );
+  if (!definition) {
+    return null;
   }
 
-  if (canonicalCommand === "full_review") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "full_review",
-        actorLogin,
-      },
-      mode: "full",
-    };
+  return {
+    trigger: {
+      type: "manual_command",
+      command: definition.triggerCommand,
+      actorLogin,
+    },
+    mode: definition.mode,
+  };
+}
+
+function parseInteractionCommand(
+  body: string,
+  botLogins: string[],
+  input: {
+    requireMention: boolean;
+  },
+): ParsedInteractionCommand | null {
+  const normalized = body.trim().toLowerCase().replace(/\s+/g, " ");
+  const mentionCommand = extractMentionCommand(normalized, botLogins);
+  const rawCommandText =
+    mentionCommand ??
+    (input.requireMention ? null : normalized.replace(/^\/+/, "").trim());
+  const canonicalCommand = canonicalizeCommand(rawCommandText);
+
+  if (!canonicalCommand) {
+    return null;
   }
 
-  if (canonicalCommand === "summary") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "summary",
-        actorLogin,
-      },
-      mode: "summary",
-    };
+  const match = new RegExp(
+    `^(${interactionCommands.join("|")})(?:_+(.+))?$`,
+  ).exec(canonicalCommand);
+  if (!match?.[1]) {
+    return null;
   }
 
-  if (canonicalCommand === "recheck") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "recheck",
-        actorLogin,
-      },
-      mode: "quick",
-    };
-  }
+  const argumentText =
+    rawCommandText
+      ?.slice(match[1].length)
+      .trim()
+      .replace(/^[:,-]\s*/, "") ?? "";
 
-  if (canonicalCommand === "ignore_this") {
-    return {
-      trigger: {
-        type: "manual_command",
-        command: "ignore_this",
-        actorLogin,
-      },
-      mode: "quick",
-    };
-  }
-
-  return null;
+  return {
+    command: match[1] as ReviewerChatCommand,
+    argumentText: argumentText.length > 0 ? argumentText : null,
+  };
 }
 
 function containsBotMention(body: string, botLogins: string[]): boolean {
@@ -449,7 +584,80 @@ export class GitHubAdapter {
         this.#botLogins,
         parsed.comment.user.login,
       );
-      if (!command) {
+      if (command) {
+        return {
+          kind: "review_requested",
+          installationId: String(parsed.installation.id),
+          repository: normalizeRepository(
+            parsed.repository,
+            parsed.installation.id,
+          ),
+          pullNumber: parsed.issue.number,
+          trigger: command.trigger,
+          mode: command.mode,
+          actorLogin: parsed.comment.user.login,
+        };
+      }
+
+      const interaction = parseInteractionCommand(
+        parsed.comment.body,
+        this.#botLogins,
+        {
+          requireMention: true,
+        },
+      );
+      if (interaction) {
+        return {
+          kind: "interaction_requested",
+          installationId: String(parsed.installation.id),
+          repository: normalizeRepository(
+            parsed.repository,
+            parsed.installation.id,
+          ),
+          pullNumber: parsed.issue.number,
+          actorLogin: parsed.comment.user.login,
+          command: interaction.command,
+          source: {
+            kind: "issue_comment",
+            commentId: parsed.comment.id,
+            body: parsed.comment.body,
+            argumentText: interaction.argumentText,
+          },
+        };
+      }
+
+      return {
+        kind: "ignored",
+        reason: `Comment did not contain a recognized nitpickr command. Supported commands: ${this.#supportedCommandExamples().join(", ")}.`,
+      };
+    }
+
+    if (eventName === "pull_request_review_comment") {
+      const parsedResult =
+        pullRequestReviewCommentEventSchema.safeParse(payload);
+      if (!parsedResult.success) {
+        return {
+          kind: "ignored",
+          reason: "Unsupported pull_request_review_comment payload.",
+        };
+      }
+
+      const parsed = parsedResult.data;
+      if (!parsed.comment.in_reply_to_id) {
+        return {
+          kind: "ignored",
+          reason: "Review comment is not a reply to an existing thread.",
+        };
+      }
+
+      const interaction = parseInteractionCommand(
+        parsed.comment.body,
+        this.#botLogins,
+        {
+          requireMention: false,
+        },
+      );
+      if (!interaction) {
         return {
           kind: "ignored",
           reason: `Comment did not contain a recognized nitpickr command. Supported commands: ${this.#supportedCommandExamples().join(", ")}.`,
@@ -457,16 +665,24 @@ export class GitHubAdapter {
       }
 
       return {
-        kind: "review_requested",
+        kind: "interaction_requested",
         installationId: String(parsed.installation.id),
         repository: normalizeRepository(
           parsed.repository,
           parsed.installation.id,
         ),
-        pullNumber: parsed.issue.number,
-        trigger: command.trigger,
-        mode: command.mode,
+        pullNumber: parsed.pull_request.number,
         actorLogin: parsed.comment.user.login,
+        command: interaction.command,
+        replyTargetCommentId: parsed.comment.in_reply_to_id,
+        source: {
+          kind: "review_comment",
+          commentId: parsed.comment.id,
+          body: parsed.comment.body,
+          argumentText: interaction.argumentText,
+          path: parsed.comment.path ?? null,
+          line: parsed.comment.line ?? null,
+        },
       };
     }
 
@@ -512,13 +728,9 @@ export class GitHubAdapter {
   }
 
   #supportedCommandExamples(): string[] {
-    return this.#botLogins.flatMap((botLogin) => [
-      `@${botLogin} review`,
-      `@${botLogin} full review`,
-      `@${botLogin} summary`,
-      `@${botLogin} recheck`,
-      `@${botLogin} ignore this`,
-    ]);
+    return this.#botLogins.flatMap((botLogin) =>
+      supportedCommandSuffixes.map((suffix) => `@${botLogin} ${suffix}`),
+    );
   }
 
   async fetchChangeRequestContext(input: {
@@ -662,6 +874,11 @@ export class GitHubAdapter {
       line: number;
       fingerprint: string;
       isResolved: boolean;
+      body: string;
+      reactionSummary: {
+        positiveCount: number;
+        negativeCount: number;
+      };
     }>
   > {
     return this.#apiClient.listNitpickrReviewThreads({
@@ -680,6 +897,44 @@ export class GitHubAdapter {
     await this.#apiClient.resolveReviewThread({
       installationId: input.installationId,
       threadId: input.threadId,
+    });
+  }
+
+  async createIssueComment(input: {
+    installationId: string;
+    repository: {
+      owner: string;
+      name: string;
+    };
+    pullNumber: number;
+    body: string;
+  }): Promise<void> {
+    await this.#apiClient.createIssueComment({
+      installationId: input.installationId,
+      owner: input.repository.owner,
+      repo: input.repository.name,
+      issueNumber: input.pullNumber,
+      body: input.body,
+    });
+  }
+
+  async replyToReviewComment(input: {
+    installationId: string;
+    repository: {
+      owner: string;
+      name: string;
+    };
+    pullNumber: number;
+    commentId: number;
+    body: string;
+  }): Promise<void> {
+    await this.#apiClient.replyToReviewComment({
+      installationId: input.installationId,
+      owner: input.repository.owner,
+      repo: input.repository.name,
+      pullNumber: input.pullNumber,
+      commentId: input.commentId,
+      body: input.body,
     });
   }
 }

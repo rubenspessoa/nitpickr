@@ -195,4 +195,33 @@ export const migrations = [
 
     create index if not exists webhook_events_status_idx on webhook_events (provider, status, updated_at desc);
   `,
+  `
+    create table if not exists review_feedback_events (
+      id text primary key,
+      tenant_id text not null,
+      repository_id text not null,
+      scope_key text not null,
+      provider_comment_id text,
+      fingerprint text,
+      path text,
+      category text,
+      finding_type text,
+      kind text not null,
+      count integer not null,
+      created_at timestamptz not null,
+      updated_at timestamptz not null
+    );
+
+    create unique index if not exists review_feedback_events_scope_idx
+      on review_feedback_events (repository_id, scope_key);
+
+    create index if not exists review_feedback_events_repo_idx
+      on review_feedback_events (tenant_id, repository_id, updated_at desc);
+  `,
+  `
+    drop index if exists review_feedback_events_scope_idx;
+
+    create unique index if not exists review_feedback_events_scope_idx
+      on review_feedback_events (repository_id, scope_key);
+  `,
 ];

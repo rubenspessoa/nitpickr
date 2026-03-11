@@ -1,0 +1,140 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  type ReviewEvaluationFixture,
+  ReviewEvaluator,
+} from "../../src/eval/review-evaluator.js";
+
+const queueFixture: ReviewEvaluationFixture = {
+  name: "queue-fairness",
+  input: {
+    changeRequest: {
+      title: "Improve queue fairness",
+      number: 42,
+    },
+    files: [
+      {
+        path: "src/queue/queue-scheduler.ts",
+        additions: 3,
+        deletions: 1,
+        patch: ["@@ -10,2 +10,3 @@", " context", "-old", "+new alpha"].join(
+          "\n",
+        ),
+      },
+    ],
+    contextFiles: [
+      {
+        path: "src/queue/queue-scheduler.ts",
+        additions: 3,
+        deletions: 1,
+        patch: ["@@ -10,2 +10,3 @@", " context", "-old", "+new alpha"].join(
+          "\n",
+        ),
+      },
+      {
+        path: "src/api/server.ts",
+        additions: 2,
+        deletions: 0,
+        patch: ["@@ -5,1 +5,2 @@", "+guard"].join("\n"),
+      },
+    ],
+    instructionText: "strictness: balanced",
+    memory: [],
+    commentBudget: 5,
+  },
+  chunkResponses: [
+    {
+      summary: "Queue ordering changed.",
+      diagram: {
+        type: "sequence",
+        participants: ["queue", "publish"],
+        steps: [
+          {
+            from: "queue",
+            to: "publish",
+            label: "publish review",
+          },
+        ],
+      },
+      findings: [
+        {
+          path: "src/queue/queue-scheduler.ts",
+          line: 12,
+          findingType: "bug",
+          severity: "high",
+          category: "correctness",
+          title: "Stable ordering breaks",
+          body: "Stable ordering breaks when equal priorities are inserted.",
+          fixPrompt:
+            "In `src/queue/queue-scheduler.ts` around line 12, preserve insertion order for equal priorities.",
+        },
+        {
+          path: "src/queue/queue-scheduler.ts",
+          line: 40,
+          findingType: "bug",
+          severity: "medium",
+          category: "correctness",
+          title: "Out-of-scope line",
+          body: "This line is outside the changed context.",
+          fixPrompt:
+            "In `src/queue/queue-scheduler.ts` around line 40, update the changed branch.",
+        },
+        {
+          path: "src/api/server.ts",
+          line: 27,
+          findingType: "question",
+          severity: "low",
+          category: "testing",
+          title: "Add broader coverage",
+          body: "Consider broader coverage for this area.",
+          fixPrompt:
+            "In `src/api/server.ts` around line 27, add a regression test.",
+        },
+      ],
+    },
+  ],
+  expectations: {
+    publishedFingerprints: [
+      "src/queue/queue-scheduler.ts:12:correctness:stable_ordering_breaks",
+    ],
+    suppressedFingerprints: [
+      "src/queue/queue-scheduler.ts:40:correctness:out-of-scope_line",
+      "src/api/server.ts:27:testing:add_broader_coverage",
+    ],
+  },
+  reactionFeedback: [
+    {
+      providerCommentId: "comment_1",
+      fingerprint:
+        "src/queue/queue-scheduler.ts:12:correctness:stable_ordering_breaks",
+      polarity: "positive",
+    },
+    {
+      providerCommentId: "comment_2",
+      fingerprint: "src/api/server.ts:27:testing:add_broader_coverage",
+      polarity: "negative",
+    },
+  ],
+};
+
+describe("ReviewEvaluator", () => {
+  it("scores fixtures against published and suppressed expectations", async () => {
+    const evaluator = new ReviewEvaluator();
+
+    const report = await evaluator.evaluate([queueFixture]);
+
+    expect(report.fixtures).toHaveLength(1);
+    expect(report.fixtures[0]?.publishedFingerprints).toEqual(
+      [...queueFixture.expectations.publishedFingerprints].sort(),
+    );
+    expect(report.fixtures[0]?.suppressedFingerprints).toEqual(
+      [...queueFixture.expectations.suppressedFingerprints].sort(),
+    );
+    expect(report.metrics.precision).toBe(1);
+    expect(report.metrics.duplicateRate).toBe(0);
+    expect(report.metrics.staleRateProxy).toBe(0);
+    expect(report.metrics.negativeReactionRate).toBe(0.5);
+    expect(report.metrics.commentCountPerReview).toBe(1);
+    expect(report.metrics.suggestionEligibilityRate).toBe(0);
+  });
+});

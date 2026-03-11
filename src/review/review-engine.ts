@@ -6,6 +6,12 @@ import {
   mergeDiagramSpecs,
   renderDiagramSpec,
 } from "./diagram-renderer.js";
+import {
+  type EvidenceGateRejectedFinding,
+  type ReviewFeedbackSignal,
+  gateAndRankFindings,
+} from "./evidence-gate.js";
+import { fingerprintFinding } from "./finding-fingerprint.js";
 import { PromptBuilder } from "./prompt-builder.js";
 
 const defaultMermaidDiagram = renderDiagramSpec(defaultDiagramSpec);
@@ -499,12 +505,19 @@ export interface ReviewEngineInput {
     path?: string;
   }>;
   commentBudget: number;
+  feedbackSignals?: ReviewFeedbackSignal[];
+  publishableFindingTypes?: ReviewFinding["findingType"][];
 }
 
 export interface ReviewEngineResult {
   summary: string;
   mermaid: string;
   findings: ReviewFinding[];
+}
+
+export interface ReviewEngineDiagnosticsResult {
+  result: ReviewEngineResult;
+  rejectedFindings: EvidenceGateRejectedFinding<ReviewFinding>[];
 }
 
 export interface ReviewEngineOptions {
@@ -556,12 +569,7 @@ function severityWeight(severity: ReviewFinding["severity"]): number {
 }
 
 function dedupeKey(finding: ReviewFinding): string {
-  return [
-    finding.path.trim().toLowerCase(),
-    finding.line,
-    finding.category,
-    finding.title.trim().toLowerCase(),
-  ].join(":");
+  return fingerprintFinding(finding);
 }
 
 function compareFindings(left: ReviewFinding, right: ReviewFinding): number {
@@ -712,6 +720,33 @@ export class ReviewEngine {
       summary: responses.map((response) => response.summary).join("\n\n"),
       mermaid: renderMergedDiagram(responses),
       findings: mergedFindings,
+    };
+  }
+
+  async reviewWithDiagnostics(
+    input: ReviewEngineInput,
+  ): Promise<ReviewEngineDiagnosticsResult> {
+    const result = await this.review(input);
+    const gatedFindings = gateAndRankFindings({
+      findings: result.findings,
+      files: input.files,
+      ...(input.contextFiles === undefined
+        ? {}
+        : { contextFiles: input.contextFiles }),
+      ...(input.feedbackSignals === undefined
+        ? {}
+        : { feedbackSignals: input.feedbackSignals }),
+      ...(input.publishableFindingTypes === undefined
+        ? {}
+        : { publishableFindingTypes: input.publishableFindingTypes }),
+    });
+
+    return {
+      result: {
+        ...result,
+        findings: gatedFindings.acceptedFindings.slice(0, input.commentBudget),
+      },
+      rejectedFindings: gatedFindings.rejectedFindings,
     };
   }
 }

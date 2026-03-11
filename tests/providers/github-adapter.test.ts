@@ -93,11 +93,31 @@ class FakeGitHubApiClient implements GitHubApiClient {
     return [
       {
         threadId: "thread_1",
-        providerCommentId: "comment_1",
+        providerCommentId: "6001",
         path: "src/api/server.ts",
         line: 27,
         fingerprint: "fp_1",
         isResolved: false,
+        body: [
+          "⚠️ 🧩 **Guard the parse**",
+          "**Where:** `src/api/server.ts:27`",
+          "",
+          "The webhook parser should reject invalid payloads before queueing work.",
+          "",
+          "<!-- nitpickr:fingerprint:fp_1 -->",
+          "<details>",
+          "<summary>🤖 AI prompt</summary>",
+          "",
+          "```text",
+          "In `src/api/server.ts` around line 27, add an early validation guard before queueing.",
+          "```",
+          "",
+          "</details>",
+        ].join("\n"),
+        reactionSummary: {
+          positiveCount: 0,
+          negativeCount: 0,
+        },
       },
     ];
   }
@@ -113,6 +133,10 @@ class FakeGitHubApiClient implements GitHubApiClient {
   }) {
     this.reactions.push(input);
   }
+
+  async createIssueComment() {}
+
+  async replyToReviewComment() {}
 }
 
 const pullRequestPayload = {
@@ -381,6 +405,210 @@ describe("GitHubAdapter", () => {
     expect(event.mode).toBe("full");
   });
 
+  it("normalizes issue comment interaction commands into interaction requests", () => {
+    const adapter = new GitHubAdapter({
+      apiClient: new FakeGitHubApiClient(),
+      appConfig: {
+        appId: 123456,
+        privateKey: "test",
+        webhookSecret: "super-secret",
+        webhookUrl: "https://nitpickr.example.com/webhooks/github",
+        botLogins: ["nitpickr", "getnitpickr"],
+      },
+    });
+
+    const event = adapter.normalizeWebhookEvent("issue_comment", {
+      action: "created",
+      installation: {
+        id: 123456,
+      },
+      repository: {
+        id: 99,
+        name: "nitpickr",
+        owner: {
+          login: "rubenspessoa",
+        },
+        default_branch: "main",
+      },
+      issue: {
+        number: 42,
+        pull_request: {
+          url: "https://api.github.com/repos/rubenspessoa/nitpickr/pulls/42",
+        },
+      },
+      comment: {
+        id: 5003,
+        body: "@getnitpickr status",
+        user: {
+          login: "maintainer",
+        },
+      },
+    });
+
+    expect(event).toEqual(
+      expect.objectContaining({
+        kind: "interaction_requested",
+        pullNumber: 42,
+        command: "status",
+      }),
+    );
+  });
+
+  it("captures learn interaction arguments from issue comments", () => {
+    const adapter = new GitHubAdapter({
+      apiClient: new FakeGitHubApiClient(),
+      appConfig: {
+        appId: 123456,
+        privateKey: "test",
+        webhookSecret: "super-secret",
+        webhookUrl: "https://nitpickr.example.com/webhooks/github",
+        botLogins: ["nitpickr", "getnitpickr"],
+      },
+    });
+
+    const event = adapter.normalizeWebhookEvent("issue_comment", {
+      action: "created",
+      installation: {
+        id: 123456,
+      },
+      repository: {
+        id: 99,
+        name: "nitpickr",
+        owner: {
+          login: "rubenspessoa",
+        },
+        default_branch: "main",
+      },
+      issue: {
+        number: 42,
+        pull_request: {
+          url: "https://api.github.com/repos/rubenspessoa/nitpickr/pulls/42",
+        },
+      },
+      comment: {
+        id: 5004,
+        body: "@getnitpickr learn prefer explicit guards in API handlers",
+        user: {
+          login: "maintainer",
+        },
+      },
+    });
+
+    expect(event).toEqual(
+      expect.objectContaining({
+        kind: "interaction_requested",
+        pullNumber: 42,
+        command: "learn",
+        source: expect.objectContaining({
+          argumentText: "prefer explicit guards in api handlers",
+        }),
+      }),
+    );
+  });
+
+  it("normalizes review-thread replies into interaction requests", () => {
+    const adapter = new GitHubAdapter({
+      apiClient: new FakeGitHubApiClient(),
+      appConfig: {
+        appId: 123456,
+        privateKey: "test",
+        webhookSecret: "super-secret",
+        webhookUrl: "https://nitpickr.example.com/webhooks/github",
+        botLogins: ["nitpickr", "getnitpickr"],
+      },
+    });
+
+    const event = adapter.normalizeWebhookEvent("pull_request_review_comment", {
+      action: "created",
+      installation: {
+        id: 123456,
+      },
+      repository: {
+        id: 99,
+        name: "nitpickr",
+        owner: {
+          login: "rubenspessoa",
+        },
+        default_branch: "main",
+      },
+      pull_request: {
+        number: 42,
+      },
+      comment: {
+        id: 7001,
+        body: "why",
+        in_reply_to_id: 6001,
+        path: "src/api/server.ts",
+        line: 27,
+        user: {
+          login: "maintainer",
+        },
+      },
+    });
+
+    expect(event).toEqual(
+      expect.objectContaining({
+        kind: "interaction_requested",
+        pullNumber: 42,
+        command: "why",
+        replyTargetCommentId: 6001,
+      }),
+    );
+  });
+
+  it("captures interaction arguments from review-thread replies", () => {
+    const adapter = new GitHubAdapter({
+      apiClient: new FakeGitHubApiClient(),
+      appConfig: {
+        appId: 123456,
+        privateKey: "test",
+        webhookSecret: "super-secret",
+        webhookUrl: "https://nitpickr.example.com/webhooks/github",
+        botLogins: ["nitpickr", "getnitpickr"],
+      },
+    });
+
+    const event = adapter.normalizeWebhookEvent("pull_request_review_comment", {
+      action: "created",
+      installation: {
+        id: 123456,
+      },
+      repository: {
+        id: 99,
+        name: "nitpickr",
+        owner: {
+          login: "rubenspessoa",
+        },
+        default_branch: "main",
+      },
+      pull_request: {
+        number: 42,
+      },
+      comment: {
+        id: 7002,
+        body: "fix add an explicit guard before parsing",
+        in_reply_to_id: 6001,
+        path: "src/api/server.ts",
+        line: 27,
+        user: {
+          login: "maintainer",
+        },
+      },
+    });
+
+    expect(event).toEqual(
+      expect.objectContaining({
+        kind: "interaction_requested",
+        pullNumber: 42,
+        command: "fix",
+        replyTargetCommentId: 6001,
+        source: expect.objectContaining({
+          argumentText: "add an explicit guard before parsing",
+        }),
+      }),
+    );
+  });
+
   it("ignores unsupported comment commands", () => {
     const adapter = new GitHubAdapter({
       apiClient: new FakeGitHubApiClient(),
@@ -421,11 +649,14 @@ describe("GitHubAdapter", () => {
       },
     });
 
-    expect(event).toEqual({
-      kind: "ignored",
-      reason:
-        "Comment did not contain a recognized nitpickr command. Supported commands: @nitpickr review, @nitpickr full review, @nitpickr summary, @nitpickr recheck, @nitpickr ignore this, @getnitpickr review, @getnitpickr full review, @getnitpickr summary, @getnitpickr recheck, @getnitpickr ignore this.",
-    });
+    expect(event).toEqual(
+      expect.objectContaining({
+        kind: "ignored",
+        reason: expect.stringContaining(
+          "Comment did not contain a recognized nitpickr command.",
+        ),
+      }),
+    );
   });
 
   it("reacts to issue comments that mention the bot", async () => {
@@ -569,11 +800,31 @@ describe("GitHubAdapter", () => {
     expect(threads).toEqual([
       {
         threadId: "thread_1",
-        providerCommentId: "comment_1",
+        providerCommentId: "6001",
         path: "src/api/server.ts",
         line: 27,
         fingerprint: "fp_1",
         isResolved: false,
+        body: [
+          "⚠️ 🧩 **Guard the parse**",
+          "**Where:** `src/api/server.ts:27`",
+          "",
+          "The webhook parser should reject invalid payloads before queueing work.",
+          "",
+          "<!-- nitpickr:fingerprint:fp_1 -->",
+          "<details>",
+          "<summary>🤖 AI prompt</summary>",
+          "",
+          "```text",
+          "In `src/api/server.ts` around line 27, add an early validation guard before queueing.",
+          "```",
+          "",
+          "</details>",
+        ].join("\n"),
+        reactionSummary: {
+          positiveCount: 0,
+          negativeCount: 0,
+        },
       },
     ]);
 

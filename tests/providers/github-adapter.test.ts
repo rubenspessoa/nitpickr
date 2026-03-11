@@ -77,6 +77,33 @@ class FakeGitHubApiClient implements GitHubApiClient {
     ];
   }
 
+  async comparePullRequestRange() {
+    return [
+      {
+        filename: "src/api/server.ts",
+        status: "modified" as const,
+        additions: 5,
+        deletions: 1,
+        patch: "@@ -1,1 +1,2 @@\n+guard",
+      },
+    ];
+  }
+
+  async listNitpickrReviewThreads() {
+    return [
+      {
+        threadId: "thread_1",
+        providerCommentId: "comment_1",
+        path: "src/api/server.ts",
+        line: 27,
+        fingerprint: "fp_1",
+        isResolved: false,
+      },
+    ];
+  }
+
+  async resolveReviewThread() {}
+
   async createIssueCommentReaction(input: {
     installationId: string;
     owner: string;
@@ -122,7 +149,7 @@ const pullRequestPayload = {
 };
 
 describe("GitHubAdapter", () => {
-  it("verifies webhook signatures", () => {
+  it("verifies webhook signatures", async () => {
     const adapter = new GitHubAdapter({
       apiClient: new FakeGitHubApiClient(),
       appConfig: {
@@ -137,10 +164,12 @@ describe("GitHubAdapter", () => {
       .update(payload)
       .digest("hex");
 
-    expect(adapter.verifyWebhookSignature(payload, `sha256=${signature}`)).toBe(
-      true,
-    );
-    expect(adapter.verifyWebhookSignature(payload, "sha256=bad")).toBe(false);
+    await expect(
+      adapter.verifyWebhookSignature(payload, `sha256=${signature}`),
+    ).resolves.toBe(true);
+    await expect(
+      adapter.verifyWebhookSignature(payload, "sha256=bad"),
+    ).resolves.toBe(false);
   });
 
   it("normalizes pull request events into review requests", () => {
@@ -480,6 +509,80 @@ describe("GitHubAdapter", () => {
     expect(context.changeRequest.number).toBe(42);
     expect(context.files[0]?.path).toBe("src/queue/queue-scheduler.ts");
     expect(context.comments).toHaveLength(2);
+  });
+
+  it("loads latest-push delta files from the compare API", async () => {
+    const adapter = new GitHubAdapter({
+      apiClient: new FakeGitHubApiClient(),
+      appConfig: {
+        appId: 123456,
+        privateKey: "test",
+        webhookSecret: "super-secret",
+        webhookUrl: "https://nitpickr.example.com/webhooks/github",
+      },
+    });
+
+    const files = await adapter.comparePullRequestRange({
+      installationId: "123456",
+      repository: {
+        owner: "rubenspessoa",
+        name: "nitpickr",
+      },
+      baseSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    });
+
+    expect(files).toEqual([
+      {
+        path: "src/api/server.ts",
+        status: "modified",
+        additions: 5,
+        deletions: 1,
+        patch: "@@ -1,1 +1,2 @@\n+guard",
+        previousPath: null,
+      },
+    ]);
+  });
+
+  it("lists and resolves nitpickr review threads", async () => {
+    const apiClient = new FakeGitHubApiClient();
+    const adapter = new GitHubAdapter({
+      apiClient,
+      appConfig: {
+        appId: 123456,
+        privateKey: "test",
+        webhookSecret: "super-secret",
+        webhookUrl: "https://nitpickr.example.com/webhooks/github",
+        botLogins: ["getnitpickr"],
+      },
+    });
+
+    const threads = await adapter.listNitpickrReviewThreads({
+      installationId: "123456",
+      repository: {
+        owner: "rubenspessoa",
+        name: "nitpickr",
+      },
+      pullNumber: 42,
+    });
+
+    expect(threads).toEqual([
+      {
+        threadId: "thread_1",
+        providerCommentId: "comment_1",
+        path: "src/api/server.ts",
+        line: 27,
+        fingerprint: "fp_1",
+        isResolved: false,
+      },
+    ]);
+
+    await expect(
+      adapter.resolveReviewThread({
+        installationId: "123456",
+        threadId: "thread_1",
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("ignores malformed webhook payloads", () => {

@@ -66,6 +66,8 @@ const reviewBudgetsSchema = z.object({
   maxDurationMs: z.number().int().positive(),
 });
 
+const reviewScopeSchema = z.enum(["full_pr", "commit_delta"]);
+
 const reviewRunSchema = z.object({
   id: z.string().min(1),
   tenantId: z.string().min(1),
@@ -73,7 +75,9 @@ const reviewRunSchema = z.object({
   changeRequestId: z.string().min(1),
   trigger: reviewTriggerSchema,
   mode: z.enum(["quick", "full", "summary"]),
+  scope: reviewScopeSchema,
   headSha: shaSchema,
+  comparedFromSha: shaSchema.nullable(),
   status: z.enum([
     "queued",
     "running",
@@ -85,26 +89,48 @@ const reviewRunSchema = z.object({
   budgets: reviewBudgetsSchema,
 });
 
-const reviewFindingSchema = z.object({
-  id: z.string().min(1),
-  reviewRunId: z.string().min(1),
-  repositoryId: z.string().min(1),
-  path: z.string().min(1),
-  line: z.number().int().positive(),
-  severity: z.enum(["low", "medium", "high", "critical"]),
-  category: z.enum([
-    "correctness",
-    "performance",
-    "security",
-    "maintainability",
-    "testing",
-    "style",
-  ]),
-  title: z.string().min(1),
-  body: z.string().min(1),
-  fixPrompt: z.string().min(1),
-  suggestedChange: z.string().min(1).optional(),
-});
+const reviewFindingTypeSchema = z.enum([
+  "bug",
+  "safe_suggestion",
+  "question",
+  "teaching_note",
+]);
+
+const reviewFindingSchema = z
+  .object({
+    id: z.string().min(1),
+    reviewRunId: z.string().min(1),
+    repositoryId: z.string().min(1),
+    path: z.string().min(1),
+    line: z.number().int().positive(),
+    findingType: reviewFindingTypeSchema,
+    severity: z.enum(["low", "medium", "high", "critical"]),
+    category: z.enum([
+      "correctness",
+      "performance",
+      "security",
+      "maintainability",
+      "testing",
+      "style",
+    ]),
+    title: z.string().min(1),
+    body: z.string().min(1),
+    fixPrompt: z.string().min(1),
+    suggestedChange: z.string().min(1).optional(),
+  })
+  .superRefine((finding, context) => {
+    if (
+      finding.suggestedChange !== undefined &&
+      finding.findingType !== "safe_suggestion"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["suggestedChange"],
+        message:
+          "suggestedChange is only allowed for safe_suggestion findings.",
+      });
+    }
+  });
 
 export type Provider = z.infer<typeof providerSchema>;
 export type ReviewCommand = z.infer<typeof reviewCommandSchema>;

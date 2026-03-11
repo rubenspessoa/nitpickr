@@ -3,28 +3,87 @@ import { z } from "zod";
 const logLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 const nodeEnvironmentSchema = z.enum(["development", "test", "production"]);
 
-const environmentSchema = z.object({
+const bootstrapEnvironmentSchema = z.object({
   NODE_ENV: nodeEnvironmentSchema.optional(),
   PORT: z.string().optional(),
   DATABASE_URL: z.string().url(),
-  OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().min(1).optional(),
   OPENAI_BASE_URL: z.string().url().optional(),
-  GITHUB_APP_ID: z.string().regex(/^\d+$/),
   GITHUB_API_BASE_URL: z.string().url().optional(),
   GITHUB_BOT_LOGINS: z.string().min(1).optional(),
-  GITHUB_PRIVATE_KEY: z.string().min(1),
-  GITHUB_WEBHOOK_SECRET: z.string().min(1),
-  NITPICKR_WEBHOOK_URL: z.string().url(),
+  NITPICKR_BASE_URL: z.string().url().optional(),
+  NITPICKR_WEBHOOK_URL: z.string().url().optional(),
+  NITPICKR_SECRET_KEY: z.string().min(1).optional(),
   NITPICKR_LOG_LEVEL: logLevelSchema.optional(),
   NITPICKR_WORKER_CONCURRENCY: z.string().optional(),
   NITPICKR_WORKER_POLL_INTERVAL_MS: z.string().optional(),
+  NITPICKR_JOB_STALE_AFTER_MS: z.string().optional(),
+  NITPICKR_WORKER_HEARTBEAT_INTERVAL_MS: z.string().optional(),
+  NITPICKR_READY_WORKER_STALE_AFTER_MS: z.string().optional(),
+  NITPICKR_REPOSITORY_ALLOWLIST: z.string().min(1).optional(),
+  DISCORD_WEBHOOK_URL: z.string().url().optional(),
 });
+
+const runtimeSecretEnvironmentSchema = z.object({
+  OPENAI_API_KEY: z.string().min(1),
+  OPENAI_MODEL: z.string().min(1).optional(),
+  GITHUB_APP_ID: z.string().regex(/^\d+$/),
+  GITHUB_BOT_LOGINS: z.string().min(1).optional(),
+  GITHUB_PRIVATE_KEY: z.string().min(1),
+  GITHUB_WEBHOOK_SECRET: z.string().min(1),
+});
+
+type BootstrapEnvironment = z.infer<typeof bootstrapEnvironmentSchema>;
+export type BotLogins = [string, ...string[]];
+const defaultBotLogins: BotLogins = ["nitpickr", "getnitpickr"];
+
+export interface RuntimeSecrets {
+  openAiApiKey: string;
+  openAiModel?: string;
+  githubAppId: number;
+  githubPrivateKey: string;
+  githubWebhookSecret: string;
+  githubBotLogins?: BotLogins;
+}
+
+export interface BootstrapConfig {
+  nodeEnv: "development" | "test" | "production";
+  port: number;
+  databaseUrl: string;
+  baseUrl: string;
+  secretKey: string | null;
+  openAi: {
+    model: string;
+    baseUrl: string;
+  };
+  github: {
+    apiBaseUrl: string;
+    botLogins: BotLogins;
+  };
+  logging: {
+    level: "debug" | "info" | "warn" | "error";
+  };
+  worker: {
+    concurrency: number;
+    pollIntervalMs: number;
+    heartbeatIntervalMs: number;
+  };
+  jobs: {
+    staleAfterMs: number;
+  };
+  ready: {
+    workerStaleAfterMs: number;
+  };
+  repositoryAllowlist: string[] | null;
+  discordWebhookUrl: string | null;
+}
 
 export interface AppConfig {
   nodeEnv: "development" | "test" | "production";
   port: number;
+  baseUrl: string;
   databaseUrl: string;
+  runtimeSecretSource: "environment" | "persisted_store";
   openAiApiKey: string;
   openAi: {
     model: string;
@@ -33,7 +92,7 @@ export interface AppConfig {
   github: {
     appId: number;
     apiBaseUrl: string;
-    botLogins: string[];
+    botLogins: BotLogins;
     privateKey: string;
     webhookSecret: string;
     webhookUrl: string;
@@ -44,7 +103,16 @@ export interface AppConfig {
   worker: {
     concurrency: number;
     pollIntervalMs: number;
+    heartbeatIntervalMs: number;
   };
+  jobs: {
+    staleAfterMs: number;
+  };
+  ready: {
+    workerStaleAfterMs: number;
+  };
+  repositoryAllowlist: string[] | null;
+  discordWebhookUrl: string | null;
 }
 
 function parseInteger(
@@ -64,9 +132,20 @@ function parseInteger(
   return parsed;
 }
 
-function parseBotLogins(value: string | undefined): string[] {
+function toBotLogins(entries: string[]): BotLogins {
+  const uniqueEntries = [...new Set(entries)];
+  const [firstLogin, ...remainingLogins] = uniqueEntries;
+
+  if (!firstLogin) {
+    throw new Error("GITHUB_BOT_LOGINS must contain at least one login.");
+  }
+
+  return [firstLogin, ...remainingLogins];
+}
+
+function parseBotLogins(value: string | undefined): BotLogins {
   if (value === undefined) {
-    return ["nitpickr", "getnitpickr"];
+    return defaultBotLogins;
   }
 
   const parsed = value
@@ -78,30 +157,96 @@ function parseBotLogins(value: string | undefined): string[] {
     throw new Error("GITHUB_BOT_LOGINS must contain at least one login.");
   }
 
-  return [...new Set(parsed)];
+  return toBotLogins(parsed);
 }
 
-export function parseAppConfig(
+function parseRepositoryAllowlist(value: string | undefined): string[] | null {
+  if (value === undefined) {
+    return null;
+  }
+
+  const entries = value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+  return entries.length > 0 ? [...new Set(entries)] : null;
+}
+
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/+$/, "");
+}
+
+function deriveBaseUrl(parsed: BootstrapEnvironment, port: number): string {
+  if (parsed.NITPICKR_BASE_URL) {
+    return normalizeBaseUrl(parsed.NITPICKR_BASE_URL);
+  }
+
+  if (parsed.NITPICKR_WEBHOOK_URL) {
+    if (!parsed.NITPICKR_WEBHOOK_URL.endsWith("/webhooks/github")) {
+      throw new Error(
+        "NITPICKR_WEBHOOK_URL must end with /webhooks/github for the GitHub App webhook.",
+      );
+    }
+
+    return normalizeBaseUrl(
+      parsed.NITPICKR_WEBHOOK_URL.slice(0, -"/webhooks/github".length),
+    );
+  }
+
+  if ((parsed.NODE_ENV ?? "development") !== "production") {
+    return `http://localhost:${port}`;
+  }
+
+  throw new Error(
+    "NITPICKR_BASE_URL is required in production when NITPICKR_WEBHOOK_URL is not provided.",
+  );
+}
+
+function normalizePrivateKey(value: string): string {
+  return value.replace(/\\n/g, "\n");
+}
+
+function normalizeRuntimeSecrets(
+  parsed: z.infer<typeof runtimeSecretEnvironmentSchema>,
+): RuntimeSecrets {
+  const runtimeSecrets: RuntimeSecrets = {
+    openAiApiKey: parsed.OPENAI_API_KEY,
+    githubAppId: Number.parseInt(parsed.GITHUB_APP_ID, 10),
+    githubPrivateKey: normalizePrivateKey(parsed.GITHUB_PRIVATE_KEY),
+    githubWebhookSecret: parsed.GITHUB_WEBHOOK_SECRET,
+  };
+
+  if (parsed.OPENAI_MODEL) {
+    runtimeSecrets.openAiModel = parsed.OPENAI_MODEL;
+  }
+
+  if (parsed.GITHUB_BOT_LOGINS) {
+    runtimeSecrets.githubBotLogins = parseBotLogins(parsed.GITHUB_BOT_LOGINS);
+  }
+
+  return runtimeSecrets;
+}
+
+export function parseBootstrapConfig(
   input: Record<string, string | undefined>,
-): AppConfig {
-  const parsed = environmentSchema.parse(input);
+): BootstrapConfig {
+  const parsed = bootstrapEnvironmentSchema.parse(input);
+  const port = parseInteger(parsed.PORT, "PORT", 3000);
 
   return {
     nodeEnv: parsed.NODE_ENV ?? "development",
-    port: parseInteger(parsed.PORT, "PORT", 3000),
+    port,
     databaseUrl: parsed.DATABASE_URL,
-    openAiApiKey: parsed.OPENAI_API_KEY,
+    baseUrl: deriveBaseUrl(parsed, port),
+    secretKey: parsed.NITPICKR_SECRET_KEY ?? null,
     openAi: {
       model: parsed.OPENAI_MODEL ?? "gpt-4.1",
       baseUrl: parsed.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
     },
     github: {
-      appId: Number.parseInt(parsed.GITHUB_APP_ID, 10),
       apiBaseUrl: parsed.GITHUB_API_BASE_URL ?? "https://api.github.com",
       botLogins: parseBotLogins(parsed.GITHUB_BOT_LOGINS),
-      privateKey: parsed.GITHUB_PRIVATE_KEY.replace(/\\n/g, "\n"),
-      webhookSecret: parsed.GITHUB_WEBHOOK_SECRET,
-      webhookUrl: parsed.NITPICKR_WEBHOOK_URL,
     },
     logging: {
       level: parsed.NITPICKR_LOG_LEVEL ?? "info",
@@ -117,6 +262,88 @@ export function parseAppConfig(
         "NITPICKR_WORKER_POLL_INTERVAL_MS",
         5000,
       ),
+      heartbeatIntervalMs: parseInteger(
+        parsed.NITPICKR_WORKER_HEARTBEAT_INTERVAL_MS,
+        "NITPICKR_WORKER_HEARTBEAT_INTERVAL_MS",
+        5000,
+      ),
     },
+    jobs: {
+      staleAfterMs: parseInteger(
+        parsed.NITPICKR_JOB_STALE_AFTER_MS,
+        "NITPICKR_JOB_STALE_AFTER_MS",
+        120_000,
+      ),
+    },
+    ready: {
+      workerStaleAfterMs: parseInteger(
+        parsed.NITPICKR_READY_WORKER_STALE_AFTER_MS,
+        "NITPICKR_READY_WORKER_STALE_AFTER_MS",
+        20_000,
+      ),
+    },
+    repositoryAllowlist: parseRepositoryAllowlist(
+      parsed.NITPICKR_REPOSITORY_ALLOWLIST,
+    ),
+    discordWebhookUrl: parsed.DISCORD_WEBHOOK_URL ?? null,
   };
+}
+
+export function parseRuntimeSecretsFromEnvironment(
+  input: Record<string, string | undefined>,
+): RuntimeSecrets | null {
+  const result = runtimeSecretEnvironmentSchema.safeParse(input);
+  if (!result.success) {
+    return null;
+  }
+
+  return normalizeRuntimeSecrets(result.data);
+}
+
+export function buildAppConfig(
+  bootstrap: BootstrapConfig,
+  secrets: RuntimeSecrets,
+  runtimeSecretSource: AppConfig["runtimeSecretSource"] = "persisted_store",
+): AppConfig {
+  return {
+    nodeEnv: bootstrap.nodeEnv,
+    port: bootstrap.port,
+    baseUrl: bootstrap.baseUrl,
+    databaseUrl: bootstrap.databaseUrl,
+    runtimeSecretSource,
+    openAiApiKey: secrets.openAiApiKey,
+    openAi: {
+      model: secrets.openAiModel ?? bootstrap.openAi.model,
+      baseUrl: bootstrap.openAi.baseUrl,
+    },
+    github: {
+      appId: secrets.githubAppId,
+      apiBaseUrl: bootstrap.github.apiBaseUrl,
+      botLogins: secrets.githubBotLogins ?? bootstrap.github.botLogins,
+      privateKey: secrets.githubPrivateKey,
+      webhookSecret: secrets.githubWebhookSecret,
+      webhookUrl: `${bootstrap.baseUrl}/webhooks/github`,
+    },
+    logging: bootstrap.logging,
+    worker: bootstrap.worker,
+    jobs: bootstrap.jobs,
+    ready: bootstrap.ready,
+    repositoryAllowlist: bootstrap.repositoryAllowlist,
+    discordWebhookUrl: bootstrap.discordWebhookUrl,
+  };
+}
+
+export function parseAppConfig(
+  input: Record<string, string | undefined>,
+): AppConfig {
+  const runtimeSecrets = runtimeSecretEnvironmentSchema.safeParse(input);
+  if (!runtimeSecrets.success) {
+    throw runtimeSecrets.error;
+  }
+
+  return buildAppConfig(
+    parseBootstrapConfig(input),
+    normalizeRuntimeSecrets(runtimeSecrets.data),
+    "environment",
+  );
 }

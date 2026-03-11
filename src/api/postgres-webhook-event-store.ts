@@ -1,0 +1,212 @@
+import {
+  WebhookEventAlreadyExistsError,
+  type WebhookEventRecord,
+  type WebhookEventStatus,
+  type WebhookEventStore,
+  type WebhookProvider,
+  isWebhookEventStatus,
+  isWebhookProvider,
+} from "./webhook-event-service.js";
+
+export class WebhookEventStoreError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause });
+    this.name = "WebhookEventStoreError";
+  }
+}
+
+export class WebhookEventNotFoundError extends Error {
+  constructor(deliveryId: string) {
+    super(`Webhook event with deliveryId ${deliveryId} was not found.`);
+    this.name = "WebhookEventNotFoundError";
+  }
+}
+
+export interface PostgresWebhookEventClient {
+  // The client must execute placeholder-based parameterized SQL. Callers pass
+  // the SQL text and arguments separately and never interpolate user input.
+  executeParameterized<T extends Record<string, unknown>>(
+    query: string,
+    params?: readonly unknown[],
+  ): Promise<T[]>;
+}
+
+function assertNonEmpty(value: string, fieldName: string): void {
+  if (value.trim().length === 0) {
+    throw new Error(`${fieldName} must not be empty.`);
+  }
+}
+
+function toJsonPayload(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+function wrapWebhookEventStoreError(message: string, error: unknown): Error {
+  return new WebhookEventStoreError(message, error);
+}
+
+function isDuplicateKeyError(error: unknown): error is { code: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    (error as { code: string }).code === "23505"
+  );
+}
+
+function parseProvider(value: unknown): WebhookProvider {
+  if (isWebhookProvider(value)) {
+    return value;
+  }
+
+  throw new Error(`Unsupported webhook event provider: ${String(value)}.`);
+}
+
+function parseStatus(value: unknown): WebhookEventStatus {
+  if (isWebhookEventStatus(value)) {
+    return value;
+  }
+
+  throw new Error(`Unsupported webhook event status: ${String(value)}.`);
+}
+
+export class PostgresWebhookEventStore implements WebhookEventStore {
+  readonly #client: PostgresWebhookEventClient;
+
+  constructor(client: PostgresWebhookEventClient) {
+    this.#client = client;
+  }
+
+  async getByDeliveryId(
+    deliveryId: string,
+  ): Promise<WebhookEventRecord | null> {
+    assertNonEmpty(deliveryId, "deliveryId");
+
+    let rows: Array<Record<string, unknown>>;
+    try {
+      rows = await this.#client.executeParameterized<Record<string, unknown>>(
+        `
+          select delivery_id, provider, event_name, status
+          from webhook_events
+          where delivery_id = $1
+          limit 1
+        `,
+        [deliveryId],
+      );
+    } catch (error) {
+      throw wrapWebhookEventStoreError(
+        "Failed to load webhook event by delivery id",
+        error,
+      );
+    }
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      deliveryId: String(row.delivery_id),
+      provider: parseProvider(row.provider),
+      eventName: String(row.event_name),
+      status: parseStatus(row.status),
+    };
+  }
+
+  async createEvent(input: {
+    deliveryId: string;
+    provider: WebhookProvider;
+    eventName: string;
+    status: WebhookEventStatus;
+    payload: unknown;
+  }): Promise<void> {
+    assertNonEmpty(input.deliveryId, "deliveryId");
+    assertNonEmpty(input.eventName, "eventName");
+    const provider = parseProvider(input.provider);
+    const status = parseStatus(input.status);
+
+    try {
+      await this.#client.executeParameterized(
+        `
+          insert into webhook_events (
+            delivery_id,
+            provider,
+            event_name,
+            status,
+            payload,
+            received_at,
+            updated_at
+          )
+          values ($1, $2, $3, $4, $5::jsonb, now(), now())
+        `,
+        [
+          input.deliveryId,
+          provider,
+          input.eventName,
+          status,
+          toJsonPayload(input.payload),
+        ],
+      );
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        throw new WebhookEventAlreadyExistsError(input.deliveryId);
+      }
+
+      throw wrapWebhookEventStoreError("Failed to create webhook event", error);
+    }
+  }
+
+  async updateEvent(input: {
+    deliveryId: string;
+    status: WebhookEventStatus;
+    repositoryId?: string;
+    changeRequestId?: string;
+    errorMessage?: string;
+    payload?: unknown;
+  }): Promise<void> {
+    assertNonEmpty(input.deliveryId, "deliveryId");
+    const status = parseStatus(input.status);
+    if (input.repositoryId !== undefined) {
+      assertNonEmpty(input.repositoryId, "repositoryId");
+    }
+    if (input.changeRequestId !== undefined) {
+      assertNonEmpty(input.changeRequestId, "changeRequestId");
+    }
+
+    try {
+      const rows = await this.#client.executeParameterized<{
+        delivery_id: string;
+      }>(
+        `
+          update webhook_events
+          set status = $2,
+              repository_id = coalesce($3, repository_id),
+              change_request_id = coalesce($4, change_request_id),
+              error_message = $5,
+              payload = coalesce($6::jsonb, payload),
+              updated_at = now()
+          where delivery_id = $1
+          returning delivery_id
+        `,
+        [
+          input.deliveryId,
+          status,
+          input.repositoryId ?? null,
+          input.changeRequestId ?? null,
+          input.errorMessage ?? null,
+          input.payload === undefined ? null : toJsonPayload(input.payload),
+        ],
+      );
+
+      if (rows.length === 0) {
+        throw new WebhookEventNotFoundError(input.deliveryId);
+      }
+    } catch (error) {
+      if (error instanceof WebhookEventNotFoundError) {
+        throw error;
+      }
+      throw wrapWebhookEventStoreError("Failed to update webhook event", error);
+    }
+  }
+}

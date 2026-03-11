@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
+import type { BotLogins } from "../../config/app-config.js";
 import { type ReviewTrigger, parseChangeRequest } from "../../domain/types.js";
 
 const repositorySchema = z.object({
@@ -66,7 +67,7 @@ const issueCommentEventSchema = z.object({
 
 export interface GitHubAppConfig {
   appId: number;
-  botLogins?: string[];
+  botLogins?: BotLogins;
   privateKey: string;
   webhookSecret: string;
   webhookUrl: string;
@@ -126,6 +127,42 @@ export interface GitHubApiClient {
       created_at: string;
     }>
   >;
+  comparePullRequestRange(input: {
+    installationId: string;
+    owner: string;
+    repo: string;
+    baseSha: string;
+    headSha: string;
+  }): Promise<
+    Array<{
+      filename: string;
+      status: "added" | "modified" | "removed" | "renamed";
+      additions: number;
+      deletions: number;
+      patch?: string;
+      previous_filename?: string;
+    }>
+  >;
+  listNitpickrReviewThreads(input: {
+    installationId: string;
+    owner: string;
+    repo: string;
+    pullNumber: number;
+    botLogins: string[];
+  }): Promise<
+    Array<{
+      threadId: string;
+      providerCommentId: string;
+      path: string;
+      line: number;
+      fingerprint: string;
+      isResolved: boolean;
+    }>
+  >;
+  resolveReviewThread(input: {
+    installationId: string;
+    threadId: string;
+  }): Promise<void>;
   createIssueCommentReaction(input: {
     installationId: string;
     owner: string;
@@ -313,7 +350,7 @@ function containsBotMention(body: string, botLogins: string[]): boolean {
 export class GitHubAdapter {
   readonly #apiClient: GitHubApiClient;
   readonly #appConfig: GitHubAppConfig;
-  readonly #botLogins: string[];
+  readonly #botLogins: BotLogins;
 
   constructor(options: GitHubAdapterOptions) {
     this.#apiClient = options.apiClient;
@@ -324,7 +361,10 @@ export class GitHubAdapter {
     ];
   }
 
-  verifyWebhookSignature(rawBody: string, signatureHeader: string): boolean {
+  async verifyWebhookSignature(
+    rawBody: string,
+    signatureHeader: string,
+  ): Promise<boolean> {
     if (!signatureHeader.startsWith("sha256=")) {
       return false;
     }
@@ -569,5 +609,77 @@ export class GitHubAdapter {
         })),
       ],
     };
+  }
+
+  async comparePullRequestRange(input: {
+    installationId: string;
+    repository: {
+      owner: string;
+      name: string;
+    };
+    baseSha: string;
+    headSha: string;
+  }): Promise<
+    Array<{
+      path: string;
+      status: "added" | "modified" | "removed" | "renamed";
+      additions: number;
+      deletions: number;
+      patch: string | null;
+      previousPath: string | null;
+    }>
+  > {
+    const files = await this.#apiClient.comparePullRequestRange({
+      installationId: input.installationId,
+      owner: input.repository.owner,
+      repo: input.repository.name,
+      baseSha: input.baseSha,
+      headSha: input.headSha,
+    });
+
+    return files.map((file) => ({
+      path: file.filename,
+      status: file.status,
+      additions: file.additions,
+      deletions: file.deletions,
+      patch: file.patch ?? null,
+      previousPath: file.previous_filename ?? null,
+    }));
+  }
+
+  async listNitpickrReviewThreads(input: {
+    installationId: string;
+    repository: {
+      owner: string;
+      name: string;
+    };
+    pullNumber: number;
+  }): Promise<
+    Array<{
+      threadId: string;
+      providerCommentId: string;
+      path: string;
+      line: number;
+      fingerprint: string;
+      isResolved: boolean;
+    }>
+  > {
+    return this.#apiClient.listNitpickrReviewThreads({
+      installationId: input.installationId,
+      owner: input.repository.owner,
+      repo: input.repository.name,
+      pullNumber: input.pullNumber,
+      botLogins: this.#botLogins,
+    });
+  }
+
+  async resolveReviewThread(input: {
+    installationId: string;
+    threadId: string;
+  }): Promise<void> {
+    await this.#apiClient.resolveReviewThread({
+      installationId: input.installationId,
+      threadId: input.threadId,
+    });
   }
 }

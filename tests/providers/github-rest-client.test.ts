@@ -325,6 +325,148 @@ describe("GitHubRestClient", () => {
     expect(capturedBody).toBe('{"content":"eyes"}');
   });
 
+  it("compares two heads to get the latest push delta", async () => {
+    let requestedUrl = "";
+    const client = new GitHubRestClient(
+      {
+        async getInstallationAccessToken() {
+          return "ghs_token";
+        },
+      },
+      async (input) => {
+        requestedUrl = String(input);
+        return new Response(
+          JSON.stringify({
+            files: [
+              {
+                filename: "src/api/server.ts",
+                status: "modified",
+                additions: 5,
+                deletions: 1,
+                patch: "@@ -1,1 +1,2 @@\n+guard",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      },
+    );
+
+    const files = await client.comparePullRequestRange({
+      installationId: "123456",
+      owner: "rubenspessoa",
+      repo: "nitpickr",
+      baseSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    });
+
+    expect(files).toEqual([
+      {
+        filename: "src/api/server.ts",
+        status: "modified",
+        additions: 5,
+        deletions: 1,
+        patch: "@@ -1,1 +1,2 @@\n+guard",
+      },
+    ]);
+    expect(requestedUrl).toBe(
+      "https://api.github.com/repos/rubenspessoa/nitpickr/compare/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    );
+  });
+
+  it("lists nitpickr review threads and resolves them through GraphQL", async () => {
+    const requestedBodies: string[] = [];
+    const client = new GitHubRestClient(
+      {
+        async getInstallationAccessToken() {
+          return "ghs_token";
+        },
+      },
+      async (_input, init) => {
+        const body = String(init?.body ?? "");
+        requestedBodies.push(body);
+        if (body.includes("reviewThreads")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                repository: {
+                  pullRequest: {
+                    reviewThreads: {
+                      nodes: [
+                        {
+                          id: "thread_1",
+                          isResolved: false,
+                          comments: {
+                            nodes: [
+                              {
+                                id: "comment_1",
+                                body: [
+                                  "nitpickr comment",
+                                  "<!-- nitpickr:fingerprint:fp_1 -->",
+                                ].join("\n"),
+                                author: {
+                                  login: "getnitpickr",
+                                },
+                                path: "src/api/server.ts",
+                                line: 27,
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            data: {
+              resolveReviewThread: {
+                thread: {
+                  id: "thread_1",
+                  isResolved: true,
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        );
+      },
+    );
+
+    const threads = await client.listNitpickrReviewThreads({
+      installationId: "123456",
+      owner: "rubenspessoa",
+      repo: "nitpickr",
+      pullNumber: 42,
+      botLogins: ["getnitpickr"],
+    });
+
+    expect(threads).toEqual([
+      {
+        threadId: "thread_1",
+        providerCommentId: "comment_1",
+        path: "src/api/server.ts",
+        line: 27,
+        fingerprint: "fp_1",
+        isResolved: false,
+      },
+    ]);
+
+    await client.resolveReviewThread({
+      installationId: "123456",
+      threadId: "thread_1",
+    });
+
+    expect(requestedBodies[0]).toContain("reviewThreads");
+    expect(requestedBodies[1]).toContain("resolveReviewThread");
+  });
+
   it("uses a custom GitHub API base URL when configured", async () => {
     let requestedUrl = "";
     const client = new GitHubRestClient(

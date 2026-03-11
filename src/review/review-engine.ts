@@ -14,6 +14,7 @@ const defaultSummary = "nitpickr completed the review.";
 const findingSchema = z.object({
   path: z.string().min(1),
   line: z.number().int().positive(),
+  findingType: z.enum(["bug", "safe_suggestion", "question", "teaching_note"]),
   severity: z.enum(["low", "medium", "high", "critical"]),
   category: z.enum([
     "correctness",
@@ -28,6 +29,24 @@ const findingSchema = z.object({
   fixPrompt: z.string().min(1),
   suggestedChange: z.string().min(1).optional(),
 });
+
+const findingTypeAliasMap: Record<
+  string,
+  z.infer<typeof findingSchema>["findingType"]
+> = {
+  bug: "bug",
+  defect: "bug",
+  issue: "bug",
+  concern: "bug",
+  safe_suggestion: "safe_suggestion",
+  safe_suggest: "safe_suggestion",
+  suggestion: "safe_suggestion",
+  question: "question",
+  clarification: "question",
+  teaching_note: "teaching_note",
+  note: "teaching_note",
+  explanation: "teaching_note",
+};
 
 const MAX_SUGGESTED_CHANGE_LINES = 12;
 const MAX_SUGGESTED_CHANGE_CHARACTERS = 600;
@@ -126,6 +145,16 @@ function normalizeCategory(
   return categoryAliasMap[value.trim().toLowerCase()];
 }
 
+function normalizeFindingType(
+  value: unknown,
+): ReviewFinding["findingType"] | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  return findingTypeAliasMap[value.trim().toLowerCase()];
+}
+
 function normalizeString(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -203,6 +232,12 @@ function normalizeFinding(value: unknown): ReviewFinding | null {
   const candidate = value as Record<string, unknown>;
   const path = normalizeString(candidate.path);
   const line = normalizeLine(candidate.line);
+  const normalizedSuggestedChange = normalizeSuggestedChange(
+    candidate.suggestedChange,
+  );
+  const findingType =
+    normalizeFindingType(candidate.findingType) ??
+    (normalizedSuggestedChange ? "safe_suggestion" : "bug");
   const severity = normalizeSeverity(candidate.severity);
   const category = normalizeCategory(candidate.category);
   const title = normalizeString(candidate.title);
@@ -217,11 +252,13 @@ function normalizeFinding(value: unknown): ReviewFinding | null {
           title,
         )
       : undefined;
-  const suggestedChange = normalizeSuggestedChange(candidate.suggestedChange);
+  const suggestedChange =
+    findingType === "safe_suggestion" ? normalizedSuggestedChange : undefined;
 
   const parsed = findingSchema.safeParse({
     path,
     line,
+    findingType,
     severity,
     category,
     title,
@@ -450,6 +487,12 @@ export interface ReviewEngineInput {
     deletions: number;
     patch: string | null;
   }>;
+  contextFiles?: Array<{
+    path: string;
+    additions: number;
+    deletions: number;
+    patch: string | null;
+  }>;
   instructionText: string;
   memory: Array<{
     summary: string;
@@ -651,6 +694,9 @@ export class ReviewEngine {
           instructionText: input.instructionText,
           memory: input.memory,
           commentBudget: input.commentBudget,
+          ...(input.contextFiles === undefined
+            ? {}
+            : { contextFiles: input.contextFiles }),
         });
 
         const response = await this.#model.generateStructuredReview(prompt);

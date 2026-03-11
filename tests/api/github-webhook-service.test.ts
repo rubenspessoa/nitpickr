@@ -73,8 +73,43 @@ class FakeQueueScheduler {
   }
 }
 
+class FakeWebhookEventService {
+  received: string[] = [];
+  queued: string[] = [];
+  ignored: string[] = [];
+  failed: string[] = [];
+  duplicates = new Set<string>();
+  markFailedError: Error | null = null;
+  beginDeliveryError: Error | null = null;
+
+  async beginDelivery(input: { deliveryId: string }) {
+    if (this.beginDeliveryError) {
+      throw this.beginDeliveryError;
+    }
+    this.received.push(input.deliveryId);
+    return this.duplicates.has(input.deliveryId) ? "duplicate" : "new";
+  }
+
+  async markQueued(input: { deliveryId: string }) {
+    this.queued.push(input.deliveryId);
+  }
+
+  async markIgnored(input: { deliveryId: string }) {
+    this.ignored.push(input.deliveryId);
+  }
+
+  async markFailed(input: { deliveryId: string }) {
+    if (this.markFailedError) {
+      throw this.markFailedError;
+    }
+    this.failed.push(input.deliveryId);
+  }
+}
+
 class FakeGitHubAdapter {
   signatureValid = true;
+  normalizeWebhookEventCalls = 0;
+  reactToMentionCalls = 0;
   mentionReaction: {
     commentId: number;
     content: "eyes";
@@ -100,15 +135,17 @@ class FakeGitHubAdapter {
     actorLogin: "ruben",
   };
 
-  verifyWebhookSignature(): boolean {
+  async verifyWebhookSignature(): Promise<boolean> {
     return this.signatureValid;
   }
 
   normalizeWebhookEvent(): GitHubNormalizedEvent {
+    this.normalizeWebhookEventCalls += 1;
     return this.normalizedEvent;
   }
 
   async reactToMention() {
+    this.reactToMentionCalls += 1;
     if (this.mentionReactionError) {
       throw this.mentionReactionError;
     }
@@ -121,10 +158,17 @@ describe("GitHubWebhookService", () => {
   it("enqueues review jobs for supported GitHub events", async () => {
     const adapter = new FakeGitHubAdapter();
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-1",
       eventName: "pull_request",
       signature: "sha256=test",
       rawBody: "{}",
@@ -139,6 +183,7 @@ describe("GitHubWebhookService", () => {
       type: "pr_opened",
       actorLogin: "ruben",
     });
+    expect(webhookEvents.queued).toEqual(["delivery-1"]);
     expect(logger.entries).toContainEqual({
       level: "info",
       message: "Queued GitHub review job.",
@@ -160,10 +205,17 @@ describe("GitHubWebhookService", () => {
       content: "eyes",
     };
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-2",
       eventName: "issue_comment",
       signature: "sha256=test",
       rawBody: "{}",
@@ -187,10 +239,17 @@ describe("GitHubWebhookService", () => {
     const adapter = new FakeGitHubAdapter();
     adapter.mentionReactionError = new Error("reaction failed");
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-3",
       eventName: "issue_comment",
       signature: "sha256=test",
       rawBody: "{}",
@@ -209,14 +268,56 @@ describe("GitHubWebhookService", () => {
     });
   });
 
+  it("catches synchronous mention reaction failures without rejecting the webhook", async () => {
+    const adapter = new FakeGitHubAdapter();
+    adapter.reactToMention = () => {
+      throw new Error("sync reaction failed");
+    };
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-sync-reaction",
+      eventName: "issue_comment",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(202);
+    expect(logger.entries).toContainEqual({
+      level: "warn",
+      message: "Failed to react to GitHub bot mention.",
+      fields: {
+        component: "github-webhook",
+        eventName: "issue_comment",
+        error: "sync reaction failed",
+      },
+    });
+  });
+
   it("rejects invalid signatures", async () => {
     const adapter = new FakeGitHubAdapter();
     adapter.signatureValid = false;
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-4",
       eventName: "pull_request",
       signature: "sha256=bad",
       rawBody: "{}",
@@ -225,6 +326,7 @@ describe("GitHubWebhookService", () => {
 
     expect(result.statusCode).toBe(401);
     expect(queue.calls).toEqual([]);
+    expect(webhookEvents.received).toEqual([]);
     expect(logger.entries).toContainEqual({
       level: "warn",
       message: "Rejected GitHub webhook with invalid signature.",
@@ -242,10 +344,17 @@ describe("GitHubWebhookService", () => {
       reason: "unsupported",
     };
     const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
     const logger = new FakeLogger();
-    const service = new GitHubWebhookService(adapter, queue, logger);
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
 
     const result = await service.handle({
+      deliveryId: "delivery-5",
       eventName: "issue_comment",
       signature: "sha256=test",
       rawBody: "{}",
@@ -255,6 +364,7 @@ describe("GitHubWebhookService", () => {
     expect(result.statusCode).toBe(202);
     expect(result.accepted).toBe(false);
     expect(queue.calls).toEqual([]);
+    expect(webhookEvents.ignored).toEqual(["delivery-5"]);
     expect(logger.entries).toContainEqual({
       level: "info",
       message: "Ignored GitHub webhook event.",
@@ -264,5 +374,252 @@ describe("GitHubWebhookService", () => {
         reason: "unsupported",
       },
     });
+  });
+
+  it("dedupes repeated webhook deliveries before queueing", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    webhookEvents.duplicates.add("delivery-dup");
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-dup",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(202);
+    expect(result.accepted).toBe(false);
+    expect(result.message).toBe("Duplicate GitHub webhook delivery ignored.");
+    expect(queue.calls).toEqual([]);
+    expect(webhookEvents.ignored).toEqual([]);
+    expect(adapter.reactToMentionCalls).toBe(0);
+    expect(adapter.normalizeWebhookEventCalls).toBe(0);
+    expect(logger.entries).toContainEqual({
+      level: "warn",
+      message: "Ignored duplicate GitHub webhook delivery.",
+      fields: {
+        component: "github-webhook",
+        deliveryId: "delivery-dup",
+        eventName: "pull_request",
+      },
+    });
+  });
+
+  it("returns a controlled failure when delivery registration throws", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    webhookEvents.beginDeliveryError = new Error("db unavailable");
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-store-fail",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result).toEqual({
+      statusCode: 500,
+      accepted: false,
+      message: "Failed to process GitHub webhook event.",
+    });
+    expect(queue.calls).toEqual([]);
+    expect(adapter.reactToMentionCalls).toBe(0);
+    expect(adapter.normalizeWebhookEventCalls).toBe(0);
+    expect(logger.entries).toContainEqual({
+      level: "error",
+      message: "GitHub webhook delivery registration failed.",
+      fields: {
+        component: "github-webhook",
+        deliveryId: "delivery-store-fail",
+        eventName: "pull_request",
+        error: "db unavailable",
+        alertable: true,
+        monitoringKey: "webhook_delivery_registration_failure",
+      },
+    });
+  });
+
+  it("awaits asynchronous signature verification before accepting the webhook", async () => {
+    const adapter = new FakeGitHubAdapter();
+    adapter.verifyWebhookSignature = async () =>
+      await new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), 0);
+      });
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-async-signature",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(401);
+    expect(queue.calls).toEqual([]);
+    expect(webhookEvents.received).toEqual([]);
+  });
+
+  it("logs webhook event persistence failures without swallowing the original webhook error", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    webhookEvents.markFailedError = new Error("db write failed");
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    adapter.normalizeWebhookEvent = () => {
+      throw new Error("boom");
+    };
+
+    const result = await service.handle({
+      deliveryId: "delivery-fail",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(500);
+    expect(result.accepted).toBe(false);
+    expect(result.message).toBe("Failed to process GitHub webhook event.");
+    expect(logger.entries).toContainEqual({
+      level: "error",
+      message: "Failed to persist GitHub webhook event status.",
+      fields: {
+        component: "github-webhook",
+        deliveryId: "delivery-fail",
+        status: "failed",
+        alertable: true,
+        monitoringKey: "webhook_event_persistence_failure",
+        error: "db write failed",
+      },
+    });
+    expect(logger.entries).toContainEqual({
+      level: "error",
+      message: "GitHub webhook event normalization failed.",
+      fields: {
+        component: "github-webhook",
+        eventName: "pull_request",
+        error: "boom",
+      },
+    });
+  });
+
+  it("logs queueing failures with queue-specific context", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    queue.enqueue = async () => {
+      throw new Error("queue unavailable");
+    };
+    const webhookEvents = new FakeWebhookEventService();
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-queue-fail",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(500);
+    expect(result.accepted).toBe(false);
+    expect(webhookEvents.failed).toEqual(["delivery-queue-fail"]);
+    expect(logger.entries).toContainEqual({
+      level: "error",
+      message: "GitHub webhook queueing failed.",
+      fields: {
+        component: "github-webhook",
+        eventName: "pull_request",
+        repositoryId: "github:99",
+        pullNumber: 42,
+        error: "queue unavailable",
+      },
+    });
+  });
+
+  it("requires a delivery id for webhook processing", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const logger = new FakeLogger();
+    const webhookEvents = new FakeWebhookEventService();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    await expect(() =>
+      service.handle({
+        deliveryId: "",
+        eventName: "pull_request",
+        signature: "sha256=test",
+        rawBody: "{}",
+        payload: {},
+      }),
+    ).rejects.toThrow(/deliveryId/i);
+  });
+
+  it("rejects webhook payloads that are not JSON objects", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const logger = new FakeLogger();
+    const webhookEvents = new FakeWebhookEventService();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    await expect(() =>
+      service.handle({
+        deliveryId: "delivery-bad-payload",
+        eventName: "pull_request",
+        signature: "sha256=test",
+        rawBody: "[]",
+        payload: [],
+      }),
+    ).rejects.toThrow(/payload/i);
   });
 });

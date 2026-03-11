@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { GitHubWebhookService } from "../../src/api/github-webhook-service.js";
 import { createApiServer } from "../../src/api/server.js";
+import {
+  WebhookEventService,
+  type WebhookEventStore,
+} from "../../src/api/webhook-event-service.js";
 import { defaultRepositoryConfig } from "../../src/config/repository-config-loader.js";
 import {
   type MemoryEntry,
@@ -154,6 +158,10 @@ class InMemoryJobStore implements JobStore {
 
     return canceled;
   }
+
+  async requeueStaleRunningJobs(): Promise<number> {
+    return 0;
+  }
 }
 
 class InMemoryMemoryStore implements MemoryStore {
@@ -175,6 +183,52 @@ class InMemoryMemoryStore implements MemoryStore {
   }
 }
 
+class InMemoryWebhookEventStore implements WebhookEventStore {
+  readonly events = new Map<
+    string,
+    {
+      deliveryId: string;
+      provider: "github";
+      eventName: string;
+      status: "received" | "ignored" | "queued" | "processed" | "failed";
+    }
+  >();
+
+  async getByDeliveryId(deliveryId: string) {
+    return this.events.get(deliveryId) ?? null;
+  }
+
+  async createEvent(input: {
+    deliveryId: string;
+    provider: "github";
+    eventName: string;
+    status: "received" | "ignored" | "queued" | "processed" | "failed";
+    payload: unknown;
+  }): Promise<void> {
+    this.events.set(input.deliveryId, {
+      deliveryId: input.deliveryId,
+      provider: input.provider,
+      eventName: input.eventName,
+      status: input.status,
+    });
+  }
+
+  async updateEvent(input: {
+    deliveryId: string;
+    status: "received" | "ignored" | "queued" | "processed" | "failed";
+  }): Promise<void> {
+    const current = this.events.get(input.deliveryId);
+    if (!current) {
+      throw new Error(`Unknown delivery ${input.deliveryId}`);
+    }
+
+    this.events.set(input.deliveryId, {
+      ...current,
+      status: input.status,
+    });
+  }
+}
+
 class InMemoryReviewLifecycleStore implements ReviewLifecycleStore {
   readonly changeRequests = new Map<
     string,
@@ -184,6 +238,7 @@ class InMemoryReviewLifecycleStore implements ReviewLifecycleStore {
   readonly findings: PersistedReviewFinding[] = [];
   readonly comments: PersistedPublishedComment[] = [];
   readonly discussionEvents: PersistedDiscussionEvent[] = [];
+  readonly resolvedThreadBatches: string[][] = [];
 
   async upsertChangeRequest(
     changeRequest: GitHubChangeRequestContext["changeRequest"],
@@ -193,6 +248,47 @@ class InMemoryReviewLifecycleStore implements ReviewLifecycleStore {
 
   async createReviewRun(reviewRun: PersistedReviewRun): Promise<void> {
     this.reviewRuns.set(reviewRun.id, reviewRun);
+  }
+
+  async findLatestCompletedReviewRun(
+    changeRequestId: string,
+  ): Promise<PersistedReviewRun | null> {
+    return (
+      [...this.reviewRuns.values()]
+        .filter(
+          (reviewRun) =>
+            reviewRun.changeRequestId === changeRequestId &&
+            (reviewRun.status === "published" ||
+              reviewRun.status === "skipped"),
+        )
+        .sort((left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt),
+        )[0] ?? null
+    );
+  }
+
+  async markPublishedCommentsResolved(input: {
+    providerThreadIds: string[];
+    resolvedAt: string;
+  }): Promise<number> {
+    this.resolvedThreadBatches.push(input.providerThreadIds);
+    let resolvedCount = 0;
+
+    this.comments.forEach((comment, index) => {
+      if (
+        comment.providerThreadId !== null &&
+        input.providerThreadIds.includes(comment.providerThreadId) &&
+        comment.resolvedAt === null
+      ) {
+        this.comments[index] = {
+          ...comment,
+          resolvedAt: input.resolvedAt,
+        };
+        resolvedCount += 1;
+      }
+    });
+
+    return resolvedCount;
   }
 
   async supersedePreviousRuns(): Promise<number> {
@@ -284,6 +380,23 @@ class FakeGitHubApi implements GitHubApiClient {
     line?: number;
     created_at: string;
   }> = [];
+  comparedFiles: Array<{
+    filename: string;
+    status: "added" | "modified" | "removed" | "renamed";
+    additions: number;
+    deletions: number;
+    patch?: string;
+    previous_filename?: string;
+  }> = [];
+  nitpickrThreads: Array<{
+    threadId: string;
+    providerCommentId: string;
+    path: string;
+    line: number;
+    fingerprint: string;
+    isResolved: boolean;
+  }> = [];
+  resolvedThreadIds: string[] = [];
 
   async getPullRequest() {
     return {
@@ -318,6 +431,29 @@ class FakeGitHubApi implements GitHubApiClient {
     return this.reviewComments;
   }
 
+  async comparePullRequestRange() {
+    return this.comparedFiles.length > 0 ? this.comparedFiles : this.files;
+  }
+
+  async listNitpickrReviewThreads() {
+    return this.nitpickrThreads;
+  }
+
+  async resolveReviewThread(input: {
+    installationId: string;
+    threadId: string;
+  }) {
+    this.resolvedThreadIds.push(input.threadId);
+    this.nitpickrThreads = this.nitpickrThreads.map((thread) =>
+      thread.threadId === input.threadId
+        ? {
+            ...thread,
+            isResolved: true,
+          }
+        : thread,
+    );
+  }
+
   async createIssueCommentReaction(input: {
     installationId: string;
     owner: string;
@@ -338,6 +474,7 @@ class CapturingReviewModel implements ReviewModel {
       {
         path: "src/api/server.ts",
         line: 13,
+        findingType: "bug",
         severity: "medium",
         category: "maintainability",
         title: "Clarify request parsing",
@@ -429,9 +566,13 @@ function createHarness() {
       webhookUrl: "https://nitpickr.example.com/webhooks/github",
     },
   });
+  const webhookEventStore = new InMemoryWebhookEventStore();
+  const webhookEventService = new WebhookEventService(webhookEventStore);
   const webhookService = new GitHubWebhookService(
     githubAdapter,
     queueScheduler,
+    webhookEventService,
+    undefined,
   );
   const server = createApiServer({
     githubWebhookService: webhookService,
@@ -575,6 +716,7 @@ describe("review flow integration", () => {
       payload,
       headers: {
         "content-type": "application/json",
+        "x-github-delivery": "delivery-1",
         "x-github-event": "pull_request",
         "x-hub-signature-256": createSignature("webhook-secret", payload),
       },
@@ -594,6 +736,8 @@ describe("review flow integration", () => {
         path: "src/api/server.ts",
         line: 12,
         side: "RIGHT",
+        fingerprint:
+          "src/api/server.ts:13:maintainability:clarify_request_parsing",
         body: expect.stringContaining("Clarify request parsing"),
       },
     ]);
@@ -674,6 +818,7 @@ describe("review flow integration", () => {
       payload,
       headers: {
         "content-type": "application/json",
+        "x-github-delivery": "delivery-2",
         "x-github-event": "issue_comment",
         "x-hub-signature-256": createSignature("webhook-secret", payload),
       },
@@ -709,5 +854,201 @@ describe("review flow integration", () => {
       command: "summary",
       actorLogin: "ruben",
     });
+  });
+
+  it("processes synchronize events as commit-delta reviews with full PR context and resolves stale nitpickr threads", async () => {
+    const harness = createHarness();
+    servers.push(harness.server);
+
+    harness.githubApi.files = [
+      {
+        filename: "src/api/server.ts",
+        status: "modified",
+        additions: 2,
+        deletions: 1,
+        patch: ["@@ -10,2 +10,3 @@", " context", "-old", "+new alpha"].join(
+          "\n",
+        ),
+      },
+      {
+        filename: "src/queue/queue-scheduler.ts",
+        status: "modified",
+        additions: 3,
+        deletions: 1,
+        patch: ["@@ -20,1 +20,2 @@", "-old queue", "+new queue"].join("\n"),
+      },
+    ];
+    harness.githubApi.comparedFiles = [
+      {
+        filename: "src/api/server.ts",
+        status: "modified",
+        additions: 2,
+        deletions: 1,
+        patch: ["@@ -10,2 +10,3 @@", " context", "-old", "+new alpha"].join(
+          "\n",
+        ),
+      },
+    ];
+    harness.githubApi.nitpickrThreads = [
+      {
+        threadId: "thread_old",
+        providerCommentId: "comment_old",
+        path: "src/api/server.ts",
+        line: 12,
+        fingerprint:
+          "src/api/server.ts:12:maintainability:clarify_request_parsing",
+        isResolved: false,
+      },
+    ];
+    harness.reviewLifecycleStore.reviewRuns.set("review_run_previous", {
+      id: "review_run_previous",
+      tenantId: "github-installation:123456",
+      repositoryId: "github:99",
+      changeRequestId: "github:rubenspessoa/nitpickr#42",
+      trigger: {
+        type: "pr_opened",
+        actorLogin: "ruben",
+      },
+      mode: "quick",
+      scope: "full_pr",
+      headSha: "cccccccccccccccccccccccccccccccccccccccc",
+      comparedFromSha: null,
+      status: "published",
+      budgets: {
+        maxFiles: 50,
+        maxHunks: 200,
+        maxTokens: 120000,
+        maxComments: 20,
+        maxDurationMs: 300000,
+      },
+      createdAt: "2026-03-09T09:50:00.000Z",
+      updatedAt: "2026-03-09T09:51:00.000Z",
+      completedAt: "2026-03-09T09:51:00.000Z",
+    });
+    harness.reviewLifecycleStore.comments.push({
+      id: "comment_persisted_1",
+      reviewRunId: "review_run_previous",
+      publishedReviewId: "review_1",
+      path: "src/api/server.ts",
+      line: 12,
+      body: "Old nitpickr comment",
+      providerThreadId: "thread_old",
+      providerCommentId: "comment_old",
+      fingerprint:
+        "src/api/server.ts:12:maintainability:clarify_request_parsing",
+      resolvedAt: null,
+      createdAt: "2026-03-09T09:51:00.000Z",
+    });
+    harness.reviewModel.nextResponse = {
+      summary: "This push hardens webhook request parsing.",
+      mermaid: "flowchart TD\nA[Sync] --> B[Review]",
+      findings: [
+        {
+          path: "src/api/server.ts",
+          line: 13,
+          findingType: "bug",
+          severity: "high",
+          category: "correctness",
+          title: "Guard malformed JSON",
+          body: "Malformed payloads can bubble through the webhook path.",
+          fixPrompt:
+            "In `src/api/server.ts` around line 13, guard malformed JSON before processing the webhook.",
+        },
+      ],
+    };
+
+    const payload = JSON.stringify({
+      action: "synchronize",
+      installation: {
+        id: 123456,
+      },
+      repository: {
+        id: 99,
+        name: "nitpickr",
+        owner: {
+          login: "rubenspessoa",
+        },
+        default_branch: "main",
+      },
+      pull_request: {
+        id: 101,
+        number: 42,
+        title: "Improve queue fairness",
+        state: "open",
+        draft: false,
+        user: {
+          login: "ruben",
+        },
+        base: {
+          sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          ref: "main",
+        },
+        head: {
+          sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          ref: "feature",
+        },
+      },
+    });
+
+    const response = await harness.server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      payload,
+      headers: {
+        "content-type": "application/json",
+        "x-github-delivery": "delivery-3",
+        "x-github-event": "pull_request",
+        "x-hub-signature-256": createSignature("webhook-secret", payload),
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+
+    const processed = await harness.worker.runOnce({
+      workerId: "worker_1",
+      perTenantCap: 1,
+    });
+
+    expect(processed).toBe(true);
+    expect(harness.publishClient.reviews).toHaveLength(1);
+    expect(harness.publishClient.reviews[0]?.body).toContain(
+      "## nitpickr commit review",
+    );
+    expect(harness.publishClient.reviews[0]?.body).toContain("Commit:");
+    expect(harness.publishClient.reviews[0]?.body).not.toContain(
+      "# nitpickr review ✨",
+    );
+    expect(harness.publishClient.reviews[0]?.comments).toEqual([
+      {
+        path: "src/api/server.ts",
+        line: 11,
+        side: "RIGHT",
+        fingerprint: "src/api/server.ts:13:correctness:guard_malformed_json",
+        body: expect.stringContaining("Guard malformed JSON"),
+      },
+    ]);
+    expect(harness.reviewModel.prompts[0]?.user).toContain(
+      "Current PR context:",
+    );
+    expect(harness.reviewModel.prompts[0]?.user).toContain(
+      "src/queue/queue-scheduler.ts (+3/-1)",
+    );
+
+    const reviewRun = [
+      ...harness.reviewLifecycleStore.reviewRuns.values(),
+    ].find((candidate) => candidate.id !== "review_run_previous");
+    expect(reviewRun).toMatchObject({
+      scope: "commit_delta",
+      comparedFromSha: "cccccccccccccccccccccccccccccccccccccccc",
+    });
+    expect(harness.githubApi.resolvedThreadIds).toEqual(["thread_old"]);
+    expect(harness.reviewLifecycleStore.resolvedThreadBatches).toEqual([
+      ["thread_old"],
+    ]);
+    expect(
+      harness.reviewLifecycleStore.comments.find(
+        (comment) => comment.providerThreadId === "thread_old",
+      )?.resolvedAt,
+    ).toBe("2026-03-09T10:05:00.000Z");
   });
 });

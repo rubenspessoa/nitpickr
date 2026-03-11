@@ -1,21 +1,22 @@
 import { env } from "node:process";
 
 import { buildRuntime } from "../runtime/build-runtime.js";
-import { GitHubWebhookService } from "./github-webhook-service.js";
 import { createApiServer } from "./server.js";
+import { createSetupAwareGitHubWebhookHandler } from "./setup-aware-webhook-handler.js";
 
 async function main(): Promise<void> {
   const runtime = buildRuntime(env);
   const logger = runtime.logger.child({
     component: "api",
   });
-  const githubWebhookService = new GitHubWebhookService(
-    runtime.githubAdapter,
-    runtime.queueScheduler,
+  const githubWebhookService = createSetupAwareGitHubWebhookHandler({
     logger,
-  );
+    runtime,
+  });
   const server = createApiServer({
     logger,
+    readinessService: runtime.readinessService,
+    setupStatusService: runtime.runtimeConfigService,
     githubWebhookService,
   });
 

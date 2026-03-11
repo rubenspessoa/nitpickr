@@ -1,4 +1,5 @@
 import type { ChangeRequest } from "../domain/types.js";
+import { parseReviewRun } from "../domain/types.js";
 import type {
   PersistedDiscussionEvent,
   PersistedPublishedComment,
@@ -73,14 +74,16 @@ export class PostgresReviewLifecycleStore implements ReviewLifecycleStore {
           change_request_id,
           trigger,
           mode,
+          scope,
           head_sha,
+          compared_from_sha,
           status,
           budgets,
           created_at,
           updated_at,
           completed_at
         )
-        values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb, $10, $11, $12)
+        values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14)
       `,
       [
         reviewRun.id,
@@ -89,7 +92,9 @@ export class PostgresReviewLifecycleStore implements ReviewLifecycleStore {
         reviewRun.changeRequestId,
         JSON.stringify(reviewRun.trigger),
         reviewRun.mode,
+        reviewRun.scope,
         reviewRun.headSha,
+        reviewRun.comparedFromSha,
         reviewRun.status,
         JSON.stringify(reviewRun.budgets),
         reviewRun.createdAt,
@@ -97,6 +102,97 @@ export class PostgresReviewLifecycleStore implements ReviewLifecycleStore {
         reviewRun.completedAt,
       ],
     );
+  }
+
+  async findLatestCompletedReviewRun(
+    changeRequestId: string,
+  ): Promise<PersistedReviewRun | null> {
+    const rows = await this.#client.unsafe<{
+      id: string;
+      tenant_id: string;
+      repository_id: string;
+      change_request_id: string;
+      trigger: string;
+      mode: string;
+      scope: string;
+      head_sha: string;
+      compared_from_sha: string | null;
+      status: string;
+      budgets: string;
+      created_at: string;
+      updated_at: string;
+      completed_at: string | null;
+    }>(
+      `
+        select
+          id,
+          tenant_id,
+          repository_id,
+          change_request_id,
+          trigger,
+          mode,
+          scope,
+          head_sha,
+          compared_from_sha,
+          status,
+          budgets,
+          created_at,
+          updated_at,
+          completed_at
+        from review_runs
+        where change_request_id = $1
+          and completed_at is not null
+        order by completed_at desc
+        limit 1
+      `,
+      [changeRequestId],
+    );
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      ...parseReviewRun({
+        id: row.id,
+        tenantId: row.tenant_id,
+        repositoryId: row.repository_id,
+        changeRequestId: row.change_request_id,
+        trigger: JSON.parse(row.trigger),
+        mode: row.mode,
+        scope: row.scope,
+        headSha: row.head_sha,
+        comparedFromSha: row.compared_from_sha,
+        status: row.status,
+        budgets: JSON.parse(row.budgets),
+      }),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      completedAt: row.completed_at,
+    };
+  }
+
+  async markPublishedCommentsResolved(input: {
+    providerThreadIds: string[];
+    resolvedAt: string;
+  }): Promise<number> {
+    const rows = await this.#client.unsafe<{ resolved_count: number }>(
+      `
+        with resolved as (
+          update published_comments
+          set resolved_at = $2
+          where provider_thread_id = any($1::text[])
+            and resolved_at is null
+          returning id
+        )
+        select count(*)::int as resolved_count
+        from resolved
+      `,
+      [input.providerThreadIds, input.resolvedAt],
+    );
+
+    return rows[0]?.resolved_count ?? 0;
   }
 
   async supersedePreviousRuns(input: {
@@ -166,6 +262,7 @@ export class PostgresReviewLifecycleStore implements ReviewLifecycleStore {
             repository_id,
             path,
             line,
+            finding_type,
             severity,
             category,
             title,
@@ -174,7 +271,7 @@ export class PostgresReviewLifecycleStore implements ReviewLifecycleStore {
             suggested_change,
             created_at
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         `,
         [
           finding.id,
@@ -182,6 +279,7 @@ export class PostgresReviewLifecycleStore implements ReviewLifecycleStore {
           finding.repositoryId,
           finding.path,
           finding.line,
+          finding.findingType,
           finding.severity,
           finding.category,
           finding.title,
@@ -203,9 +301,13 @@ export class PostgresReviewLifecycleStore implements ReviewLifecycleStore {
             path,
             line,
             body,
+            provider_thread_id,
+            provider_comment_id,
+            fingerprint,
+            resolved_at,
             created_at
           )
-          values ($1, $2, $3, $4, $5, $6, $7)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         `,
         [
           comment.id,
@@ -214,6 +316,10 @@ export class PostgresReviewLifecycleStore implements ReviewLifecycleStore {
           comment.path,
           comment.line,
           comment.body,
+          comment.providerThreadId,
+          comment.providerCommentId,
+          comment.fingerprint,
+          comment.resolvedAt,
           comment.createdAt,
         ],
       );

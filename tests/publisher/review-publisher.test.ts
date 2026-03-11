@@ -64,6 +64,7 @@ describe("ReviewPublisher", () => {
         {
           path: "src/queue/queue-scheduler.ts",
           line: 18,
+          findingType: "bug",
           severity: "high",
           category: "correctness",
           title: "Stable ordering breaks",
@@ -94,6 +95,7 @@ describe("ReviewPublisher", () => {
       {
         path: "src/queue/queue-scheduler.ts",
         line: 18,
+        findingType: "safe_suggestion",
         severity: "high",
         category: "correctness",
         title: "Stable ordering breaks",
@@ -124,6 +126,7 @@ describe("ReviewPublisher", () => {
       {
         path: "src/queue/queue-scheduler.ts",
         line: 18,
+        findingType: "question",
         severity: "low",
         category: "style",
         title: "Rename variable for clarity",
@@ -144,6 +147,7 @@ describe("ReviewPublisher", () => {
         {
           path: "src/queue/queue-scheduler.ts",
           line: 13,
+          findingType: "bug",
           severity: "high",
           category: "correctness",
           title: "Stable ordering breaks",
@@ -169,6 +173,8 @@ describe("ReviewPublisher", () => {
         path: "src/queue/queue-scheduler.ts",
         line: 11,
         side: "RIGHT",
+        fingerprint:
+          "src/queue/queue-scheduler.ts:13:correctness:stable_ordering_breaks",
         body: expect.stringContaining("Stable ordering breaks"),
       },
     ]);
@@ -186,6 +192,7 @@ describe("ReviewPublisher", () => {
         name: "nitpickr",
       },
       pullNumber: 42,
+      publishMode: "pr_summary",
       result: {
         summary: "Queue fairness improved.",
         mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
@@ -193,6 +200,7 @@ describe("ReviewPublisher", () => {
           {
             path: "src/queue/queue-scheduler.ts",
             line: 18,
+            findingType: "bug",
             severity: "high",
             category: "correctness",
             title: "Stable ordering breaks",
@@ -239,6 +247,7 @@ describe("ReviewPublisher", () => {
         name: "nitpickr",
       },
       pullNumber: 42,
+      publishMode: "pr_summary",
       result: {
         summary: "Queue fairness improved.",
         mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
@@ -248,6 +257,156 @@ describe("ReviewPublisher", () => {
 
     expect(published.reviewId).toBe("review_existing");
     expect(client.calls).toHaveLength(0);
+  });
+
+  it("does not create another summary review once nitpickr already posted one", async () => {
+    const client = new FakePublishReviewClient();
+    client.existingReviews = [
+      {
+        reviewId: "review_summary",
+        body: [
+          "<!-- nitpickr:summary -->",
+          "<!-- nitpickr:review-run:review_run_1 -->",
+          "# nitpickr review ✨",
+        ].join("\n"),
+      },
+    ];
+    const publisher = new ReviewPublisher(client);
+
+    const published = await publisher.publish({
+      reviewRunId: "review_run_2",
+      installationId: "123456",
+      repository: {
+        owner: "rubenspessoa",
+        name: "nitpickr",
+      },
+      pullNumber: 42,
+      publishMode: "pr_summary",
+      result: {
+        summary: "Queue fairness improved.",
+        mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+        findings: [],
+      },
+    });
+
+    expect(published.reviewId).toBe("review_summary");
+    expect(client.calls).toHaveLength(0);
+  });
+
+  it("publishes later review comments without another visible summary", async () => {
+    const client = new FakePublishReviewClient();
+    client.existingReviews = [
+      {
+        reviewId: "review_summary",
+        body: [
+          "<!-- nitpickr:summary -->",
+          "<!-- nitpickr:review-run:review_run_1 -->",
+          "# nitpickr review ✨",
+        ].join("\n"),
+      },
+    ];
+    const publisher = new ReviewPublisher(client);
+
+    const published = await publisher.publish({
+      reviewRunId: "review_run_2",
+      installationId: "123456",
+      repository: {
+        owner: "rubenspessoa",
+        name: "nitpickr",
+      },
+      pullNumber: 42,
+      publishMode: "commit_summary",
+      reviewedCommitSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      commitSummaryCounts: {
+        newFindings: 1,
+        resolvedThreads: 0,
+        stillRelevantFindings: 1,
+      },
+      result: {
+        summary: "This push tightens queue ordering checks.",
+        mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+        findings: [
+          {
+            path: "src/queue/queue-scheduler.ts",
+            line: 18,
+            findingType: "bug",
+            severity: "high",
+            category: "correctness",
+            title: "Stable ordering breaks",
+            body: "Equal priorities do not preserve insertion order.",
+            fixPrompt:
+              "Refactor the queue to preserve insertion order for equal priorities.",
+          },
+        ],
+      },
+      files: [
+        {
+          path: "src/queue/queue-scheduler.ts",
+          patch: [
+            "@@ -17,1 +17,2 @@",
+            " context",
+            "+inserted",
+            "+stable ordering",
+          ].join("\n"),
+        },
+      ],
+    });
+
+    expect(published.reviewId).toBe("review_1");
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0]?.body).toContain(
+      "<!-- nitpickr:review-run:review_run_2 -->",
+    );
+    expect(client.calls[0]?.body).toContain("nitpickr commit review");
+    expect(client.calls[0]?.body).toContain("`bbbbbbb`");
+    expect(client.calls[0]?.body).toContain("New findings: 1");
+    expect(client.calls[0]?.comments).toHaveLength(1);
+  });
+
+  it("publishes a visible clean commit summary even when there are no findings", async () => {
+    const client = new FakePublishReviewClient();
+    client.existingReviews = [
+      {
+        reviewId: "review_summary",
+        body: [
+          "<!-- nitpickr:summary -->",
+          "<!-- nitpickr:review-run:review_run_1 -->",
+          "# nitpickr review ✨",
+        ].join("\n"),
+      },
+    ];
+    const publisher = new ReviewPublisher(client);
+
+    const published = await publisher.publish({
+      reviewRunId: "review_run_3",
+      installationId: "123456",
+      repository: {
+        owner: "rubenspessoa",
+        name: "nitpickr",
+      },
+      pullNumber: 42,
+      publishMode: "commit_summary",
+      reviewedCommitSha: "cccccccccccccccccccccccccccccccccccccccc",
+      commitSummaryCounts: {
+        newFindings: 0,
+        resolvedThreads: 2,
+        stillRelevantFindings: 0,
+      },
+      result: {
+        summary: "This push mainly refines webhook validation.",
+        mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+        findings: [],
+      },
+    });
+
+    expect(published.reviewId).toBe("review_1");
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0]?.comments).toHaveLength(0);
+    expect(client.calls[0]?.body).toContain(
+      "No concerning issues found in this push.",
+    );
+    expect(client.calls[0]?.body).toContain("final human review before merge");
+    expect(client.calls[0]?.body).toContain("Resolved stale threads: 2");
   });
 
   it("rejects publish calls with no repository owner", async () => {
@@ -262,6 +421,7 @@ describe("ReviewPublisher", () => {
           name: "nitpickr",
         },
         pullNumber: 42,
+        publishMode: "pr_summary",
         result: {
           summary: "Queue fairness improved.",
           mermaid: "flowchart TD\nA[Queue] --> B[Publish]",

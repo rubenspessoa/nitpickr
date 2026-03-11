@@ -80,7 +80,9 @@ describe("domain types", () => {
         actorLogin: "ruben",
       },
       mode: "quick",
+      scope: "full_pr",
       headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      comparedFromSha: null,
       status: "queued",
       budgets: {
         maxFiles: 40,
@@ -113,7 +115,9 @@ describe("domain types", () => {
           actorLogin: "ruben",
         },
         mode: "quick",
+        scope: "full_pr",
         headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        comparedFromSha: null,
         status: "queued",
         budgets: {
           maxFiles: 40,
@@ -133,6 +137,7 @@ describe("domain types", () => {
       repositoryId: "repo_1",
       path: "src/review/queue.ts",
       line: 18,
+      findingType: "safe_suggestion",
       severity: "high",
       category: "correctness",
       title: "Queue ordering is unstable",
@@ -145,5 +150,26 @@ describe("domain types", () => {
 
     expect(finding.fixPrompt).toContain("queue sorting logic");
     expect(finding.suggestedChange).toContain("left.sequence");
+  });
+
+  it("rejects suggested changes on non-safe suggestion findings", () => {
+    expect(() =>
+      parseReviewFinding({
+        id: "finding_1",
+        reviewRunId: "run_1",
+        repositoryId: "repo_1",
+        path: "src/review/queue.ts",
+        line: 18,
+        findingType: "bug",
+        severity: "high",
+        category: "correctness",
+        title: "Queue ordering is unstable",
+        body: "Jobs with the same priority can be reordered unexpectedly.",
+        fixPrompt:
+          "Rewrite the queue sorting logic to preserve insertion order for equal priorities.",
+        suggestedChange:
+          "return left.priority - right.priority || left.sequence - right.sequence;",
+      }),
+    ).toThrow(/suggestedChange/i);
   });
 });

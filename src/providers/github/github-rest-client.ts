@@ -23,6 +23,11 @@ interface GitHubPullRequest {
   };
 }
 
+function extractFingerprintMarker(body: string): string | null {
+  const match = /<!--\s*nitpickr:fingerprint:([a-z0-9:_-]+)\s*-->/i.exec(body);
+  return match?.[1] ?? null;
+}
+
 export interface GitHubRestClientOptions {
   baseUrl?: string;
 }
@@ -118,6 +123,39 @@ export class GitHubRestClient {
         created_at: string;
       }>
     >;
+  }
+
+  async comparePullRequestRange(input: {
+    installationId: string;
+    owner: string;
+    repo: string;
+    baseSha: string;
+    headSha: string;
+  }): Promise<
+    Array<{
+      filename: string;
+      status: "added" | "modified" | "removed" | "renamed";
+      additions: number;
+      deletions: number;
+      patch?: string;
+      previous_filename?: string;
+    }>
+  > {
+    const payload = (await this.#requestJson(
+      input.installationId,
+      `/repos/${input.owner}/${input.repo}/compare/${input.baseSha}...${input.headSha}`,
+    )) as {
+      files?: Array<{
+        filename: string;
+        status: "added" | "modified" | "removed" | "renamed";
+        additions: number;
+        deletions: number;
+        patch?: string;
+        previous_filename?: string;
+      }>;
+    };
+
+    return payload.files ?? [];
   }
 
   async listPullRequestReviews(input: {
@@ -378,6 +416,147 @@ export class GitHubRestClient {
     }
   }
 
+  async listNitpickrReviewThreads(input: {
+    installationId: string;
+    owner: string;
+    repo: string;
+    pullNumber: number;
+    botLogins: string[];
+  }): Promise<
+    Array<{
+      threadId: string;
+      providerCommentId: string;
+      path: string;
+      line: number;
+      fingerprint: string;
+      isResolved: boolean;
+    }>
+  > {
+    const payload = (await this.#requestGraphQL(
+      input.installationId,
+      `
+        query NitpickrReviewThreads($owner: String!, $repo: String!, $pullNumber: Int!) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $pullNumber) {
+              reviewThreads(first: 100) {
+                nodes {
+                  id
+                  isResolved
+                  comments(first: 20) {
+                    nodes {
+                      id
+                      body
+                      path
+                      line
+                      author {
+                        login
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `,
+      {
+        owner: input.owner,
+        repo: input.repo,
+        pullNumber: input.pullNumber,
+      },
+    )) as {
+      repository?: {
+        pullRequest?: {
+          reviewThreads?: {
+            nodes?: Array<{
+              id?: string;
+              isResolved?: boolean;
+              comments?: {
+                nodes?: Array<{
+                  id?: string;
+                  body?: string;
+                  path?: string;
+                  line?: number;
+                  author?: {
+                    login?: string;
+                  };
+                }>;
+              };
+            }>;
+          };
+        };
+      };
+    };
+
+    const threads = payload.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+
+    return threads.flatMap((thread) => {
+      if (!thread.id) {
+        return [];
+      }
+
+      const matchingComment =
+        thread.comments?.nodes?.find((comment) => {
+          const authorLogin = comment.author?.login?.toLowerCase();
+          if (!authorLogin || !comment.body || !comment.path || !comment.line) {
+            return false;
+          }
+
+          return (
+            input.botLogins.some(
+              (botLogin) => botLogin.toLowerCase() === authorLogin,
+            ) && extractFingerprintMarker(comment.body) !== null
+          );
+        }) ?? null;
+
+      if (
+        !matchingComment?.id ||
+        !matchingComment.path ||
+        !matchingComment.line
+      ) {
+        return [];
+      }
+
+      const fingerprint = extractFingerprintMarker(matchingComment.body ?? "");
+      if (!fingerprint) {
+        return [];
+      }
+
+      return [
+        {
+          threadId: thread.id,
+          providerCommentId: matchingComment.id,
+          path: matchingComment.path,
+          line: matchingComment.line,
+          fingerprint,
+          isResolved: thread.isResolved ?? false,
+        },
+      ];
+    });
+  }
+
+  async resolveReviewThread(input: {
+    installationId: string;
+    threadId: string;
+  }): Promise<void> {
+    await this.#requestGraphQL(
+      input.installationId,
+      `
+        mutation ResolveNitpickrReviewThread($threadId: ID!) {
+          resolveReviewThread(input: { threadId: $threadId }) {
+            thread {
+              id
+              isResolved
+            }
+          }
+        }
+      `,
+      {
+        threadId: input.threadId,
+      },
+    );
+  }
+
   async publishPullRequestReview(input: {
     installationId: string;
     owner: string;
@@ -423,6 +602,42 @@ export class GitHubRestClient {
     }
 
     return response.json();
+  }
+
+  async #requestGraphQL(
+    installationId: string,
+    query: string,
+    variables: Record<string, unknown>,
+  ): Promise<unknown> {
+    const response = await this.#request(installationId, "/graphql", {
+      method: "POST",
+      body: JSON.stringify({
+        query,
+        variables,
+      }),
+    });
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(
+        `GitHub request failed with status ${response.status}: ${details}`,
+      );
+    }
+
+    const payload = (await response.json()) as {
+      data?: unknown;
+      errors?: Array<{
+        message?: string;
+      }>;
+    };
+    if (payload.errors && payload.errors.length > 0) {
+      throw new Error(
+        `GitHub GraphQL request failed: ${payload.errors
+          .map((error) => error.message ?? "Unknown GraphQL error.")
+          .join("; ")}`,
+      );
+    }
+
+    return payload.data ?? {};
   }
 
   async #request(

@@ -35,6 +35,10 @@ export interface PersistedPublishedComment {
   path: string;
   line: number;
   body: string;
+  providerThreadId: string | null;
+  providerCommentId: string | null;
+  fingerprint: string | null;
+  resolvedAt: string | null;
   createdAt: string;
 }
 
@@ -55,6 +59,13 @@ export interface PersistedDiscussionEvent {
 export interface ReviewLifecycleStore {
   upsertChangeRequest(changeRequest: ChangeRequest): Promise<void>;
   createReviewRun(reviewRun: PersistedReviewRun): Promise<void>;
+  findLatestCompletedReviewRun(
+    changeRequestId: string,
+  ): Promise<PersistedReviewRun | null>;
+  markPublishedCommentsResolved(input: {
+    providerThreadIds: string[];
+    resolvedAt: string;
+  }): Promise<number>;
   supersedePreviousRuns(input: {
     changeRequestId: string;
     reviewRunId: string;
@@ -103,6 +114,8 @@ export class ReviewLifecycleService {
     changeRequest: ChangeRequest;
     trigger: ReviewTrigger;
     mode: ReviewRun["mode"];
+    scope: ReviewRun["scope"];
+    comparedFromSha: ReviewRun["comparedFromSha"];
     budgets: ReviewRunBudgets;
     discussionSnapshot: DiscussionSnapshotEntry[];
   }): Promise<string> {
@@ -117,7 +130,9 @@ export class ReviewLifecycleService {
       changeRequestId: input.changeRequest.id,
       trigger: input.trigger,
       mode: input.mode,
+      scope: input.scope,
       headSha: input.changeRequest.headSha,
+      comparedFromSha: input.comparedFromSha,
       status: "running",
       budgets: input.budgets,
       createdAt: timestamp,
@@ -152,6 +167,25 @@ export class ReviewLifecycleService {
     return reviewRunId;
   }
 
+  async getLatestCompletedReview(
+    changeRequestId: string,
+  ): Promise<PersistedReviewRun | null> {
+    return this.#store.findLatestCompletedReviewRun(changeRequestId);
+  }
+
+  async markPublishedCommentsResolved(
+    providerThreadIds: string[],
+  ): Promise<number> {
+    if (providerThreadIds.length === 0) {
+      return 0;
+    }
+
+    return this.#store.markPublishedCommentsResolved({
+      providerThreadIds,
+      resolvedAt: this.#now().toISOString(),
+    });
+  }
+
   async completeReview(input: {
     reviewRunId: string;
     repositoryId: string;
@@ -162,6 +196,10 @@ export class ReviewLifecycleService {
       path: string;
       line: number;
       body: string;
+      providerThreadId?: string | null;
+      providerCommentId?: string | null;
+      fingerprint?: string | null;
+      resolvedAt?: string | null;
     }>;
   }): Promise<void> {
     const completedAt = this.#now().toISOString();
@@ -178,6 +216,7 @@ export class ReviewLifecycleService {
         repositoryId: input.repositoryId,
         path: finding.path,
         line: finding.line,
+        findingType: finding.findingType,
         severity: finding.severity,
         category: finding.category,
         title: finding.title,
@@ -193,6 +232,10 @@ export class ReviewLifecycleService {
         path: comment.path,
         line: comment.line,
         body: comment.body,
+        providerThreadId: comment.providerThreadId ?? null,
+        providerCommentId: comment.providerCommentId ?? null,
+        fingerprint: comment.fingerprint ?? null,
+        resolvedAt: comment.resolvedAt ?? null,
         createdAt: completedAt,
       })),
       completedAt,

@@ -22,6 +22,20 @@ describe("PromptBuilder", () => {
           },
         ],
       },
+      contextFiles: [
+        {
+          path: "src/queue/queue-scheduler.ts",
+          patch: "@@ -1,4 +1,8 @@\n+preserve order",
+          additions: 8,
+          deletions: 2,
+        },
+        {
+          path: "src/api/server.ts",
+          patch: "@@ -10,1 +10,2 @@\n+validate body",
+          additions: 2,
+          deletions: 1,
+        },
+      ],
       instructionText:
         "strictness: balanced\nfocusAreas: queue fairness, prompt validation",
       memory: [
@@ -47,6 +61,10 @@ describe("PromptBuilder", () => {
     );
     expect(prompt.system).toContain("Lead with the issue");
     expect(prompt.system).toContain("suggestedChange");
+    expect(prompt.system).toContain("findingType");
+    expect(prompt.system).toContain(
+      "'bug' | 'safe_suggestion' | 'question' | 'teaching_note'",
+    );
     expect(prompt.system).toContain(
       "Only return suggestedChange when the fix is small, local, and safe to apply inline on GitHub.",
     );
@@ -61,6 +79,9 @@ describe("PromptBuilder", () => {
     expect(prompt.user).toContain("queue fairness");
     expect(prompt.user).toContain("unstable ordering fixes");
     expect(prompt.user).toContain("src/queue/queue-scheduler.ts");
+    expect(prompt.user).toContain("Current PR context:");
+    expect(prompt.user).toContain("src/api/server.ts (+2/-1)");
+    expect(prompt.user).toContain("Primary review scope:");
   });
 
   it("rejects empty review chunks", () => {

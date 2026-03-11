@@ -3,6 +3,7 @@ import { targetReviewCommentLine } from "./review-comment-targeter.js";
 export interface PublishedFinding {
   path: string;
   line: number;
+  findingType: "bug" | "safe_suggestion" | "question" | "teaching_note";
   severity: "low" | "medium" | "high" | "critical";
   category:
     | "correctness"
@@ -55,6 +56,10 @@ export interface PublishedInlineComment {
   line: number;
   side: "RIGHT";
   body: string;
+  fingerprint: string;
+  providerThreadId?: string | null;
+  providerCommentId?: string | null;
+  resolvedAt?: string | null;
 }
 
 const severityEmoji: Record<PublishedFinding["severity"], string> = {
@@ -81,6 +86,15 @@ function renderSignal(finding: PublishedFinding): string {
   return `${severityEmoji[finding.severity]} ${categoryEmoji[finding.category]}`;
 }
 
+function fingerprintFinding(finding: PublishedFinding): string {
+  return [
+    finding.path.trim().toLowerCase(),
+    finding.line,
+    finding.category,
+    finding.title.trim().toLowerCase().replace(/\s+/g, "_"),
+  ].join(":");
+}
+
 function renderGitHubSuggestion(suggestedChange: string | undefined): string[] {
   if (!suggestedChange) {
     return [];
@@ -103,6 +117,23 @@ function summarizeFindingCount(count: number): string {
 
 function buildReviewRunMarker(reviewRunId: string): string {
   return `<!-- nitpickr:review-run:${reviewRunId} -->`;
+}
+
+function buildSummaryMarker(): string {
+  return "<!-- nitpickr:summary -->";
+}
+
+function shortSha(sha: string | undefined): string | null {
+  if (!sha) {
+    return null;
+  }
+
+  const trimmed = sha.trim();
+  if (trimmed.length < 7) {
+    return null;
+  }
+
+  return trimmed.slice(0, 7);
 }
 
 export class ReviewPublisher {
@@ -131,6 +162,7 @@ export class ReviewPublisher {
           ].join("\n");
 
     return [
+      buildSummaryMarker(),
       buildReviewRunMarker(input.reviewRunId),
       "",
       "# nitpickr review ✨",
@@ -151,6 +183,41 @@ export class ReviewPublisher {
       "",
       "</details>",
     ].join("\n");
+  }
+
+  buildFollowUpBody(reviewRunId: string): string {
+    return buildReviewRunMarker(reviewRunId);
+  }
+
+  buildCommitSummaryBody(input: {
+    reviewRunId: string;
+    summary: string;
+    reviewedCommitSha?: string;
+    counts: {
+      newFindings: number;
+      resolvedThreads: number;
+      stillRelevantFindings: number;
+    };
+  }): string {
+    const commitLabel = shortSha(input.reviewedCommitSha);
+    const cleanState = input.counts.newFindings === 0;
+
+    return [
+      buildReviewRunMarker(input.reviewRunId),
+      "",
+      "## nitpickr commit review",
+      "",
+      commitLabel ? `**Commit:** \`${commitLabel}\`` : null,
+      `> ${input.summary.trim()}`,
+      "",
+      cleanState
+        ? "No concerning issues found in this push. Please do a final human review before merge."
+        : `New findings: ${input.counts.newFindings}`,
+      `Resolved stale threads: ${input.counts.resolvedThreads}`,
+      `Still relevant findings: ${input.counts.stillRelevantFindings}`,
+    ]
+      .filter((line): line is string => line !== null)
+      .join("\n");
   }
 
   buildInlineComments(
@@ -194,6 +261,7 @@ export class ReviewPublisher {
           path: finding.path,
           line,
           side: "RIGHT",
+          fingerprint: fingerprintFinding(finding),
           body: [
             `${renderSignal(finding)} **${finding.title}**`,
             `**Where:** \`${finding.path}:${line}\``,
@@ -201,6 +269,7 @@ export class ReviewPublisher {
             `${finding.body}`,
             "",
             ...renderGitHubSuggestion(finding.suggestedChange),
+            `<!-- nitpickr:fingerprint:${fingerprintFinding(finding)} -->`,
             "<details>",
             "<summary>🤖 AI prompt</summary>",
             "",
@@ -223,6 +292,13 @@ export class ReviewPublisher {
       name: string;
     };
     pullNumber: number;
+    publishMode: "pr_summary" | "commit_summary";
+    reviewedCommitSha?: string;
+    commitSummaryCounts?: {
+      newFindings: number;
+      resolvedThreads: number;
+      stillRelevantFindings: number;
+    };
     result: {
       summary: string;
       mermaid: string;
@@ -243,13 +319,13 @@ export class ReviewPublisher {
       throw new Error("pullNumber must be positive.");
     }
 
-    const existingReview = (
-      await this.#client.listPullRequestReviews({
-        installationId: input.installationId,
-        repository: input.repository,
-        pullNumber: input.pullNumber,
-      })
-    ).find((review) =>
+    const existingReviews = await this.#client.listPullRequestReviews({
+      installationId: input.installationId,
+      repository: input.repository,
+      pullNumber: input.pullNumber,
+    });
+
+    const existingReview = existingReviews.find((review) =>
       review.body.includes(buildReviewRunMarker(input.reviewRunId)),
     );
 
@@ -259,22 +335,55 @@ export class ReviewPublisher {
       };
     }
 
+    const existingSummaryReview = existingReviews.find((review) =>
+      review.body.includes(buildSummaryMarker()),
+    );
+    const comments =
+      input.files === undefined
+        ? this.buildInlineComments(input.result.findings)
+        : this.buildInlineComments(input.result.findings, {
+            files: input.files,
+          });
+
+    if (
+      input.publishMode === "pr_summary" &&
+      existingSummaryReview &&
+      comments.length === 0
+    ) {
+      return {
+        reviewId: existingSummaryReview.reviewId,
+      };
+    }
+
+    const body =
+      input.publishMode === "commit_summary"
+        ? this.buildCommitSummaryBody({
+            reviewRunId: input.reviewRunId,
+            summary: input.result.summary,
+            counts: input.commitSummaryCounts ?? {
+              newFindings: input.result.findings.length,
+              resolvedThreads: 0,
+              stillRelevantFindings: input.result.findings.length,
+            },
+            ...(input.reviewedCommitSha
+              ? { reviewedCommitSha: input.reviewedCommitSha }
+              : {}),
+          })
+        : existingSummaryReview
+          ? this.buildFollowUpBody(input.reviewRunId)
+          : this.buildSummaryBody({
+              reviewRunId: input.reviewRunId,
+              summary: input.result.summary,
+              mermaid: input.result.mermaid,
+              findings: input.result.findings,
+            });
+
     return this.#client.publishPullRequestReview({
       installationId: input.installationId,
       repository: input.repository,
       pullNumber: input.pullNumber,
-      body: this.buildSummaryBody({
-        reviewRunId: input.reviewRunId,
-        summary: input.result.summary,
-        mermaid: input.result.mermaid,
-        findings: input.result.findings,
-      }),
-      comments:
-        input.files === undefined
-          ? this.buildInlineComments(input.result.findings)
-          : this.buildInlineComments(input.result.findings, {
-              files: input.files,
-            }),
+      body,
+      comments,
     });
   }
 }

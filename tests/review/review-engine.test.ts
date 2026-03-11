@@ -49,6 +49,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/queue/a.ts",
             line: 12,
+            findingType: "bug",
             severity: "high",
             category: "correctness",
             title: "Ordering breaks for equal priority",
@@ -102,6 +103,26 @@ describe("ReviewEngine", () => {
           patch: "@@ -1,1 +1,20 @@\n+abcdefghijklmnopqrst",
         },
       ],
+      contextFiles: [
+        {
+          path: "src/queue/a.ts",
+          additions: 10,
+          deletions: 2,
+          patch: "@@ -1,1 +1,20 @@\n+12345678901234567890",
+        },
+        {
+          path: "src/queue/b.ts",
+          additions: 8,
+          deletions: 1,
+          patch: "@@ -1,1 +1,20 @@\n+abcdefghijklmnopqrst",
+        },
+        {
+          path: "src/api/server.ts",
+          additions: 3,
+          deletions: 1,
+          patch: "@@ -1,1 +1,5 @@\n+validate body",
+        },
+      ],
       instructionText: "strictness: balanced",
       memory: [],
       commentBudget: 10,
@@ -114,6 +135,8 @@ describe("ReviewEngine", () => {
     expect(result.mermaid).toContain("sequenceDiagram");
     expect(result.mermaid).toContain("queue->>sort: Prepare ordering");
     expect(result.mermaid).toContain("sort->>publish: Publish comments");
+    expect(model.prompts[0]).toContain("Current PR context:");
+    expect(model.prompts[0]).toContain("src/api/server.ts (+3/-1)");
   });
 
   it("caps findings to the configured comment budget", async () => {
@@ -138,6 +161,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/queue/a.ts",
             line: 12,
+            findingType: "bug",
             severity: "critical",
             category: "correctness",
             title: "Critical bug",
@@ -147,6 +171,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/queue/b.ts",
             line: 18,
+            findingType: "teaching_note",
             severity: "low",
             category: "maintainability",
             title: "Minor issue",
@@ -202,6 +227,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/queue/b.ts",
             line: 30,
+            findingType: "bug",
             severity: "medium",
             category: "maintainability",
             title: "Extract duplicate branch",
@@ -211,6 +237,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/queue/a.ts",
             line: 12,
+            findingType: "bug",
             severity: "high",
             category: "correctness",
             title: "Ordering breaks for equal priority",
@@ -239,6 +266,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/queue/a.ts",
             line: 12,
+            findingType: "bug",
             severity: "critical",
             category: "correctness",
             title: "Ordering breaks for equal priority",
@@ -248,6 +276,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/queue/a.ts",
             line: 40,
+            findingType: "question",
             severity: "medium",
             category: "testing",
             title: "Add a regression test",
@@ -353,6 +382,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/queue/a.ts",
             line: 12,
+            findingType: "safe_suggestion",
             severity: "minor",
             category: "robustness",
             title: "Guard missing state",
@@ -421,6 +451,7 @@ describe("ReviewEngine", () => {
           {
             path: "",
             line: 12,
+            findingType: "bug",
             severity: "minor",
             category: "robustness",
             title: "Bad finding",
@@ -430,6 +461,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/queue/a.ts",
             line: 18,
+            findingType: "bug",
             severity: "major",
             category: "performance",
             title: "Avoid repeated scans",
@@ -492,6 +524,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/api/server.ts",
             line: 27,
+            findingType: "bug",
             severity: "medium",
             category: "maintainability",
             title: "Clarify parsing path",
@@ -555,6 +588,7 @@ describe("ReviewEngine", () => {
           {
             path: "src/api/server.ts",
             line: 27,
+            findingType: "safe_suggestion",
             severity: "medium",
             category: "maintainability",
             title: "Extract request validation",
@@ -593,6 +627,77 @@ describe("ReviewEngine", () => {
         suggestedChange: undefined,
       }),
     ]);
+  });
+
+  it("normalizes finding types and strips suggested changes from non-safe findings", async () => {
+    const model = new FakeReviewModel([
+      {
+        summary: "Summary",
+        findings: [
+          {
+            path: "src/queue/a.ts",
+            line: 12,
+            findingType: "suggestion",
+            severity: "medium",
+            category: "maintainability",
+            title: "Extract a helper",
+            body: "This branch repeats logic twice.",
+            fixPrompt: "Extract a helper for the repeated branch.",
+            suggestedChange: "return buildTenantCountMap(runningJobs);",
+          },
+          {
+            path: "src/queue/a.ts",
+            line: 18,
+            findingType: "bug",
+            severity: "high",
+            category: "correctness",
+            title: "Ordering breaks",
+            body: "Stable ordering is lost for equal priorities.",
+            fixPrompt: "Preserve insertion order for equal priorities.",
+            suggestedChange: "return left.sequence - right.sequence;",
+          },
+        ],
+      },
+    ]);
+
+    const engine = new ReviewEngine(model);
+    const result = await engine.review({
+      changeRequest: {
+        title: "Improve queue fairness",
+        number: 42,
+      },
+      files: [
+        {
+          path: "src/queue/a.ts",
+          additions: 10,
+          deletions: 2,
+          patch: "@@ -1,1 +1,20 @@\n+stable ordering",
+        },
+      ],
+      instructionText: "strictness: balanced",
+      memory: [],
+      commentBudget: 10,
+    });
+
+    const suggestionFinding = result.findings.find(
+      (finding) => finding.findingType === "safe_suggestion",
+    );
+    const bugFinding = result.findings.find(
+      (finding) => finding.title === "Ordering breaks",
+    );
+
+    expect(suggestionFinding).toEqual(
+      expect.objectContaining({
+        findingType: "safe_suggestion",
+        suggestedChange: "return buildTenantCountMap(runningJobs);",
+      }),
+    );
+    expect(bugFinding).toEqual(
+      expect.objectContaining({
+        findingType: "bug",
+        suggestedChange: undefined,
+      }),
+    );
   });
 
   it("rejects malformed top-level model output", async () => {

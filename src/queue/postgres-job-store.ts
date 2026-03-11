@@ -314,4 +314,35 @@ export class PostgresJobStore implements JobStore {
 
     return rows[0]?.canceled_count ?? 0;
   }
+
+  async requeueStaleRunningJobs(input: {
+    activeWorkerIds: string[];
+    staleStartedBefore: Date;
+    recoveredAt: Date;
+  }): Promise<number> {
+    const rows = await this.#client.unsafe<{ recovered_count: number }>(
+      `
+        with recovered as (
+          update jobs
+          set status = 'queued',
+              scheduled_at = $3,
+              started_at = null,
+              worker_id = null,
+              last_error = 'Recovered stale running job after worker heartbeat timeout.'
+          where status = 'running'
+            and started_at <= $1
+            and (
+              worker_id is null
+              or worker_id <> all($2::text[])
+            )
+          returning id
+        )
+        select count(*)::int as recovered_count
+        from recovered
+      `,
+      [input.staleStartedBefore, input.activeWorkerIds, input.recoveredAt],
+    );
+
+    return rows[0]?.recovered_count ?? 0;
+  }
 }

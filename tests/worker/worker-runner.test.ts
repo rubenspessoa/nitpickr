@@ -782,6 +782,8 @@ describe("WorkerRunner", () => {
           throw new Error("legacy review path should not be used");
         },
         async reviewWithDiagnostics(input) {
+          expect(["full_pr", "commit_delta"]).toContain(input.scope);
+          expect(["off", "balanced"]).toContain(input.optimizationMode);
           expect(input.feedbackSignals).toEqual([
             {
               fingerprint:
@@ -831,6 +833,24 @@ describe("WorkerRunner", () => {
                 },
               },
             ],
+            promptUsage: {
+              beforeCompaction: {
+                chunkCount: 1,
+                primaryPatchChars: 72,
+                contextPatchChars: 0,
+                instructionChars: 64,
+                memoryChars: 0,
+                estimatedPromptTokens: 34,
+              },
+              afterCompaction: {
+                chunkCount: 1,
+                primaryPatchChars: 35,
+                contextPatchChars: 0,
+                instructionChars: 19,
+                memoryChars: 0,
+                estimatedPromptTokens: 14,
+              },
+            },
           };
         },
       },

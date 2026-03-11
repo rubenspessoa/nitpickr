@@ -10,6 +10,7 @@ import type {
 import type { ReviewPublisher } from "../publisher/review-publisher.js";
 import type { ReviewStatusPublisher } from "../publisher/review-status-publisher.js";
 import type { QueueJob, QueueScheduler } from "../queue/queue-scheduler.js";
+import type { PromptOptimizationMode } from "../review/prompt-payload-optimizer.js";
 import type {
   ReviewEngine,
   ReviewEngineResult,
@@ -23,6 +24,17 @@ import {
 } from "../review/reviewer-chat-service.js";
 
 const REVIEW_DURATION_BUDGET_MS = 300_000;
+
+function emptyPromptUsageSnapshot() {
+  return {
+    chunkCount: 0,
+    primaryPatchChars: 0,
+    contextPatchChars: 0,
+    instructionChars: 0,
+    memoryChars: 0,
+    estimatedPromptTokens: 0,
+  };
+}
 
 type ReviewFailureClass =
   | "config_setup"
@@ -515,6 +527,7 @@ export interface InstructionBundleLoader {
 
 export interface WorkerRunnerDependencies {
   logger?: Logger;
+  promptOptimizationMode?: PromptOptimizationMode;
   queueScheduler: Pick<
     QueueScheduler,
     "claimNextJobs" | "cancelSupersededReviewJobs" | "completeJob" | "failJob"
@@ -562,6 +575,7 @@ export interface WorkerRunnerDependencies {
 
 export class WorkerRunner {
   readonly #logger: Logger;
+  readonly #promptOptimizationMode: PromptOptimizationMode;
   readonly #queueScheduler: WorkerRunnerDependencies["queueScheduler"];
   readonly #githubAdapter: WorkerRunnerDependencies["githubAdapter"];
   readonly #instructionBundleLoader: WorkerRunnerDependencies["instructionBundleLoader"];
@@ -581,6 +595,7 @@ export class WorkerRunner {
     this.#logger = (input.logger ?? noopLogger).child({
       component: "worker-runner",
     });
+    this.#promptOptimizationMode = input.promptOptimizationMode ?? "balanced";
     this.#queueScheduler = input.queueScheduler;
     this.#githubAdapter = input.githubAdapter;
     this.#instructionBundleLoader = input.instructionBundleLoader;
@@ -755,6 +770,7 @@ export class WorkerRunner {
         repositoryId: job.repositoryId,
         mode: payload.mode,
         scope: reviewScope,
+        optimizationMode: this.#promptOptimizationMode,
         comparedFromSha,
         reviewableFileCount: reviewPlan.files.length,
         summaryOnly: reviewPlan.summaryOnly,
@@ -866,6 +882,10 @@ export class WorkerRunner {
                 findings: [],
               },
               rejectedFindings: [],
+              promptUsage: {
+                beforeCompaction: emptyPromptUsageSnapshot(),
+                afterCompaction: emptyPromptUsageSnapshot(),
+              },
             }
           : await (async () => {
               try {
@@ -875,6 +895,8 @@ export class WorkerRunner {
                     number: context.changeRequest.number,
                   },
                   files: reviewPlan.files,
+                  scope: reviewScope,
+                  optimizationMode: this.#promptOptimizationMode,
                   instructionText: this.#renderInstructionText(
                     instructionBundle,
                     memories,
@@ -920,6 +942,10 @@ export class WorkerRunner {
                 return {
                   result: await this.#reviewEngine.review(reviewInput),
                   rejectedFindings: [],
+                  promptUsage: {
+                    beforeCompaction: emptyPromptUsageSnapshot(),
+                    afterCompaction: emptyPromptUsageSnapshot(),
+                  },
                 };
               } catch (error) {
                 throw classifyReviewError("review", error);
@@ -943,6 +969,21 @@ export class WorkerRunner {
           suppressedFindingCount: diagnostics.rejectedFindings.length,
         });
       }
+
+      this.#logger.info("Review prompt usage before compaction.", {
+        jobId: job.id,
+        reviewRunId: startedReviewRunId,
+        scope: reviewScope,
+        optimizationMode: this.#promptOptimizationMode,
+        ...diagnostics.promptUsage.beforeCompaction,
+      });
+      this.#logger.info("Review prompt usage after compaction.", {
+        jobId: job.id,
+        reviewRunId: startedReviewRunId,
+        scope: reviewScope,
+        optimizationMode: this.#promptOptimizationMode,
+        ...diagnostics.promptUsage.afterCompaction,
+      });
 
       if (reviewPlan.files.length === 0) {
         this.#logger.info(

@@ -78,6 +78,8 @@ async function main(): Promise<void> {
     });
     const runner = new WorkerRunner({
       logger,
+      promptOptimizationMode:
+        operationalRuntime.config.review.promptOptimizationMode,
       queueScheduler: runtime.queueScheduler,
       githubAdapter: operationalRuntime.githubAdapter,
       instructionBundleLoader: operationalRuntime.instructionBundleLoader,

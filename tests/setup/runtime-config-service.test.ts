@@ -59,4 +59,22 @@ describe("RuntimeConfigService", () => {
       ready: true,
     });
   });
+
+  it("treats environment runtime secrets as setup-complete", async () => {
+    const service = new RuntimeConfigService(null, {
+      openAiApiKey: "sk-test-key",
+      githubAppId: 123456,
+      githubPrivateKey:
+        "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+      githubWebhookSecret: "webhook-secret",
+      githubBotLogins: ["getnitpickr"],
+    });
+
+    await expect(service.getSetupStatus()).resolves.toEqual({
+      state: "ready",
+      openAiConfigured: true,
+      githubAppConfigured: true,
+      ready: true,
+    });
+  });
 });

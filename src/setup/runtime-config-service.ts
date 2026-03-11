@@ -14,12 +14,21 @@ export interface RuntimeConfigStore {
 
 export class RuntimeConfigService {
   readonly #store: RuntimeConfigStore | null;
+  readonly #environmentSecrets: RuntimeSecrets | null;
 
-  constructor(store: RuntimeConfigStore | null) {
+  constructor(
+    store: RuntimeConfigStore | null,
+    environmentSecrets: RuntimeSecrets | null = null,
+  ) {
     this.#store = store;
+    this.#environmentSecrets = environmentSecrets;
   }
 
   async loadRuntimeSecrets(): Promise<RuntimeSecrets | null> {
+    if (this.#environmentSecrets) {
+      return this.#environmentSecrets;
+    }
+
     if (!this.#store) {
       return null;
     }

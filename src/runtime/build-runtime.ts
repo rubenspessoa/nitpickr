@@ -63,6 +63,7 @@ export function buildRuntime(
   environment: Record<string, string | undefined>,
 ): AppRuntime {
   const config = parseBootstrapConfig(environment);
+  const environmentSecrets = parseRuntimeSecretsFromEnvironment(environment);
   const logger = createLogger({
     level: config.logging.level,
     context: {
@@ -94,6 +95,7 @@ export function buildRuntime(
     config.secretKey
       ? new PostgresRuntimeConfigStore(sql, new SecretCrypto(config.secretKey))
       : null,
+    environmentSecrets,
   );
   const workerHeartbeatService = new WorkerHeartbeatService(
     new PostgresWorkerHeartbeatStore(sql),
@@ -113,7 +115,6 @@ export function buildRuntime(
   } | null = null;
 
   async function getOperationalRuntime(): Promise<OperationalRuntime | null> {
-    const environmentSecrets = parseRuntimeSecretsFromEnvironment(environment);
     const source =
       environmentSecrets !== null ? "environment" : "persisted_store";
     const secrets =

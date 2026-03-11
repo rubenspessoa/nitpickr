@@ -219,7 +219,8 @@ function parseJsonPayloadFromText(text: string): unknown | null {
       if (!parseErrorLogged) {
         parseErrorLogged = true;
         console.debug("parseJsonPayloadFromText parse error", {
-          error: error instanceof Error ? error.message : String(error),
+          error: "JSON parse failure while scanning provider payload.",
+          errorType: error instanceof Error ? error.name : typeof error,
         });
       }
       return null;

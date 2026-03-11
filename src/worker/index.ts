@@ -15,6 +15,7 @@ async function main(): Promise<void> {
     component: "worker",
   });
   const workerId = `worker-${process.pid}`;
+  let previousSetupStatusSignature: string | null = null;
 
   logger.info("Starting worker loop.", {
     pollIntervalMs: runtime.config.worker.pollIntervalMs,
@@ -40,15 +41,35 @@ async function main(): Promise<void> {
 
     const operationalRuntime = await runtime.getOperationalRuntime();
     if (!operationalRuntime) {
+      const setupStatus = await runtime.runtimeConfigService.getSetupStatus();
+      const setupStatusSignature = JSON.stringify(setupStatus);
       await runtime.workerHeartbeatService.recordHeartbeat({
         workerId,
         status: "setup_required",
       });
-      logger.info("Worker is idle until nitpickr setup completes.", {
-        workerId,
-      });
+      if (previousSetupStatusSignature !== setupStatusSignature) {
+        previousSetupStatusSignature = setupStatusSignature;
+        logger.warn("Worker is idle until nitpickr setup completes.", {
+          workerId,
+          setupState: setupStatus.state,
+          openAiConfigured: setupStatus.openAiConfigured,
+          githubAppConfigured: setupStatus.githubAppConfigured,
+        });
+      } else {
+        logger.debug("Worker remains idle while setup is incomplete.", {
+          workerId,
+          setupState: setupStatus.state,
+        });
+      }
       await sleep(runtime.config.worker.pollIntervalMs);
       continue;
+    }
+
+    if (previousSetupStatusSignature !== null) {
+      previousSetupStatusSignature = null;
+      logger.info("Worker resumed after setup completion.", {
+        workerId,
+      });
     }
 
     await runtime.workerHeartbeatService.recordHeartbeat({

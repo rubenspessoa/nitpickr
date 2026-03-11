@@ -219,6 +219,32 @@ describe("GitHubAdapter", () => {
 
     expect(event.repository.owner).toBe("rubenspessoa");
     expect(event.trigger.type).toBe("pr_opened");
+    expect(event.mode).toBe("full");
+  });
+
+  it("keeps synchronize pull request events in quick mode", () => {
+    const adapter = new GitHubAdapter({
+      apiClient: new FakeGitHubApiClient(),
+      appConfig: {
+        appId: 123456,
+        privateKey: "test",
+        webhookSecret: "super-secret",
+        webhookUrl: "https://nitpickr.example.com/webhooks/github",
+      },
+    });
+
+    const event = adapter.normalizeWebhookEvent("pull_request", {
+      ...pullRequestPayload,
+      action: "synchronize",
+    });
+
+    expect(event.kind).toBe("review_requested");
+    if (event.kind !== "review_requested") {
+      throw new Error("Expected a review request event.");
+    }
+
+    expect(event.trigger.type).toBe("pr_synchronized");
+    expect(event.mode).toBe("quick");
   });
 
   it("ignores unsupported pull request actions instead of throwing", () => {

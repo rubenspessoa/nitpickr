@@ -214,6 +214,8 @@
   - documented casing-change impact as a breaking change that needs release-note visibility
   - added marker-variant detection export to cover canonical + deprecated object truncation literals
   - added `CHANGELOG.md` with an Unreleased note about marker casing and the deprecated alias
+  - clarified changelog wording to foreground backward compatibility
+  - exported a marker `Set` companion for compatibility-friendly membership checks
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

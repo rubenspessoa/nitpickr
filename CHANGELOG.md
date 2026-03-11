@@ -2,6 +2,6 @@
 
 ## Unreleased
 
-- Publisher diagnostics: canonical object truncation marker is now `[truncated]`.
-  A deprecated compatibility alias `[Truncated]` remains available for
-  consumers that still match legacy log literals.
+- Publisher diagnostics: canonical object truncation marker is standardized to
+  lowercase `[truncated]`; a deprecated uppercase alias `[Truncated]` remains
+  available for backward compatibility with consumers matching legacy literals.

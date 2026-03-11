@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-export type QueueJobType = "review_requested" | "memory_ingest";
+export type QueueJobType =
+  | "review_requested"
+  | "interaction_requested"
+  | "memory_ingest";
 export type QueueJobStatus =
   | "queued"
   | "running"

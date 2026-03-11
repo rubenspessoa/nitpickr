@@ -205,6 +205,85 @@ describe("ReviewEngine", () => {
     expect(result.findings[0]?.title).toBe("Critical bug");
   });
 
+  it("suppresses findings outside the changed scope and exposes rejection reasons", async () => {
+    const model = new FakeReviewModel([
+      {
+        summary: "Summary",
+        mermaid: "flowchart TD\nA[Change] --> B[Reviewed]",
+        findings: [
+          {
+            path: "src/queue/a.ts",
+            line: 12,
+            findingType: "bug",
+            severity: "high",
+            category: "correctness",
+            title: "Stable ordering breaks",
+            body: "Stable ordering breaks when equal priorities are inserted.",
+            fixPrompt:
+              "In `src/queue/a.ts` around line 12, preserve insertion order.",
+          },
+          {
+            path: "src/queue/a.ts",
+            line: 40,
+            findingType: "bug",
+            severity: "medium",
+            category: "correctness",
+            title: "Outside changed context",
+            body: "This finding points to a line outside the changed hunk.",
+            fixPrompt:
+              "In `src/queue/a.ts` around line 40, update the changed branch.",
+          },
+          {
+            path: "src/missing.ts",
+            line: 10,
+            findingType: "bug",
+            severity: "medium",
+            category: "correctness",
+            title: "Wrong file",
+            body: "This finding points to an unknown file.",
+            fixPrompt: "In `src/missing.ts` around line 10, update the file.",
+          },
+        ],
+      },
+    ]);
+
+    const engine = new ReviewEngine(model);
+    const result = await engine.reviewWithDiagnostics({
+      changeRequest: {
+        title: "Improve queue fairness",
+        number: 42,
+      },
+      files: [
+        {
+          path: "src/queue/a.ts",
+          additions: 3,
+          deletions: 1,
+          patch: "@@ -10,2 +10,3 @@\n context\n-old\n+new alpha",
+        },
+      ],
+      instructionText: "strictness: balanced",
+      memory: [],
+      commentBudget: 5,
+    });
+
+    expect(result.result.findings).toHaveLength(1);
+    expect(result.result.findings[0]?.title).toBe("Stable ordering breaks");
+    expect(result.rejectedFindings).toHaveLength(2);
+    expect(result.rejectedFindings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          findingFingerprint:
+            "src/queue/a.ts:40:correctness:outside_changed_context",
+          reasons: ["line_not_in_changed_context"],
+        }),
+        expect.objectContaining({
+          findingFingerprint: "src/missing.ts:10:correctness:wrong_file",
+          reasons: ["path_not_in_scope"],
+        }),
+      ]),
+    );
+  });
+
   it("deduplicates repeated findings and keeps ordering stable", async () => {
     const model = new FakeReviewModel([
       {

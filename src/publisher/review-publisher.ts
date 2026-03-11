@@ -1,3 +1,4 @@
+import { fingerprintFinding } from "../review/finding-fingerprint.js";
 import { targetReviewCommentLine } from "./review-comment-targeter.js";
 
 export interface PublishedFinding {
@@ -84,15 +85,6 @@ function escapeMarkdownTableCell(value: string): string {
 
 function renderSignal(finding: PublishedFinding): string {
   return `${severityEmoji[finding.severity]} ${categoryEmoji[finding.category]}`;
-}
-
-function fingerprintFinding(finding: PublishedFinding): string {
-  return [
-    finding.path.trim().toLowerCase(),
-    finding.line,
-    finding.category,
-    finding.title.trim().toLowerCase().replace(/\s+/g, "_"),
-  ].join(":");
 }
 
 function renderGitHubSuggestion(suggestedChange: string | undefined): string[] {

@@ -235,6 +235,62 @@ describe("GitHubWebhookService", () => {
     });
   });
 
+  it("enqueues interaction jobs for supported reviewer chat commands", async () => {
+    const adapter = new FakeGitHubAdapter();
+    adapter.normalizedEvent = {
+      kind: "interaction_requested",
+      installationId: "123456",
+      repository: {
+        installationId: "123456",
+        repositoryId: "github:99",
+        providerRepositoryId: 99,
+        owner: "rubenspessoa",
+        name: "nitpickr",
+        defaultBranch: "main",
+      },
+      pullNumber: 42,
+      actorLogin: "maintainer",
+      command: "status",
+      source: {
+        kind: "issue_comment",
+        commentId: 9001,
+        body: "@getnitpickr status",
+        argumentText: null,
+      },
+    };
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-interaction",
+      eventName: "issue_comment",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(202);
+    expect(queue.calls[0]).toEqual(
+      expect.objectContaining({
+        type: "interaction_requested",
+        payload: expect.objectContaining({
+          command: "status",
+          source: expect.objectContaining({
+            kind: "issue_comment",
+            commentId: 9001,
+          }),
+        }),
+      }),
+    );
+  });
+
   it("logs mention reaction failures without rejecting the webhook", async () => {
     const adapter = new FakeGitHubAdapter();
     adapter.mentionReactionError = new Error("reaction failed");

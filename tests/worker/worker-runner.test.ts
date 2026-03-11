@@ -505,6 +505,18 @@ describe("WorkerRunner", () => {
               line: 14,
               fingerprint: "old_fp",
               isResolved: false,
+              body: [
+                "⚠️ 🧩 **Stable ordering still breaks**",
+                "**Where:** `src/queue/queue-scheduler.ts:14`",
+                "",
+                "Equal priorities can still reorder existing items.",
+                "",
+                "<!-- nitpickr:fingerprint:old_fp -->",
+              ].join("\n"),
+              reactionSummary: {
+                positiveCount: 0,
+                negativeCount: 0,
+              },
             },
           ];
         },
@@ -654,6 +666,209 @@ describe("WorkerRunner", () => {
     expect(lifecycle.resolvedComments).toEqual([["thread_old"]]);
   });
 
+  it("uses review diagnostics when available to suppress out-of-scope findings before publish", async () => {
+    const queue = new FakeQueueScheduler();
+    const lifecycle = new FakeReviewLifecycleService();
+    const planner = new FakeReviewPlanner();
+    const publishCalls: Array<Record<string, unknown>> = [];
+    queue.nextJobs = [
+      {
+        id: "job_diag",
+        type: "review_requested",
+        tenantId: "github-installation:123456",
+        repositoryId: "github:99",
+        changeRequestId: "github:99:42",
+        dedupeKey: "github:99:42:quick",
+        priority: 100,
+        status: "running",
+        attempts: 0,
+        maxAttempts: 3,
+        payload: {
+          installationId: "123456",
+          repository: {
+            owner: "rubenspessoa",
+            name: "nitpickr",
+          },
+          pullNumber: 42,
+          mode: "quick",
+          trigger: {
+            type: "pr_opened",
+            actorLogin: "ruben",
+          },
+        },
+        createdAt: new Date("2026-03-09T10:00:00.000Z"),
+        scheduledAt: new Date("2026-03-09T10:00:00.000Z"),
+        startedAt: new Date("2026-03-09T10:00:01.000Z"),
+        completedAt: null,
+        workerId: "worker_1",
+        lastError: null,
+      },
+    ];
+
+    const runner = new WorkerRunner({
+      logger: new FakeLogger(),
+      queueScheduler: queue,
+      githubAdapter: {
+        async fetchChangeRequestContext() {
+          return {
+            tenantId: "github-installation:123456",
+            installationId: "123456",
+            repositoryId: "github:99",
+            repository: {
+              owner: "rubenspessoa",
+              name: "nitpickr",
+            },
+            changeRequest: {
+              id: "github:99:42",
+              tenantId: "github-installation:123456",
+              installationId: "123456",
+              repositoryId: "github:99",
+              provider: "github" as const,
+              number: 42,
+              title: "Improve queue fairness",
+              baseSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              status: "open" as const,
+              authorLogin: "ruben",
+            },
+            files: [
+              {
+                path: "src/queue/queue-scheduler.ts",
+                additions: 10,
+                deletions: 2,
+                status: "modified" as const,
+                patch: "@@ -10,2 +10,3 @@\n context\n-old\n+new alpha",
+                previousPath: null,
+              },
+            ],
+            comments: [],
+          };
+        },
+      },
+      instructionBundleLoader: {
+        async loadForReview() {
+          return {
+            config: testRepositoryConfig,
+            documents: [],
+            combinedText: "strictness: balanced",
+          };
+        },
+      },
+      memoryService: {
+        async getRelevantMemories() {
+          return [];
+        },
+        async ingestDiscussion() {},
+      },
+      feedbackService: {
+        async syncCommentReactions() {},
+        async recordOutcome() {},
+        async getSignals() {
+          return [
+            {
+              fingerprint:
+                "src/queue/queue-scheduler.ts:12:correctness:stable_ordering_breaks",
+              path: "src/queue/queue-scheduler.ts",
+              category: "correctness",
+              score: 1,
+            },
+          ];
+        },
+      },
+      reviewPlanner: planner,
+      reviewLifecycle: lifecycle,
+      reviewEngine: {
+        async review() {
+          throw new Error("legacy review path should not be used");
+        },
+        async reviewWithDiagnostics(input) {
+          expect(input.feedbackSignals).toEqual([
+            {
+              fingerprint:
+                "src/queue/queue-scheduler.ts:12:correctness:stable_ordering_breaks",
+              path: "src/queue/queue-scheduler.ts",
+              category: "correctness",
+              score: 1,
+            },
+          ]);
+          expect(input.publishableFindingTypes).toEqual([
+            "bug",
+            "safe_suggestion",
+          ]);
+          return {
+            result: {
+              summary: "Queue fairness improved.",
+              mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+              findings: [
+                {
+                  path: "src/queue/queue-scheduler.ts",
+                  line: 12,
+                  findingType: "bug" as const,
+                  severity: "high" as const,
+                  category: "correctness" as const,
+                  title: "Stable ordering breaks",
+                  body: "Stable ordering breaks when equal priorities are inserted.",
+                  fixPrompt:
+                    "In `src/queue/queue-scheduler.ts` around line 12, preserve insertion order.",
+                },
+              ],
+            },
+            rejectedFindings: [
+              {
+                findingFingerprint:
+                  "src/queue/queue-scheduler.ts:40:correctness:outside_changed_context",
+                reasons: ["line_not_in_changed_context"],
+                finding: {
+                  path: "src/queue/queue-scheduler.ts",
+                  line: 40,
+                  findingType: "question" as const,
+                  severity: "low" as const,
+                  category: "testing" as const,
+                  title: "Out-of-scope note",
+                  body: "Not actionable.",
+                  fixPrompt:
+                    "In `src/queue/queue-scheduler.ts` around line 40, add a test.",
+                },
+              },
+            ],
+          };
+        },
+      },
+      publisher: {
+        buildInlineComments(findings) {
+          publishCalls.push({
+            type: "build_inline_comments",
+            findings,
+          });
+          return [];
+        },
+        async publish(input) {
+          publishCalls.push({
+            type: "publish",
+            ...input,
+          });
+          return { reviewId: "review_1" };
+        },
+      },
+    });
+
+    await runner.runOnce({
+      workerId: "worker_1",
+      perTenantCap: 1,
+    });
+
+    expect(publishCalls).toContainEqual(
+      expect.objectContaining({
+        type: "build_inline_comments",
+        findings: [
+          expect.objectContaining({
+            title: "Stable ordering breaks",
+          }),
+        ],
+      }),
+    );
+  });
+
   it("processes memory ingestion jobs", async () => {
     const queue = new FakeQueueScheduler();
     const lifecycle = new FakeReviewLifecycleService();
@@ -745,6 +960,130 @@ describe("WorkerRunner", () => {
         discussionCount: 1,
       },
     });
+  });
+
+  it("processes reviewer interaction jobs by replying in the matching GitHub surface", async () => {
+    const queue = new FakeQueueScheduler();
+    const lifecycle = new FakeReviewLifecycleService();
+    const planner = new FakeReviewPlanner();
+    const issueReplies: Array<Record<string, unknown>> = [];
+    queue.nextJobs = [
+      {
+        id: "job_interaction",
+        type: "interaction_requested",
+        tenantId: "github-installation:123456",
+        repositoryId: "github:99",
+        changeRequestId: "github:99:42",
+        dedupeKey: "github:99:42:status:9001",
+        priority: 80,
+        status: "running",
+        attempts: 0,
+        maxAttempts: 3,
+        payload: {
+          installationId: "123456",
+          repository: {
+            owner: "rubenspessoa",
+            name: "nitpickr",
+          },
+          pullNumber: 42,
+          actorLogin: "maintainer",
+          command: "status",
+          source: {
+            kind: "issue_comment",
+            commentId: 9001,
+            body: "@getnitpickr status",
+            argumentText: null,
+          },
+        },
+        createdAt: new Date("2026-03-09T10:00:00.000Z"),
+        scheduledAt: new Date("2026-03-09T10:00:00.000Z"),
+        startedAt: new Date("2026-03-09T10:00:01.000Z"),
+        completedAt: null,
+        workerId: "worker_1",
+        lastError: null,
+      },
+    ];
+    lifecycle.getLatestCompletedReview = async () => ({
+      id: "run_latest",
+      tenantId: "github-installation:123456",
+      repositoryId: "github:99",
+      changeRequestId: "github:99:42",
+      trigger: {
+        type: "pr_synchronized",
+        actorLogin: "ruben",
+      },
+      mode: "quick",
+      scope: "commit_delta",
+      headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      comparedFromSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      status: "published",
+      budgets: {
+        maxFiles: 5,
+        maxHunks: 20,
+        maxTokens: 8_000,
+        maxComments: 5,
+        maxDurationMs: 300_000,
+      },
+      createdAt: "2026-03-11T12:00:00.000Z",
+      updatedAt: "2026-03-11T12:00:00.000Z",
+      completedAt: "2026-03-11T12:02:00.000Z",
+    });
+
+    const runner = new WorkerRunner({
+      logger: new FakeLogger(),
+      queueScheduler: queue,
+      githubAdapter: {
+        async fetchChangeRequestContext() {
+          throw new Error("not used");
+        },
+        async createIssueComment(input) {
+          issueReplies.push(input);
+        },
+      },
+      instructionBundleLoader: {
+        async loadForReview() {
+          return {
+            config: testRepositoryConfig,
+            documents: [],
+            combinedText: "",
+          };
+        },
+      },
+      memoryService: {
+        async getRelevantMemories() {
+          return [];
+        },
+        async ingestDiscussion() {},
+      },
+      reviewPlanner: planner,
+      reviewLifecycle: lifecycle,
+      reviewEngine: {
+        async review() {
+          throw new Error("not used");
+        },
+      },
+      publisher: {
+        buildInlineComments() {
+          return [];
+        },
+        async publish() {
+          return { reviewId: "unused" };
+        },
+      },
+    });
+
+    const processed = await runner.runOnce({
+      workerId: "worker_1",
+      perTenantCap: 1,
+    });
+
+    expect(processed).toBe(true);
+    expect(issueReplies).toEqual([
+      expect.objectContaining({
+        pullNumber: 42,
+        body: expect.stringContaining("**nitpickr status**"),
+      }),
+    ]);
   });
 
   it("fails jobs when processing throws", async () => {

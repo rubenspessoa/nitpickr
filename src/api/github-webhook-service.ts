@@ -66,7 +66,10 @@ function buildChangeRequestId(
 }
 
 function buildReviewStatusFields(
-  event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
+  event: Extract<
+    GitHubNormalizedEvent,
+    { kind: "review_requested" | "interaction_requested" }
+  >,
 ): {
   repositoryId: string;
   changeRequestId?: string;
@@ -101,6 +104,33 @@ function buildReviewJobInput(
       pullNumber: event.pullNumber,
       mode: event.mode,
       trigger: event.trigger,
+    },
+  };
+}
+
+function buildInteractionJobInput(
+  event: Extract<GitHubNormalizedEvent, { kind: "interaction_requested" }>,
+): EnqueueJobInput {
+  return {
+    type: "interaction_requested",
+    tenantId: `github-installation:${event.installationId}`,
+    repositoryId: event.repository.repositoryId,
+    changeRequestId: `${event.repository.repositoryId}:${event.pullNumber}`,
+    dedupeKey: `${event.repository.repositoryId}:${event.pullNumber}:${event.command}:${event.source.commentId}`,
+    priority: 80,
+    payload: {
+      installationId: event.installationId,
+      repository: {
+        owner: event.repository.owner,
+        name: event.repository.name,
+      },
+      pullNumber: event.pullNumber,
+      actorLogin: event.actorLogin,
+      command: event.command,
+      ...(event.replyTargetCommentId === undefined
+        ? {}
+        : { replyTargetCommentId: event.replyTargetCommentId }),
+      source: event.source,
     },
   };
 }
@@ -301,21 +331,35 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
     }
 
     try {
-      await this.#queueScheduler.enqueue(buildReviewJobInput(normalized));
+      await this.#queueScheduler.enqueue(
+        normalized.kind === "review_requested"
+          ? buildReviewJobInput(normalized)
+          : buildInteractionJobInput(normalized),
+      );
       await this.#updateWebhookEventStatus(parsed.deliveryId, "queued", {
         ...buildReviewStatusFields(normalized),
       });
-      this.#logger.info("Queued GitHub review job.", {
-        eventName: parsed.eventName,
-        installationId: normalized.installationId,
-        repositoryId: normalized.repository.repositoryId,
-        pullNumber: normalized.pullNumber,
-        mode: normalized.mode,
-      });
+      this.#logger.info(
+        normalized.kind === "review_requested"
+          ? "Queued GitHub review job."
+          : "Queued GitHub interaction job.",
+        {
+          eventName: parsed.eventName,
+          installationId: normalized.installationId,
+          repositoryId: normalized.repository.repositoryId,
+          pullNumber: normalized.pullNumber,
+          ...(normalized.kind === "review_requested"
+            ? { mode: normalized.mode }
+            : { command: normalized.command }),
+        },
+      );
       return {
         statusCode: 202,
         accepted: true,
-        message: "Review job queued.",
+        message:
+          normalized.kind === "review_requested"
+            ? "Review job queued."
+            : "Interaction job queued.",
       };
     } catch (error) {
       await this.#updateWebhookEventStatus(parsed.deliveryId, "failed", {

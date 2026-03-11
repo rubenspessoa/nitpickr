@@ -314,6 +314,32 @@ export class GitHubRestClient {
     }
   }
 
+  async createIssueComment(input: {
+    installationId: string;
+    owner: string;
+    repo: string;
+    issueNumber: number;
+    body: string;
+  }): Promise<void> {
+    const response = await this.#request(
+      input.installationId,
+      `/repos/${input.owner}/${input.repo}/issues/${input.issueNumber}/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          body: input.body,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(
+        `GitHub request failed with status ${response.status}: ${details}`,
+      );
+    }
+  }
+
   async createCommitStatus(input: {
     installationId: string;
     owner: string;
@@ -430,6 +456,11 @@ export class GitHubRestClient {
       line: number;
       fingerprint: string;
       isResolved: boolean;
+      body: string;
+      reactionSummary: {
+        positiveCount: number;
+        negativeCount: number;
+      };
     }>
   > {
     const payload = (await this.#requestGraphQL(
@@ -445,9 +476,16 @@ export class GitHubRestClient {
                   comments(first: 20) {
                     nodes {
                       id
+                      databaseId
                       body
                       path
                       line
+                      reactionGroups {
+                        content
+                        users {
+                          totalCount
+                        }
+                      }
                       author {
                         login
                       }
@@ -474,9 +512,16 @@ export class GitHubRestClient {
               comments?: {
                 nodes?: Array<{
                   id?: string;
+                  databaseId?: number;
                   body?: string;
                   path?: string;
                   line?: number;
+                  reactionGroups?: Array<{
+                    content?: string;
+                    users?: {
+                      totalCount?: number;
+                    };
+                  }>;
                   author?: {
                     login?: string;
                   };
@@ -509,15 +554,16 @@ export class GitHubRestClient {
           );
         }) ?? null;
 
-      if (
-        !matchingComment?.id ||
-        !matchingComment.path ||
-        !matchingComment.line
-      ) {
+      if (!matchingComment?.path || !matchingComment.line) {
         return [];
       }
 
-      const fingerprint = extractFingerprintMarker(matchingComment.body ?? "");
+      const commentBody = matchingComment.body ?? null;
+      if (commentBody === null) {
+        return [];
+      }
+
+      const fingerprint = extractFingerprintMarker(commentBody);
       if (!fingerprint) {
         return [];
       }
@@ -525,14 +571,68 @@ export class GitHubRestClient {
       return [
         {
           threadId: thread.id,
-          providerCommentId: matchingComment.id,
+          providerCommentId: String(
+            matchingComment.databaseId ?? matchingComment.id,
+          ),
           path: matchingComment.path,
           line: matchingComment.line,
           fingerprint,
           isResolved: thread.isResolved ?? false,
+          body: commentBody,
+          reactionSummary: (matchingComment.reactionGroups ?? []).reduce(
+            (summary, group) => {
+              const count = group.users?.totalCount ?? 0;
+
+              switch (group.content) {
+                case "THUMBS_UP":
+                case "HEART":
+                case "ROCKET":
+                  summary.positiveCount += count;
+                  break;
+                case "THUMBS_DOWN":
+                case "CONFUSED":
+                  summary.negativeCount += count;
+                  break;
+              }
+
+              return summary;
+            },
+            {
+              positiveCount: 0,
+              negativeCount: 0,
+            },
+          ),
         },
       ];
     });
+  }
+
+  async replyToReviewComment(input: {
+    installationId: string;
+    owner: string;
+    repo: string;
+    pullNumber: number;
+    commentId: number;
+    body: string;
+  }): Promise<void> {
+    const response = await this.#request(
+      input.installationId,
+      `/repos/${input.owner}/${input.repo}/pulls/${input.pullNumber}/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          body: input.body,
+          in_reply_to: input.commentId,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(
+        `GitHub request failed with status ${response.status}: ${details}`,
+      );
+    }
   }
 
   async resolveReviewThread(input: {

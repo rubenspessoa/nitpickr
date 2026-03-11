@@ -3,6 +3,7 @@ import { cwd, env, exit } from "node:process";
 import { parseBootstrapConfig as parseCliBootstrapConfig } from "../config/app-config.js";
 import { createPostgresClient } from "../runtime/postgres.js";
 import { DoctorCommand } from "./doctor-command.js";
+import { EvalReviewsCommand } from "./eval-reviews-command.js";
 import { MigrateCommand } from "./migrate-command.js";
 import { SetupCommand } from "./setup-command.js";
 
@@ -31,6 +32,14 @@ async function main(): Promise<void> {
     if (!result.ok) {
       throw new Error(result.errors.join("\n"));
     }
+    return;
+  }
+
+  if (command === "eval:reviews") {
+    const evaluation = new EvalReviewsCommand();
+    await evaluation.run({
+      cwd: cwd(),
+    });
     return;
   }
 

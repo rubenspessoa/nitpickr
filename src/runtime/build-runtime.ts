@@ -8,6 +8,8 @@ import {
   parseBootstrapConfig,
   parseRuntimeSecretsFromEnvironment,
 } from "../config/app-config.js";
+import { PostgresReviewFeedbackStore } from "../feedback/postgres-review-feedback-store.js";
+import { ReviewFeedbackService } from "../feedback/review-feedback-service.js";
 import { PostgresWorkerHeartbeatStore } from "../health/postgres-worker-heartbeat-store.js";
 import { ReadinessService } from "../health/readiness-service.js";
 import { WorkerHeartbeatService } from "../health/worker-heartbeat-service.js";
@@ -47,6 +49,7 @@ export interface AppRuntime {
   sql: ReturnType<typeof createPostgresClient>;
   queueScheduler: QueueScheduler;
   memoryService: MemoryService;
+  feedbackService: ReviewFeedbackService;
   reviewPlanner: ReviewPlanner;
   reviewLifecycle: ReviewLifecycleService;
   runtimeConfigService: RuntimeConfigService;
@@ -69,6 +72,9 @@ export function buildRuntime(
   const sql = createPostgresClient(config.databaseUrl);
   const queueScheduler = new QueueScheduler(new PostgresJobStore(sql));
   const memoryService = new MemoryService(new PostgresMemoryStore(sql));
+  const feedbackService = new ReviewFeedbackService(
+    new PostgresReviewFeedbackStore(sql),
+  );
   const reviewLifecycle = new ReviewLifecycleService(
     new PostgresReviewLifecycleStore(sql),
   );
@@ -246,6 +252,7 @@ export function buildRuntime(
     sql,
     queueScheduler,
     memoryService,
+    feedbackService,
     reviewPlanner,
     reviewLifecycle,
     runtimeConfigService,

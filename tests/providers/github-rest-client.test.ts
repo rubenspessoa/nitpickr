@@ -400,6 +400,7 @@ describe("GitHubRestClient", () => {
                             nodes: [
                               {
                                 id: "comment_1",
+                                databaseId: 6001,
                                 body: [
                                   "nitpickr comment",
                                   "<!-- nitpickr:fingerprint:fp_1 -->",
@@ -409,6 +410,26 @@ describe("GitHubRestClient", () => {
                                 },
                                 path: "src/api/server.ts",
                                 line: 27,
+                                reactionGroups: [
+                                  {
+                                    content: "THUMBS_UP",
+                                    users: {
+                                      totalCount: 2,
+                                    },
+                                  },
+                                  {
+                                    content: "HEART",
+                                    users: {
+                                      totalCount: 1,
+                                    },
+                                  },
+                                  {
+                                    content: "CONFUSED",
+                                    users: {
+                                      totalCount: 1,
+                                    },
+                                  },
+                                ],
                               },
                             ],
                           },
@@ -450,11 +471,18 @@ describe("GitHubRestClient", () => {
     expect(threads).toEqual([
       {
         threadId: "thread_1",
-        providerCommentId: "comment_1",
+        providerCommentId: "6001",
         path: "src/api/server.ts",
         line: 27,
         fingerprint: "fp_1",
         isResolved: false,
+        body: ["nitpickr comment", "<!-- nitpickr:fingerprint:fp_1 -->"].join(
+          "\n",
+        ),
+        reactionSummary: {
+          positiveCount: 3,
+          negativeCount: 1,
+        },
       },
     ]);
 
@@ -512,5 +540,53 @@ describe("GitHubRestClient", () => {
     expect(requestedUrl).toBe(
       "http://github-stub:4010/repos/rubenspessoa/nitpickr/pulls/42",
     );
+  });
+
+  it("creates issue comments and review comment replies", async () => {
+    const requestedUrls: string[] = [];
+    const requestedBodies: string[] = [];
+    const client = new GitHubRestClient(
+      {
+        async getInstallationAccessToken() {
+          return "ghs_token";
+        },
+      },
+      async (input, init) => {
+        requestedUrls.push(String(input));
+        requestedBodies.push(String(init?.body ?? ""));
+
+        return new Response(JSON.stringify({ id: 1 }), { status: 201 });
+      },
+    );
+
+    await client.createIssueComment({
+      installationId: "123456",
+      owner: "rubenspessoa",
+      repo: "nitpickr",
+      issueNumber: 42,
+      body: "status reply",
+    });
+    await client.replyToReviewComment({
+      installationId: "123456",
+      owner: "rubenspessoa",
+      repo: "nitpickr",
+      pullNumber: 42,
+      commentId: 7001,
+      body: "thread reply",
+    });
+
+    expect(requestedUrls).toEqual([
+      "https://api.github.com/repos/rubenspessoa/nitpickr/issues/42/comments",
+      "https://api.github.com/repos/rubenspessoa/nitpickr/pulls/42/comments",
+    ]);
+    expect(requestedBodies).toEqual([
+      JSON.stringify({
+        body: "status reply",
+      }),
+      JSON.stringify({
+        body: "thread reply",
+        in_reply_to: 7001,
+      }),
+    ]);
   });
 });

@@ -7,6 +7,13 @@ import {
   isWebhookProvider,
 } from "./webhook-event-service.js";
 
+export class WebhookEventStoreError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause });
+    this.name = "WebhookEventStoreError";
+  }
+}
+
 export class WebhookEventNotFoundError extends Error {
   constructor(deliveryId: string) {
     super(`Webhook event with deliveryId ${deliveryId} was not found.`);
@@ -34,9 +41,7 @@ function toJsonPayload(value: unknown): string {
 }
 
 function wrapWebhookEventStoreError(message: string, error: unknown): Error {
-  return new Error(message, {
-    cause: error,
-  });
+  return new WebhookEventStoreError(message, error);
 }
 
 function parseProvider(value: unknown): WebhookProvider {
@@ -44,7 +49,7 @@ function parseProvider(value: unknown): WebhookProvider {
     return value;
   }
 
-  throw new Error("Unsupported webhook event provider.");
+  throw new Error(`Unsupported webhook event provider: ${String(value)}.`);
 }
 
 function parseStatus(value: unknown): WebhookEventStatus {
@@ -52,7 +57,7 @@ function parseStatus(value: unknown): WebhookEventStatus {
     return value;
   }
 
-  throw new Error("Unsupported webhook event status.");
+  throw new Error(`Unsupported webhook event status: ${String(value)}.`);
 }
 
 export class PostgresWebhookEventStore implements WebhookEventStore {

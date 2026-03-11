@@ -65,6 +65,23 @@ function buildChangeRequestId(
   return `${repositoryId}:${pullNumber}`;
 }
 
+function buildReviewStatusFields(
+  event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
+): {
+  repositoryId: string;
+  changeRequestId?: string;
+} {
+  const changeRequestId = buildChangeRequestId(
+    event.repository.repositoryId,
+    event.pullNumber,
+  );
+
+  return {
+    repositoryId: event.repository.repositoryId,
+    ...(changeRequestId ? { changeRequestId } : {}),
+  };
+}
+
 function buildReviewJobInput(
   event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
 ): EnqueueJobInput {
@@ -174,6 +191,7 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
 
   async handle(input: GitHubWebhookRequest): Promise<GitHubWebhookResult> {
     const parsed = webhookRequestSchema.parse(input);
+    // Signature validation is async through the GitHub adapter and must stay awaited.
     const signatureValid = await this.verifySignature(
       parsed.rawBody,
       parsed.signature,
@@ -269,13 +287,8 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
 
     try {
       await this.#queueScheduler.enqueue(buildReviewJobInput(normalized));
-      const changeRequestId = buildChangeRequestId(
-        normalized.repository.repositoryId,
-        normalized.pullNumber,
-      );
       await this.#updateWebhookEventStatus(parsed.deliveryId, "queued", {
-        repositoryId: normalized.repository.repositoryId,
-        ...(changeRequestId ? { changeRequestId } : {}),
+        ...buildReviewStatusFields(normalized),
       });
       this.#logger.info("Queued GitHub review job.", {
         eventName: parsed.eventName,
@@ -290,13 +303,8 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
         message: "Review job queued.",
       };
     } catch (error) {
-      const changeRequestId = buildChangeRequestId(
-        normalized.repository.repositoryId,
-        normalized.pullNumber,
-      );
       await this.#updateWebhookEventStatus(parsed.deliveryId, "failed", {
-        repositoryId: normalized.repository.repositoryId,
-        ...(changeRequestId ? { changeRequestId } : {}),
+        ...buildReviewStatusFields(normalized),
         errorMessage: toErrorMessage(
           error,
           "Unknown webhook queueing failure.",

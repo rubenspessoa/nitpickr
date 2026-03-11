@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   PostgresWebhookEventStore,
   WebhookEventNotFoundError,
+  WebhookEventStoreError,
 } from "../../src/api/postgres-webhook-event-store.js";
 
 interface QueryCall {
@@ -202,15 +203,16 @@ describe("PostgresWebhookEventStore", () => {
     client.queueError(new Error("db unavailable"));
     const store = new PostgresWebhookEventStore(client);
 
-    await expect(() =>
-      store.createEvent({
-        deliveryId: "delivery-4",
-        provider: "github",
-        eventName: "pull_request",
-        status: "received",
-        payload: {},
-      }),
-    ).rejects.toThrow(/create webhook event/i);
+    const writeAttempt = store.createEvent({
+      deliveryId: "delivery-4",
+      provider: "github",
+      eventName: "pull_request",
+      status: "received",
+      payload: {},
+    });
+
+    await expect(writeAttempt).rejects.toThrow(/create webhook event/i);
+    await expect(writeAttempt).rejects.toBeInstanceOf(WebhookEventStoreError);
   });
 
   it("does not leak raw database error details to callers", async () => {

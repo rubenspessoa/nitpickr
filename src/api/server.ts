@@ -13,6 +13,10 @@ const githubWebhookHeadersSchema = z.object({
   deliveryId: z.string().min(1),
 });
 
+export function normalizeRawWebhookBody(body: unknown): string {
+  return typeof body === "string" ? body : JSON.stringify(body ?? {});
+}
+
 function renderSetupPage(setupStatus: SetupStatus): string {
   return `<!doctype html>
 <html lang="en">
@@ -126,7 +130,7 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
       });
     }
 
-    const rawBody = typeof request.body === "string" ? request.body : "";
+    const rawBody = normalizeRawWebhookBody(request.body);
     let payload: Record<string, unknown>;
     try {
       payload = webhookPayloadSchema.parse(

@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
+import type { BotLogins } from "../../config/app-config.js";
 import { type ReviewTrigger, parseChangeRequest } from "../../domain/types.js";
 
 const repositorySchema = z.object({
@@ -66,7 +67,7 @@ const issueCommentEventSchema = z.object({
 
 export interface GitHubAppConfig {
   appId: number;
-  botLogins?: string[];
+  botLogins?: BotLogins;
   privateKey: string;
   webhookSecret: string;
   webhookUrl: string;
@@ -313,7 +314,7 @@ function containsBotMention(body: string, botLogins: string[]): boolean {
 export class GitHubAdapter {
   readonly #apiClient: GitHubApiClient;
   readonly #appConfig: GitHubAppConfig;
-  readonly #botLogins: string[];
+  readonly #botLogins: BotLogins;
 
   constructor(options: GitHubAdapterOptions) {
     this.#apiClient = options.apiClient;

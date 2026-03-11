@@ -431,4 +431,27 @@ describe("GitHubWebhookService", () => {
       }),
     ).rejects.toThrow(/deliveryId/i);
   });
+
+  it("rejects webhook payloads that are not JSON objects", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const logger = new FakeLogger();
+    const webhookEvents = new FakeWebhookEventService();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    await expect(() =>
+      service.handle({
+        deliveryId: "delivery-bad-payload",
+        eventName: "pull_request",
+        signature: "sha256=test",
+        rawBody: "[]",
+        payload: [],
+      }),
+    ).rejects.toThrow(/payload/i);
+  });
 });

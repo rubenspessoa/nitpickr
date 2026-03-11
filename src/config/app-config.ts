@@ -34,7 +34,7 @@ const runtimeSecretEnvironmentSchema = z.object({
 });
 
 type BootstrapEnvironment = z.infer<typeof bootstrapEnvironmentSchema>;
-type BotLogins = [string, ...string[]];
+export type BotLogins = [string, ...string[]];
 
 export interface RuntimeSecrets {
   openAiApiKey: string;

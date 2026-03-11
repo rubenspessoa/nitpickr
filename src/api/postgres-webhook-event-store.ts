@@ -24,9 +24,9 @@ function toJsonPayload(value: unknown): string {
 }
 
 function wrapWebhookEventStoreError(message: string, error: unknown): Error {
-  const cause =
-    error instanceof Error ? error.message : "Unknown database error.";
-  return new Error(`${message}: ${cause}`);
+  return new Error(message, {
+    cause: error,
+  });
 }
 
 export class PostgresWebhookEventStore implements WebhookEventStore {
@@ -156,6 +156,9 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
         );
       }
     } catch (error) {
+      if (error instanceof Error && error.message.includes("was not found")) {
+        throw error;
+      }
       throw wrapWebhookEventStoreError("Failed to update webhook event", error);
     }
   }

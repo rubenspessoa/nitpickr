@@ -16,7 +16,7 @@ const webhookRequestSchema = z.object({
   eventName: z.string().min(1),
   signature: z.string().min(1),
   rawBody: z.string(),
-  payload: z.unknown(),
+  payload: z.object({}).passthrough(),
 });
 
 export interface GitHubWebhookResult {
@@ -100,7 +100,7 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
   }
 
   async verifySignature(rawBody: string, signature: string): Promise<boolean> {
-    return this.#adapter.verifyWebhookSignature(rawBody, signature);
+    return await this.#adapter.verifyWebhookSignature(rawBody, signature);
   }
 
   async #updateWebhookEventStatus(
@@ -157,10 +157,7 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
 
   async handle(input: GitHubWebhookRequest): Promise<GitHubWebhookResult> {
     const parsed = webhookRequestSchema.parse(input);
-    const valid = this.#adapter.verifyWebhookSignature(
-      parsed.rawBody,
-      parsed.signature,
-    );
+    const valid = await this.verifySignature(parsed.rawBody, parsed.signature);
     if (!valid) {
       this.#logger.warn("Rejected GitHub webhook with invalid signature.", {
         eventName: parsed.eventName,

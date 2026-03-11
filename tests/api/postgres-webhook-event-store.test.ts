@@ -133,6 +133,22 @@ describe("PostgresWebhookEventStore", () => {
     ).rejects.toThrow(/create webhook event/i);
   });
 
+  it("does not leak raw database error details to callers", async () => {
+    const client = new FakePostgresClient();
+    client.queueError(new Error("password authentication failed for user"));
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(() =>
+      store.createEvent({
+        deliveryId: "delivery-4b",
+        provider: "github",
+        eventName: "pull_request",
+        status: "received",
+        payload: {},
+      }),
+    ).rejects.toThrow(/^Failed to create webhook event$/);
+  });
+
   it("adds context when database updates fail", async () => {
     const client = new FakePostgresClient();
     client.queueError(new Error("db unavailable"));

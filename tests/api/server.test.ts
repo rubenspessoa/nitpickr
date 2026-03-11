@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { createApiServer } from "../../src/api/server.js";
+import {
+  createApiServer,
+  normalizeRawWebhookBody,
+} from "../../src/api/server.js";
 
 class FakeLogger {
   readonly entries: Array<{
@@ -42,6 +45,16 @@ class FakeLogger {
 }
 
 describe("createApiServer", () => {
+  it("normalizes raw webhook bodies from strings and objects", () => {
+    expect(normalizeRawWebhookBody('{"action":"opened"}')).toBe(
+      '{"action":"opened"}',
+    );
+    expect(normalizeRawWebhookBody({ action: "opened" })).toBe(
+      '{"action":"opened"}',
+    );
+    expect(normalizeRawWebhookBody(undefined)).toBe("{}");
+  });
+
   it("accepts GitHub webhooks through Fastify", async () => {
     const server = createApiServer({
       githubWebhookService: {

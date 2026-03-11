@@ -50,6 +50,10 @@ type WebhookEventTracker = Pick<
   "beginDelivery" | "markFailed" | "markIgnored" | "markQueued"
 >;
 
+function toErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function buildReviewJobInput(
   event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
 ): EnqueueJobInput {
@@ -159,8 +163,11 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
 
   async handle(input: GitHubWebhookRequest): Promise<GitHubWebhookResult> {
     const parsed = webhookRequestSchema.parse(input);
-    const valid = await this.verifySignature(parsed.rawBody, parsed.signature);
-    if (!valid) {
+    const signatureValid = await this.verifySignature(
+      parsed.rawBody,
+      parsed.signature,
+    );
+    if (!signatureValid) {
       this.#logger.warn("Rejected GitHub webhook with invalid signature.", {
         eventName: parsed.eventName,
       });
@@ -213,25 +220,44 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
       });
     }
 
+    let normalized: ReturnType<GitHubAdapter["normalizeWebhookEvent"]>;
     try {
-      const normalized = this.#adapter.normalizeWebhookEvent(
+      normalized = this.#adapter.normalizeWebhookEvent(
         parsed.eventName,
         parsed.payload,
       );
+    } catch (error) {
+      await this.#updateWebhookEventStatus(parsed.deliveryId, "failed", {
+        errorMessage: toErrorMessage(
+          error,
+          "Unknown webhook normalization failure.",
+        ),
+      });
+      this.#logger.error("GitHub webhook event normalization failed.", {
+        eventName: parsed.eventName,
+        error: toErrorMessage(error, "Unknown webhook normalization failure."),
+      });
+      return {
+        statusCode: 500,
+        accepted: false,
+        message: "Failed to process GitHub webhook event.",
+      };
+    }
 
-      if (normalized.kind === "ignored") {
-        await this.#updateWebhookEventStatus(parsed.deliveryId, "ignored");
-        this.#logger.info("Ignored GitHub webhook event.", {
-          eventName: parsed.eventName,
-          reason: normalized.reason,
-        });
-        return {
-          statusCode: 202,
-          accepted: false,
-          message: normalized.reason,
-        };
-      }
+    if (normalized.kind === "ignored") {
+      await this.#updateWebhookEventStatus(parsed.deliveryId, "ignored");
+      this.#logger.info("Ignored GitHub webhook event.", {
+        eventName: parsed.eventName,
+        reason: normalized.reason,
+      });
+      return {
+        statusCode: 202,
+        accepted: false,
+        message: normalized.reason,
+      };
+    }
 
+    try {
       await this.#queueScheduler.enqueue(buildReviewJobInput(normalized));
       await this.#updateWebhookEventStatus(parsed.deliveryId, "queued", {
         repositoryId: normalized.repository.repositoryId,
@@ -251,13 +277,18 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
       };
     } catch (error) {
       await this.#updateWebhookEventStatus(parsed.deliveryId, "failed", {
-        errorMessage:
-          error instanceof Error ? error.message : "Unknown webhook failure.",
+        repositoryId: normalized.repository.repositoryId,
+        changeRequestId: `${normalized.repository.repositoryId}:${normalized.pullNumber}`,
+        errorMessage: toErrorMessage(
+          error,
+          "Unknown webhook queueing failure.",
+        ),
       });
-      this.#logger.error("GitHub webhook processing failed.", {
+      this.#logger.error("GitHub webhook queueing failed.", {
         eventName: parsed.eventName,
-        error:
-          error instanceof Error ? error.message : "Unknown webhook failure.",
+        repositoryId: normalized.repository.repositoryId,
+        pullNumber: normalized.pullNumber,
+        error: toErrorMessage(error, "Unknown webhook queueing failure."),
       });
       return {
         statusCode: 500,

@@ -447,11 +447,50 @@ describe("GitHubWebhookService", () => {
     });
     expect(logger.entries).toContainEqual({
       level: "error",
-      message: "GitHub webhook processing failed.",
+      message: "GitHub webhook event normalization failed.",
       fields: {
         component: "github-webhook",
         eventName: "pull_request",
         error: "boom",
+      },
+    });
+  });
+
+  it("logs queueing failures with queue-specific context", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    queue.enqueue = async () => {
+      throw new Error("queue unavailable");
+    };
+    const webhookEvents = new FakeWebhookEventService();
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-queue-fail",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(500);
+    expect(result.accepted).toBe(false);
+    expect(webhookEvents.failed).toEqual(["delivery-queue-fail"]);
+    expect(logger.entries).toContainEqual({
+      level: "error",
+      message: "GitHub webhook queueing failed.",
+      fields: {
+        component: "github-webhook",
+        eventName: "pull_request",
+        repositoryId: "github:99",
+        pullNumber: 42,
+        error: "queue unavailable",
       },
     });
   });

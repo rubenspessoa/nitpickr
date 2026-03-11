@@ -28,4 +28,10 @@ describe("InMemoryWebhookRateLimiter", () => {
       allowed: true,
     });
   });
+
+  it("always returns a promise from consume", () => {
+    const limiter = new InMemoryWebhookRateLimiter();
+
+    expect(limiter.consume("127.0.0.1")).toBeInstanceOf(Promise);
+  });
 });

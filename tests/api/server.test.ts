@@ -71,6 +71,12 @@ describe("createApiServer", () => {
     expect(() => parseWebhookPayload(circular)).toThrow(
       "Invalid GitHub webhook payload.",
     );
+    expect(() => parseWebhookPayload([])).toThrow(
+      "Invalid GitHub webhook payload.",
+    );
+    expect(() => parseWebhookPayload(null)).toThrow(
+      "Invalid GitHub webhook payload.",
+    );
   });
 
   it("accepts GitHub webhooks through Fastify", async () => {
@@ -440,6 +446,41 @@ describe("createApiServer", () => {
       accepted: false,
       message: "GitHub webhooks must use Content-Type: application/json.",
     });
+  });
+
+  it("rejects malformed webhook requests without logging request payloads", async () => {
+    const logger = new FakeLogger();
+    const server = createApiServer({
+      logger,
+      githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
+        async handle() {
+          return {
+            statusCode: 202,
+            accepted: true,
+            message: "queued",
+          };
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "content-type": "application/json",
+      },
+      payload: JSON.stringify({
+        installation: {
+          token: "secret-value",
+        },
+      }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(logger.entries).toEqual([]);
   });
 
   it("accepts webhook requests with application/json content type parameters", async () => {

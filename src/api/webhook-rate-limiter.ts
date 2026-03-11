@@ -4,9 +4,7 @@ export interface WebhookRateLimitResult {
 }
 
 export interface WebhookRateLimiter {
-  consume(
-    key: string,
-  ): Promise<WebhookRateLimitResult> | WebhookRateLimitResult;
+  consume(key: string): Promise<WebhookRateLimitResult>;
 }
 
 interface BucketEntry {
@@ -30,7 +28,7 @@ export class InMemoryWebhookRateLimiter implements WebhookRateLimiter {
     this.#now = input?.now ?? (() => Date.now());
   }
 
-  consume(key: string): WebhookRateLimitResult {
+  async consume(key: string): Promise<WebhookRateLimitResult> {
     const now = this.#now();
     const current = this.#buckets.get(key);
 

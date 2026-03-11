@@ -93,6 +93,10 @@ const categoryEmoji: Record<PublishedFinding["category"], string> = {
   style: "🎨",
 };
 
+const DIAGNOSTIC_MAX_SERIALIZED_LENGTH = 1_000;
+const DIAGNOSTIC_MAX_STRING_LENGTH = 200;
+const DIAGNOSTIC_OBJECT_BUDGET = 200;
+
 function escapeMarkdownTableCell(value: string): string {
   return value.replace(/\|/g, "\\|").trim();
 }
@@ -198,8 +202,6 @@ function collectErrorTextsFromPayload(payload: unknown): {
 }
 
 function toDiagnosticErrorSourceText(value: unknown): string {
-  const maxSerializedLength = 1_000;
-
   if (value instanceof Error) {
     return value.message;
   }
@@ -210,35 +212,41 @@ function toDiagnosticErrorSourceText(value: unknown): string {
 
   if (typeof value === "object" && value !== null) {
     const visited = new WeakSet<object>();
-    let objectBudget = 200;
+    let remainingObjectBudget = DIAGNOSTIC_OBJECT_BUDGET;
 
     try {
       const serialized = JSON.stringify(value, (_key, entry) => {
+        if (typeof entry === "bigint") {
+          return entry.toString();
+        }
+
         if (typeof entry === "string") {
-          return entry.length > 200
-            ? `${entry.slice(0, 200)}...[truncated]`
+          return entry.length > DIAGNOSTIC_MAX_STRING_LENGTH
+            ? `${entry.slice(0, DIAGNOSTIC_MAX_STRING_LENGTH)}...[truncated]`
             : entry;
         }
 
-        if (typeof entry === "object" && entry !== null) {
-          if (visited.has(entry)) {
-            return "[Circular]";
-          }
-          visited.add(entry);
-
-          if (objectBudget <= 0) {
-            return "[Truncated]";
-          }
-          objectBudget -= 1;
+        if (entry === null || typeof entry !== "object") {
+          return entry;
         }
+
+        if (visited.has(entry)) {
+          return "[Circular]";
+        }
+        visited.add(entry);
+
+        if (remainingObjectBudget <= 0) {
+          return "[Truncated]";
+        }
+        remainingObjectBudget -= 1;
 
         return entry;
       });
 
       if (typeof serialized === "string") {
-        return serialized.length <= maxSerializedLength
+        return serialized.length <= DIAGNOSTIC_MAX_SERIALIZED_LENGTH
           ? serialized
-          : `${serialized.slice(0, maxSerializedLength)}...[truncated]`;
+          : `${serialized.slice(0, DIAGNOSTIC_MAX_SERIALIZED_LENGTH)}...[truncated]`;
       }
     } catch {
       // Fall back to String(...) below.

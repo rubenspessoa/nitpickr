@@ -177,3 +177,29 @@
   - `pnpm typecheck`
   - `pnpm lint`
   - `pnpm test` (`51` files, `255` tests)
+
+# PR #3 Follow-up Thread Sweep (Round 2)
+
+## Plan
+
+- [x] Re-triage newly opened sanitizer-focused PR threads.
+- [x] Harden diagnostic serialization for bounded object payloads and `BigInt` values.
+- [x] Add/extend sanitizer-focused regression tests.
+- [x] Re-run lint, typecheck, and targeted publisher tests.
+- [x] Resolve addressed PR threads.
+
+## Results
+
+- Updated `src/publisher/review-publisher.ts`:
+  - introduced named constants for diagnostic serialization/truncation budgets
+  - hardened object serialization with bounded traversal and serialized-length capping
+  - added explicit `BigInt` support in the JSON replacer to avoid stringify throws
+  - simplified replacer flow with early primitive returns and consolidated object handling
+  - kept parse-error deduplication sentinel function-scoped during scanner execution
+- Updated `tests/publisher/review-publisher.test.ts`:
+  - added circular-object sanitizer coverage
+  - added `BigInt` serialization regression coverage
+- Verification completed:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test tests/publisher/review-publisher.test.ts`

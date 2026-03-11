@@ -79,6 +79,16 @@ describe("ReviewPublisher", () => {
       expect(/^[\x20-\x7E]+$/.test(message)).toBe(true);
     });
 
+    it("serializes BigInt values as strings", () => {
+      const message = sanitizeDiagnosticErrorMessage({
+        status: 422n,
+        nested: { value: 9007199254740993n },
+      });
+
+      expect(message).toContain('"status":"422"');
+      expect(message).toContain('"value":"9007199254740993"');
+    });
+
     it("sanitizes strings with non-ascii characters and truncates to 200 chars", () => {
       const source = `${"émoji 🚨 ".repeat(40)}tail`;
       const message = sanitizeDiagnosticErrorMessage(source);

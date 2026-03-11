@@ -24,3 +24,4 @@
 - When extracting shared constants, move the full policy group together (limits + markers + budgets) to avoid follow-up churn from partial extraction.
 - For shared policy constants, add a short module header and enforce consistent marker casing to cut style churn in follow-up review passes.
 - When normalizing marker formats, keep backward-compatible aliases if logs or external tooling may depend on previous literal strings.
+- If literal markers are part of compatibility behavior, export a canonical marker plus variant list and keep sanitizer detection aware of both forms.

@@ -212,6 +212,8 @@
   - unified truncation casing to lowercase marker format (`[truncated]`)
   - added deprecated uppercase marker alias for backward compatibility (`DIAGNOSTIC_OBJECT_TRUNCATION_MARKER_DEPRECATED`)
   - documented casing-change impact as a breaking change that needs release-note visibility
+  - added marker-variant detection export to cover canonical + deprecated object truncation literals
+  - added `CHANGELOG.md` with an Unreleased note about marker casing and the deprecated alias
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

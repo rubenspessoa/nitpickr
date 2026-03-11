@@ -4,6 +4,8 @@ import {
   DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER,
   DIAGNOSTIC_OBJECT_TRUNCATION_MARKER,
   DIAGNOSTIC_SANITIZED_MAX_LENGTH,
+} from "../../src/publisher/diagnostic-constants.js";
+import {
   type PublishReviewClient,
   ReviewPublisher,
   sanitizeDiagnosticErrorMessage,

@@ -1,0 +1,3 @@
+export const DIAGNOSTIC_SANITIZED_MAX_LENGTH = 200;
+export const DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER = "...[truncated]";
+export const DIAGNOSTIC_OBJECT_TRUNCATION_MARKER = "[Truncated]";

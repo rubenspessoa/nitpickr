@@ -205,6 +205,8 @@
   - added regression tests for object-budget truncation marker preservation
   - exported sanitizer truncation constants for canonical reuse across tests/callers
   - switched truncation assertions to import constants instead of hard-coded literals
+  - extracted diagnostic constants into `src/publisher/diagnostic-constants.ts`
+  - updated publisher and tests to import constants from the dedicated diagnostics module
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { PostgresWebhookEventStore } from "../../src/api/postgres-webhook-event-store.js";
+import {
+  PostgresWebhookEventStore,
+  WebhookEventNotFoundError,
+} from "../../src/api/postgres-webhook-event-store.js";
 
 interface QueryCall {
   query: string;
@@ -57,6 +60,23 @@ describe("PostgresWebhookEventStore", () => {
     });
   });
 
+  it("rejects unsupported provider values from persisted rows", async () => {
+    const client = new FakePostgresClient();
+    client.queueResponse([
+      {
+        delivery_id: "delivery-unsupported",
+        provider: "gitlab",
+        event_name: "pull_request",
+        status: "queued",
+      },
+    ]);
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(() =>
+      store.getByDeliveryId("delivery-unsupported"),
+    ).rejects.toThrow(/unsupported webhook event provider/i);
+  });
+
   it("creates and updates webhook events", async () => {
     const client = new FakePostgresClient();
     const store = new PostgresWebhookEventStore(client);
@@ -89,7 +109,7 @@ describe("PostgresWebhookEventStore", () => {
         deliveryId: "missing-delivery",
         status: "queued",
       }),
-    ).rejects.toThrow(/missing-delivery/i);
+    ).rejects.toBeInstanceOf(WebhookEventNotFoundError);
   });
 
   it("rejects empty identifiers before querying", async () => {

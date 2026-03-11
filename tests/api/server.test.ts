@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createApiServer,
   normalizeRawWebhookBody,
+  parseWebhookPayload,
 } from "../../src/api/server.js";
 
 class FakeLogger {
@@ -53,6 +54,22 @@ describe("createApiServer", () => {
       '{"action":"opened"}',
     );
     expect(normalizeRawWebhookBody(undefined)).toBe("{}");
+  });
+
+  it("parses webhook payloads defensively", () => {
+    expect(parseWebhookPayload('{"action":"opened"}')).toEqual({
+      rawBody: '{"action":"opened"}',
+      payload: {
+        action: "opened",
+      },
+    });
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+
+    expect(() => parseWebhookPayload(circular)).toThrow(
+      "Invalid GitHub webhook payload.",
+    );
   });
 
   it("accepts GitHub webhooks through Fastify", async () => {

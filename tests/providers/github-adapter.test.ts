@@ -122,7 +122,7 @@ const pullRequestPayload = {
 };
 
 describe("GitHubAdapter", () => {
-  it("verifies webhook signatures", () => {
+  it("verifies webhook signatures", async () => {
     const adapter = new GitHubAdapter({
       apiClient: new FakeGitHubApiClient(),
       appConfig: {
@@ -137,10 +137,12 @@ describe("GitHubAdapter", () => {
       .update(payload)
       .digest("hex");
 
-    expect(adapter.verifyWebhookSignature(payload, `sha256=${signature}`)).toBe(
-      true,
-    );
-    expect(adapter.verifyWebhookSignature(payload, "sha256=bad")).toBe(false);
+    await expect(
+      adapter.verifyWebhookSignature(payload, `sha256=${signature}`),
+    ).resolves.toBe(true);
+    await expect(
+      adapter.verifyWebhookSignature(payload, "sha256=bad"),
+    ).resolves.toBe(false);
   });
 
   it("normalizes pull request events into review requests", () => {

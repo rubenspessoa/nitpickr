@@ -129,7 +129,7 @@ class FakeGitHubAdapter {
     actorLogin: "ruben",
   };
 
-  verifyWebhookSignature(): boolean {
+  async verifyWebhookSignature(): Promise<boolean> {
     return this.signatureValid;
   }
 
@@ -358,6 +358,15 @@ describe("GitHubWebhookService", () => {
     expect(result.accepted).toBe(false);
     expect(result.message).toBe("Duplicate GitHub webhook delivery ignored.");
     expect(queue.calls).toEqual([]);
+    expect(logger.entries).toContainEqual({
+      level: "warn",
+      message: "Ignored duplicate GitHub webhook delivery.",
+      fields: {
+        component: "github-webhook",
+        deliveryId: "delivery-dup",
+        eventName: "pull_request",
+      },
+    });
   });
 
   it("logs webhook event persistence failures without swallowing the original webhook error", async () => {

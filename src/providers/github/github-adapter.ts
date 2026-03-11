@@ -325,7 +325,10 @@ export class GitHubAdapter {
     ];
   }
 
-  verifyWebhookSignature(rawBody: string, signatureHeader: string): boolean {
+  async verifyWebhookSignature(
+    rawBody: string,
+    signatureHeader: string,
+  ): Promise<boolean> {
     if (!signatureHeader.startsWith("sha256=")) {
       return false;
     }

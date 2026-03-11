@@ -4,6 +4,13 @@ import type {
   WebhookEventStore,
 } from "./webhook-event-service.js";
 
+export class WebhookEventNotFoundError extends Error {
+  constructor(deliveryId: string) {
+    super(`Webhook event with deliveryId ${deliveryId} was not found.`);
+    this.name = "WebhookEventNotFoundError";
+  }
+}
+
 export interface PostgresWebhookEventClient {
   // The client must execute placeholder-based parameterized SQL. Callers pass
   // the SQL text and arguments separately and never interpolate user input.
@@ -27,6 +34,14 @@ function wrapWebhookEventStoreError(message: string, error: unknown): Error {
   return new Error(message, {
     cause: error,
   });
+}
+
+function parseProvider(value: unknown): "github" {
+  if (value === "github") {
+    return value;
+  }
+
+  throw new Error("Unsupported webhook event provider.");
 }
 
 export class PostgresWebhookEventStore implements WebhookEventStore {
@@ -66,7 +81,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
 
     return {
       deliveryId: String(row.delivery_id),
-      provider: String(row.provider) as "github",
+      provider: parseProvider(row.provider),
       eventName: String(row.event_name),
       status: String(row.status) as WebhookEventStatus,
     };
@@ -151,12 +166,10 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
       );
 
       if (rows.length === 0) {
-        throw new Error(
-          `Webhook event with deliveryId ${input.deliveryId} was not found.`,
-        );
+        throw new WebhookEventNotFoundError(input.deliveryId);
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes("was not found")) {
+      if (error instanceof WebhookEventNotFoundError) {
         throw error;
       }
       throw wrapWebhookEventStoreError("Failed to update webhook event", error);

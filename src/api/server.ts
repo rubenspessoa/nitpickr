@@ -17,6 +17,32 @@ export function normalizeRawWebhookBody(body: unknown): string {
   return typeof body === "string" ? body : JSON.stringify(body ?? {});
 }
 
+export function parseWebhookPayload(body: unknown): {
+  rawBody: string;
+  payload: Record<string, unknown>;
+} {
+  let rawBody: string;
+  try {
+    rawBody = normalizeRawWebhookBody(body);
+  } catch {
+    throw new Error("Invalid GitHub webhook payload.");
+  }
+
+  let parsedPayload: unknown;
+  try {
+    parsedPayload = rawBody.trim().length === 0 ? {} : JSON.parse(rawBody);
+  } catch {
+    throw new Error("Invalid GitHub webhook payload.");
+  }
+
+  const payload = webhookPayloadSchema.parse(parsedPayload);
+
+  return {
+    rawBody,
+    payload,
+  };
+}
+
 function renderSetupPage(setupStatus: SetupStatus): string {
   return `<!doctype html>
 <html lang="en">
@@ -130,12 +156,12 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
       });
     }
 
-    const rawBody = normalizeRawWebhookBody(request.body);
+    let rawBody: string;
     let payload: Record<string, unknown>;
     try {
-      payload = webhookPayloadSchema.parse(
-        rawBody.length === 0 ? {} : JSON.parse(rawBody),
-      );
+      const parsedPayload = parseWebhookPayload(request.body);
+      rawBody = parsedPayload.rawBody;
+      payload = parsedPayload.payload;
     } catch {
       return reply.status(400).send({
         accepted: false,

@@ -158,6 +158,28 @@ describe("PostgresWebhookEventStore", () => {
     ).rejects.toThrow(/repositoryId/i);
   });
 
+  it("rejects unsupported webhook event statuses before writing", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(() =>
+      store.createEvent({
+        deliveryId: "delivery-bad-status",
+        provider: "github",
+        eventName: "pull_request",
+        status: "bogus" as never,
+        payload: {},
+      }),
+    ).rejects.toThrow(/unsupported webhook event status/i);
+
+    await expect(() =>
+      store.updateEvent({
+        deliveryId: "delivery-bad-status",
+        status: "bogus" as never,
+      }),
+    ).rejects.toThrow(/unsupported webhook event status/i);
+  });
+
   it("adds context when database writes fail", async () => {
     const client = new FakePostgresClient();
     client.queueError(new Error("db unavailable"));

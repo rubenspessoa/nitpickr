@@ -15,6 +15,23 @@ export type WebhookEventStatus =
   | "processed"
   | "failed";
 
+export const supportedWebhookEventStatuses = [
+  "received",
+  "ignored",
+  "queued",
+  "processed",
+  "failed",
+] as const;
+
+export function isWebhookEventStatus(
+  value: unknown,
+): value is WebhookEventStatus {
+  return (
+    typeof value === "string" &&
+    supportedWebhookEventStatuses.includes(value as WebhookEventStatus)
+  );
+}
+
 export interface WebhookEventRecord {
   deliveryId: string;
   provider: WebhookProvider;

@@ -3,6 +3,7 @@ import {
   type WebhookEventStatus,
   type WebhookEventStore,
   type WebhookProvider,
+  isWebhookEventStatus,
   isWebhookProvider,
 } from "./webhook-event-service.js";
 
@@ -44,6 +45,14 @@ function parseProvider(value: unknown): WebhookProvider {
   }
 
   throw new Error("Unsupported webhook event provider.");
+}
+
+function parseStatus(value: unknown): WebhookEventStatus {
+  if (isWebhookEventStatus(value)) {
+    return value;
+  }
+
+  throw new Error("Unsupported webhook event status.");
 }
 
 export class PostgresWebhookEventStore implements WebhookEventStore {
@@ -99,6 +108,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
     assertNonEmpty(input.deliveryId, "deliveryId");
     assertNonEmpty(input.eventName, "eventName");
     const provider = parseProvider(input.provider);
+    const status = parseStatus(input.status);
 
     try {
       await this.#client.executeParameterized(
@@ -118,7 +128,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
           input.deliveryId,
           provider,
           input.eventName,
-          input.status,
+          status,
           toJsonPayload(input.payload),
         ],
       );
@@ -136,6 +146,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
     payload?: unknown;
   }): Promise<void> {
     assertNonEmpty(input.deliveryId, "deliveryId");
+    const status = parseStatus(input.status);
     if (input.repositoryId !== undefined) {
       assertNonEmpty(input.repositoryId, "repositoryId");
     }
@@ -160,7 +171,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
         `,
         [
           input.deliveryId,
-          input.status,
+          status,
           input.repositoryId ?? null,
           input.changeRequestId ?? null,
           input.errorMessage ?? null,

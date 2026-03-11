@@ -148,7 +148,7 @@
 - [x] Fix omission-marker and truncation edge-case correctness issues.
 - [x] Harden 422 fallback error-shape parsing and add non-Error payload test coverage.
 - [x] Re-run lint, typecheck, and full test suite.
-- [ ] Resolve all addressed PR threads.
+- [x] Resolve all addressed PR threads.
 
 ## Results
 

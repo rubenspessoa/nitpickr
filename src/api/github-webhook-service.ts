@@ -144,9 +144,11 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
           : {}),
       });
     } catch (error) {
-      this.#logger.warn("Failed to persist GitHub webhook event status.", {
+      this.#logger.error("Failed to persist GitHub webhook event status.", {
         deliveryId,
         status,
+        alertable: true,
+        monitoringKey: "webhook_event_persistence_failure",
         error:
           error instanceof Error
             ? error.message
@@ -169,6 +171,8 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
       };
     }
 
+    // Register the delivery before any reactions, normalization, or queue
+    // work so duplicates are rejected before the handler produces side effects.
     const delivery = await this.#webhookEventService.beginDelivery({
       deliveryId: parsed.deliveryId,
       provider: "github",

@@ -5,6 +5,10 @@ import type { ReadinessStatus } from "../health/readiness-service.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
 import type { SetupStatus } from "../setup/runtime-config-service.js";
 import type { GitHubWebhookHandler } from "./github-webhook-service.js";
+import {
+  InMemoryWebhookRateLimiter,
+  type WebhookRateLimiter,
+} from "./webhook-rate-limiter.js";
 
 const webhookPayloadSchema = z.object({}).passthrough();
 const githubWebhookHeadersSchema = z.object({
@@ -75,12 +79,15 @@ export interface ApiServerDependencies {
   setupStatusService?: {
     getSetupStatus(): Promise<SetupStatus>;
   };
+  webhookRateLimiter?: WebhookRateLimiter;
 }
 
 export function createApiServer(input: ApiServerDependencies): FastifyInstance {
   const githubWebhookService = input.githubWebhookService;
   const readinessService = input.readinessService;
   const setupStatusService = input.setupStatusService;
+  const webhookRateLimiter =
+    input.webhookRateLimiter ?? new InMemoryWebhookRateLimiter();
   const server = Fastify({
     logger: false,
   });
@@ -153,6 +160,18 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
       return reply.status(503).send({
         accepted: false,
         message: "Nitpickr setup is incomplete.",
+      });
+    }
+
+    const rateLimit = await webhookRateLimiter.consume(request.ip);
+    if (!rateLimit.allowed) {
+      if (rateLimit.retryAfterSeconds !== undefined) {
+        void reply.header("retry-after", String(rateLimit.retryAfterSeconds));
+      }
+
+      return reply.status(429).send({
+        accepted: false,
+        message: "GitHub webhook rate limit exceeded.",
       });
     }
 

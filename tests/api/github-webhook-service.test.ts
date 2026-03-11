@@ -104,6 +104,8 @@ class FakeWebhookEventService {
 
 class FakeGitHubAdapter {
   signatureValid = true;
+  normalizeWebhookEventCalls = 0;
+  reactToMentionCalls = 0;
   mentionReaction: {
     commentId: number;
     content: "eyes";
@@ -134,10 +136,12 @@ class FakeGitHubAdapter {
   }
 
   normalizeWebhookEvent(): GitHubNormalizedEvent {
+    this.normalizeWebhookEventCalls += 1;
     return this.normalizedEvent;
   }
 
   async reactToMention() {
+    this.reactToMentionCalls += 1;
     if (this.mentionReactionError) {
       throw this.mentionReactionError;
     }
@@ -358,6 +362,8 @@ describe("GitHubWebhookService", () => {
     expect(result.accepted).toBe(false);
     expect(result.message).toBe("Duplicate GitHub webhook delivery ignored.");
     expect(queue.calls).toEqual([]);
+    expect(adapter.reactToMentionCalls).toBe(0);
+    expect(adapter.normalizeWebhookEventCalls).toBe(0);
     expect(logger.entries).toContainEqual({
       level: "warn",
       message: "Ignored duplicate GitHub webhook delivery.",
@@ -398,12 +404,14 @@ describe("GitHubWebhookService", () => {
     expect(result.accepted).toBe(false);
     expect(result.message).toBe("Failed to process GitHub webhook event.");
     expect(logger.entries).toContainEqual({
-      level: "warn",
+      level: "error",
       message: "Failed to persist GitHub webhook event status.",
       fields: {
         component: "github-webhook",
         deliveryId: "delivery-fail",
         status: "failed",
+        alertable: true,
+        monitoringKey: "webhook_event_persistence_failure",
         error: "db write failed",
       },
     });

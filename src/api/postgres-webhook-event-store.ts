@@ -1,7 +1,9 @@
-import type {
-  WebhookEventRecord,
-  WebhookEventStatus,
-  WebhookEventStore,
+import {
+  type WebhookEventRecord,
+  type WebhookEventStatus,
+  type WebhookEventStore,
+  type WebhookProvider,
+  isWebhookProvider,
 } from "./webhook-event-service.js";
 
 export class WebhookEventNotFoundError extends Error {
@@ -36,8 +38,8 @@ function wrapWebhookEventStoreError(message: string, error: unknown): Error {
   });
 }
 
-function parseProvider(value: unknown): "github" {
-  if (value === "github") {
+function parseProvider(value: unknown): WebhookProvider {
+  if (isWebhookProvider(value)) {
     return value;
   }
 

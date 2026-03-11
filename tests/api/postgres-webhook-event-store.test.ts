@@ -77,6 +77,26 @@ describe("PostgresWebhookEventStore", () => {
     ).rejects.toThrow(/unsupported webhook event provider/i);
   });
 
+  it("supports all configured webhook providers", async () => {
+    const client = new FakePostgresClient();
+    client.queueResponse([
+      {
+        delivery_id: "delivery-github",
+        provider: "github",
+        event_name: "pull_request",
+        status: "queued",
+      },
+    ]);
+    const store = new PostgresWebhookEventStore(client);
+
+    await expect(store.getByDeliveryId("delivery-github")).resolves.toEqual({
+      deliveryId: "delivery-github",
+      provider: "github",
+      eventName: "pull_request",
+      status: "queued",
+    });
+  });
+
   it("creates and updates webhook events", async () => {
     const client = new FakePostgresClient();
     const store = new PostgresWebhookEventStore(client);

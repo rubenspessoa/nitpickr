@@ -1,3 +1,13 @@
+export const supportedWebhookProviders = ["github"] as const;
+export type WebhookProvider = (typeof supportedWebhookProviders)[number];
+
+export function isWebhookProvider(value: unknown): value is WebhookProvider {
+  return (
+    typeof value === "string" &&
+    supportedWebhookProviders.includes(value as WebhookProvider)
+  );
+}
+
 export type WebhookEventStatus =
   | "received"
   | "ignored"
@@ -7,7 +17,7 @@ export type WebhookEventStatus =
 
 export interface WebhookEventRecord {
   deliveryId: string;
-  provider: "github";
+  provider: WebhookProvider;
   eventName: string;
   status: WebhookEventStatus;
 }
@@ -16,7 +26,7 @@ export interface WebhookEventStore {
   getByDeliveryId(deliveryId: string): Promise<WebhookEventRecord | null>;
   createEvent(input: {
     deliveryId: string;
-    provider: "github";
+    provider: WebhookProvider;
     eventName: string;
     status: WebhookEventStatus;
     payload: unknown;
@@ -40,7 +50,7 @@ export class WebhookEventService {
 
   async beginDelivery(input: {
     deliveryId: string;
-    provider: "github";
+    provider: WebhookProvider;
     eventName: string;
     payload: unknown;
   }): Promise<"new" | "duplicate"> {

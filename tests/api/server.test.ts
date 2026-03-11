@@ -5,6 +5,7 @@ import {
   normalizeRawWebhookBody,
   parseWebhookPayload,
 } from "../../src/api/server.js";
+import { InMemoryWebhookRateLimiter } from "../../src/api/webhook-rate-limiter.js";
 
 class FakeLogger {
   readonly entries: Array<{
@@ -106,6 +107,62 @@ describe("createApiServer", () => {
     expect(response.json()).toEqual({
       accepted: true,
       message: "queued",
+    });
+  });
+
+  it("rate limits GitHub webhooks when the limiter bucket is exhausted", async () => {
+    const server = createApiServer({
+      githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
+        async handle() {
+          return {
+            statusCode: 202,
+            accepted: true,
+            message: "queued",
+          };
+        },
+      },
+      webhookRateLimiter: new InMemoryWebhookRateLimiter({
+        maxRequests: 1,
+        windowMs: 60_000,
+        now: () => 1_000,
+      }),
+    });
+
+    const headers = {
+      "x-github-delivery": "delivery-rate-limit",
+      "x-github-event": "pull_request",
+      "x-hub-signature-256": "sha256=test",
+      "content-type": "application/json",
+    };
+    const payload = JSON.stringify({
+      action: "opened",
+    });
+
+    const firstResponse = await server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers,
+      payload,
+    });
+    const secondResponse = await server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        ...headers,
+        "x-github-delivery": "delivery-rate-limit-2",
+      },
+      payload,
+    });
+
+    expect(firstResponse.statusCode).toBe(202);
+    expect(secondResponse.statusCode).toBe(429);
+    expect(secondResponse.headers["retry-after"]).toBe("60");
+    expect(secondResponse.json()).toEqual({
+      accepted: false,
+      message: "GitHub webhook rate limit exceeded.",
     });
   });
 

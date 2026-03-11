@@ -131,7 +131,7 @@ class FakeGitHubAdapter {
       type: "pr_opened",
       actorLogin: "ruben",
     },
-    mode: "quick",
+    mode: "full",
     actorLogin: "ruben",
   };
 
@@ -193,7 +193,7 @@ describe("GitHubWebhookService", () => {
         installationId: "123456",
         repositoryId: "github:99",
         pullNumber: 42,
-        mode: "quick",
+        mode: "full",
       },
     });
   });

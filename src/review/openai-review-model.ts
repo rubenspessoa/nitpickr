@@ -11,6 +11,22 @@ function normalizeBaseUrl(baseUrl: string | undefined): string {
   return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
 }
 
+function shouldRetryWithoutTemperature(
+  status: number,
+  details: string,
+): boolean {
+  if (status !== 400) {
+    return false;
+  }
+
+  const normalized = details.toLowerCase();
+  return (
+    normalized.includes("temperature") &&
+    normalized.includes("unsupported") &&
+    normalized.includes("default")
+  );
+}
+
 export class OpenAiReviewModel {
   readonly #config: OpenAiReviewModelConfig;
   readonly #fetch: FetchLike;
@@ -24,9 +40,9 @@ export class OpenAiReviewModel {
     system: string;
     user: string;
   }): Promise<unknown> {
-    const response = await this.#fetch(
-      `${normalizeBaseUrl(this.#config.baseUrl)}/chat/completions`,
-      {
+    const endpoint = `${normalizeBaseUrl(this.#config.baseUrl)}/chat/completions`;
+    const sendRequest = (includeTemperature: boolean) =>
+      this.#fetch(endpoint, {
         method: "POST",
         headers: {
           authorization: `Bearer ${this.#config.apiKey}`,
@@ -34,7 +50,7 @@ export class OpenAiReviewModel {
         },
         body: JSON.stringify({
           model: this.#config.model,
-          temperature: 0.1,
+          ...(includeTemperature ? { temperature: 0.1 } : {}),
           response_format: {
             type: "json_object",
           },
@@ -49,14 +65,24 @@ export class OpenAiReviewModel {
             },
           ],
         }),
-      },
-    );
+      });
 
+    let response = await sendRequest(true);
     if (!response.ok) {
       const details = await response.text();
-      throw new Error(
-        `OpenAI request failed with status ${response.status}: ${details}`,
-      );
+      if (!shouldRetryWithoutTemperature(response.status, details)) {
+        throw new Error(
+          `OpenAI request failed with status ${response.status}: ${details}`,
+        );
+      }
+
+      response = await sendRequest(false);
+      if (!response.ok) {
+        const retryDetails = await response.text();
+        throw new Error(
+          `OpenAI request failed with status ${response.status}: ${retryDetails}`,
+        );
+      }
     }
 
     const payload = (await response.json()) as {

@@ -558,7 +558,7 @@ export class GitHubAdapter {
         repository,
         pullNumber: parsed.pull_request.number,
         trigger,
-        mode: "quick",
+        mode: parsed.action === "synchronize" ? "quick" : "full",
         actorLogin: parsed.pull_request.user.login,
       };
     }

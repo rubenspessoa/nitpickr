@@ -208,6 +208,8 @@
   - extracted diagnostic constants into `src/publisher/diagnostic-constants.ts`
   - updated publisher and tests to import constants from the dedicated diagnostics module
   - moved `DIAGNOSTIC_MAX_SERIALIZED_LENGTH`, `DIAGNOSTIC_MAX_STRING_LENGTH`, and `DIAGNOSTIC_OBJECT_BUDGET` into the same diagnostics constants module
+  - added a diagnostics constants header comment documenting units/relationships
+  - unified truncation casing to lowercase marker format (`[truncated]`)
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

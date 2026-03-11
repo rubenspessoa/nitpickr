@@ -203,6 +203,8 @@
   - ensured sanitizer preserves truncation sentinels when trimming to 200 chars
   - added regression tests for serialized-length truncation marker preservation
   - added regression tests for object-budget truncation marker preservation
+  - exported sanitizer truncation constants for canonical reuse across tests/callers
+  - switched truncation assertions to import constants instead of hard-coded literals
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

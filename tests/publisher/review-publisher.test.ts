@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER,
+  DIAGNOSTIC_OBJECT_TRUNCATION_MARKER,
+  DIAGNOSTIC_SANITIZED_MAX_LENGTH,
   type PublishReviewClient,
   ReviewPublisher,
   sanitizeDiagnosticErrorMessage,
@@ -93,7 +96,9 @@ describe("ReviewPublisher", () => {
       const source = `${"émoji 🚨 ".repeat(40)}tail`;
       const message = sanitizeDiagnosticErrorMessage(source);
 
-      expect(message.length).toBeLessThanOrEqual(200);
+      expect(message.length).toBeLessThanOrEqual(
+        DIAGNOSTIC_SANITIZED_MAX_LENGTH,
+      );
       expect(/^[\x20-\x7E]+$/.test(message)).toBe(true);
     });
 
@@ -107,8 +112,10 @@ describe("ReviewPublisher", () => {
 
       const message = sanitizeDiagnosticErrorMessage(oversizedPayload);
 
-      expect(message).toContain("...[truncated]");
-      expect(message.length).toBeLessThanOrEqual(200);
+      expect(message).toContain(DIAGNOSTIC_ELLIPSIS_TRUNCATION_MARKER);
+      expect(message.length).toBeLessThanOrEqual(
+        DIAGNOSTIC_SANITIZED_MAX_LENGTH,
+      );
     });
 
     it("preserves object-budget truncation markers", () => {
@@ -118,8 +125,10 @@ describe("ReviewPublisher", () => {
 
       const message = sanitizeDiagnosticErrorMessage(budgetExhaustingPayload);
 
-      expect(message).toContain("[Truncated]");
-      expect(message.length).toBeLessThanOrEqual(200);
+      expect(message).toContain(DIAGNOSTIC_OBJECT_TRUNCATION_MARKER);
+      expect(message.length).toBeLessThanOrEqual(
+        DIAGNOSTIC_SANITIZED_MAX_LENGTH,
+      );
     });
 
     it("returns a fallback when sanitization yields an empty string", () => {
@@ -134,7 +143,9 @@ describe("ReviewPublisher", () => {
       const message = sanitizeDiagnosticErrorMessage(payload);
 
       expect(message).toContain('"self":"[Circular]"');
-      expect(message.length).toBeLessThanOrEqual(200);
+      expect(message.length).toBeLessThanOrEqual(
+        DIAGNOSTIC_SANITIZED_MAX_LENGTH,
+      );
       expect(/^[\x20-\x7E]+$/.test(message)).toBe(true);
     });
   });

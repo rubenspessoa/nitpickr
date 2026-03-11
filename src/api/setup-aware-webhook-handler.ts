@@ -38,7 +38,7 @@ export function createSetupAwareGitHubWebhookHandler(input: {
   return {
     async verifySignature(rawBody, signature) {
       if (cachedService) {
-        return cachedService.verifySignature(rawBody, signature);
+        return await cachedService.verifySignature(rawBody, signature);
       }
 
       const operationalRuntime = await input.runtime.getOperationalRuntime();
@@ -47,7 +47,7 @@ export function createSetupAwareGitHubWebhookHandler(input: {
       }
 
       cachedService = createWebhookService(operationalRuntime);
-      return cachedService.verifySignature(rawBody, signature);
+      return await cachedService.verifySignature(rawBody, signature);
     },
     async handle(request) {
       if (cachedService) {

@@ -17,6 +17,26 @@ const githubWebhookHeadersSchema = z.object({
   deliveryId: z.string().min(1),
 });
 
+function buildDefaultSetupStatus(): SetupStatus {
+  return {
+    state: "ready",
+    openAiConfigured: true,
+    githubAppConfigured: true,
+    ready: true,
+  };
+}
+
+function hasJsonContentType(
+  headerValue: string | string[] | undefined,
+): boolean {
+  const header = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  if (!header) {
+    return false;
+  }
+
+  return header.split(";")[0]?.trim().toLowerCase() === "application/json";
+}
+
 export function normalizeRawWebhookBody(body: unknown): string {
   return typeof body === "string" ? body : JSON.stringify(body ?? {});
 }
@@ -128,12 +148,7 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
   server.get("/setup", async (_request, reply) => {
     const setupStatus = setupStatusService
       ? await setupStatusService.getSetupStatus()
-      : {
-          state: "ready" as const,
-          openAiConfigured: true,
-          githubAppConfigured: true,
-          ready: true,
-        };
+      : buildDefaultSetupStatus();
 
     return reply
       .type("text/html; charset=utf-8")
@@ -143,12 +158,7 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
 
   server.get("/setup/status", async () => {
     if (!setupStatusService) {
-      return {
-        state: "ready" as const,
-        openAiConfigured: true,
-        githubAppConfigured: true,
-        ready: true,
-      };
+      return buildDefaultSetupStatus();
     }
 
     return setupStatusService.getSetupStatus();
@@ -160,6 +170,13 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
       return reply.status(503).send({
         accepted: false,
         message: "Nitpickr setup is incomplete.",
+      });
+    }
+
+    if (!hasJsonContentType(request.headers["content-type"])) {
+      return reply.status(415).send({
+        accepted: false,
+        message: "GitHub webhooks must use Content-Type: application/json.",
       });
     }
 

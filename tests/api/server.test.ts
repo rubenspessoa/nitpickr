@@ -270,6 +270,29 @@ describe("createApiServer", () => {
     });
   });
 
+  it("reuses the same default setup status when setup services are absent", async () => {
+    const server = createApiServer({});
+
+    const setupPage = await server.inject({
+      method: "GET",
+      url: "/setup",
+    });
+    const setupStatus = await server.inject({
+      method: "GET",
+      url: "/setup/status",
+    });
+
+    expect(setupPage.statusCode).toBe(200);
+    expect(setupPage.body).toContain("State: <strong>ready</strong>");
+    expect(setupStatus.statusCode).toBe(200);
+    expect(setupStatus.json()).toEqual({
+      state: "ready",
+      openAiConfigured: true,
+      githubAppConfigured: true,
+      ready: true,
+    });
+  });
+
   it("logs unhandled webhook errors and returns a 500 response", async () => {
     const logger = new FakeLogger();
     const server = createApiServer({
@@ -376,6 +399,83 @@ describe("createApiServer", () => {
     expect(response.json()).toEqual({
       accepted: false,
       message: "Missing required GitHub webhook headers.",
+    });
+  });
+
+  it("rejects webhook requests with a non-json content type", async () => {
+    let handleCalled = false;
+    const server = createApiServer({
+      githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
+        async handle() {
+          handleCalled = true;
+          return {
+            statusCode: 202,
+            accepted: true,
+            message: "queued",
+          };
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "x-github-delivery": "delivery-text",
+        "x-github-event": "pull_request",
+        "x-hub-signature-256": "sha256=test",
+        "content-type": "text/plain",
+      },
+      payload: JSON.stringify({
+        action: "opened",
+      }),
+    });
+
+    expect(response.statusCode).toBe(415);
+    expect(handleCalled).toBe(false);
+    expect(response.json()).toEqual({
+      accepted: false,
+      message: "GitHub webhooks must use Content-Type: application/json.",
+    });
+  });
+
+  it("accepts webhook requests with application/json content type parameters", async () => {
+    const server = createApiServer({
+      githubWebhookService: {
+        async verifySignature() {
+          return true;
+        },
+        async handle() {
+          return {
+            statusCode: 202,
+            accepted: true,
+            message: "queued",
+          };
+        },
+      },
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "x-github-delivery": "delivery-json-charset",
+        "x-github-event": "pull_request",
+        "x-hub-signature-256": "sha256=test",
+        "content-type": "application/json; charset=utf-8",
+      },
+      payload: JSON.stringify({
+        action: "opened",
+      }),
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({
+      accepted: true,
+      message: "queued",
     });
   });
 

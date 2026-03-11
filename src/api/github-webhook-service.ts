@@ -181,6 +181,7 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
     });
 
     if (delivery === "duplicate") {
+      await this.#updateWebhookEventStatus(parsed.deliveryId, "ignored");
       this.#logger.warn("Ignored duplicate GitHub webhook delivery.", {
         deliveryId: parsed.deliveryId,
         eventName: parsed.eventName,

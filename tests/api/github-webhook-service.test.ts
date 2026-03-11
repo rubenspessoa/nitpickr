@@ -362,6 +362,7 @@ describe("GitHubWebhookService", () => {
     expect(result.accepted).toBe(false);
     expect(result.message).toBe("Duplicate GitHub webhook delivery ignored.");
     expect(queue.calls).toEqual([]);
+    expect(webhookEvents.ignored).toEqual(["delivery-dup"]);
     expect(adapter.reactToMentionCalls).toBe(0);
     expect(adapter.normalizeWebhookEventCalls).toBe(0);
     expect(logger.entries).toContainEqual({
@@ -373,6 +374,35 @@ describe("GitHubWebhookService", () => {
         eventName: "pull_request",
       },
     });
+  });
+
+  it("awaits asynchronous signature verification before accepting the webhook", async () => {
+    const adapter = new FakeGitHubAdapter();
+    adapter.verifyWebhookSignature = async () =>
+      await new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), 0);
+      });
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    const logger = new FakeLogger();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      logger,
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-async-signature",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: {},
+    });
+
+    expect(result.statusCode).toBe(401);
+    expect(queue.calls).toEqual([]);
+    expect(webhookEvents.received).toEqual([]);
   });
 
   it("logs webhook event persistence failures without swallowing the original webhook error", async () => {

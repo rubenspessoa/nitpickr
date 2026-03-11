@@ -116,6 +116,7 @@ describe("PostgresWebhookEventStore", () => {
     });
 
     expect(client.calls[0]?.query).toContain("insert into webhook_events");
+    expect(client.calls[0]?.params?.[1]).toBe("github");
     expect(client.calls[1]?.query).toContain("update webhook_events");
   });
 

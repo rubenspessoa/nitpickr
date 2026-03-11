@@ -91,13 +91,14 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
 
   async createEvent(input: {
     deliveryId: string;
-    provider: "github";
+    provider: WebhookProvider;
     eventName: string;
     status: WebhookEventStatus;
     payload: unknown;
   }): Promise<void> {
     assertNonEmpty(input.deliveryId, "deliveryId");
     assertNonEmpty(input.eventName, "eventName");
+    const provider = parseProvider(input.provider);
 
     try {
       await this.#client.executeParameterized(
@@ -115,7 +116,7 @@ export class PostgresWebhookEventStore implements WebhookEventStore {
         `,
         [
           input.deliveryId,
-          input.provider,
+          provider,
           input.eventName,
           input.status,
           toJsonPayload(input.payload),

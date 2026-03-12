@@ -37,3 +37,9 @@
 - If literal markers are part of compatibility behavior, export a canonical marker plus variant list and keep sanitizer detection aware of both forms.
 - When compatibility variants are expected to grow, ship both ordered arrays and readonly sets from the constants module so callsites can choose iteration vs membership semantics without re-declaring structures.
 - Keep iteration callsites on ordered arrays and reserve sets for explicit membership checks to reduce allocation/readability churn.
+- When user-supplied marketing art has transparent backgrounds, preserve that transparency on-page:
+  - place the artwork on intentional gradients, cards, or framed surfaces instead of flattening it into opaque exports
+  - only convert scene art to opaque formats when the composition is already a full rectangular image, such as a hero banner or social preview
+- For marketing pages, force the message into one short value phrase before expanding the layout:
+  - if the page cannot be summarized in a simple sentence, the copy will feel dense no matter how polished the visuals are
+  - make each section answer one follow-up question from that phrase instead of stacking multiple product stories into the same block

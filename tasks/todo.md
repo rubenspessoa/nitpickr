@@ -248,6 +248,19 @@
 - [x] Add a dedicated GitHub Pages Actions workflow for deployment from `main`.
 - [x] Verify the site build and key links, then document results.
 
+## Follow-up Asset Pass
+
+- [x] Turn the new mascot renders in `assets/` into web-sized landing page assets.
+- [x] Replace the placeholder mascot scenes with the stronger review, VPS, and motion illustrations.
+- [x] Rebuild the Pages artifact, re-open the browser preview, and document the verification results.
+
+## Simplification Pass
+
+- [x] Reduce the landing page to a calmer, roomier structure with fewer competing sections.
+- [x] Rewrite the copy to feel friendlier and easier to scan while preserving the key product truths.
+- [x] Use the mascot art more selectively so each illustration has a clear role instead of repeating throughout the page.
+- [x] Rebuild, re-open the browser preview, and verify the simplified page.
+
 ## Results
 
 - Added a standalone marketing site under `website/` with:
@@ -262,6 +275,16 @@
 - Follow-up asset refresh:
   - replaced the flatter mascot derivatives with SVG scene compositions for the hero, brand chip, badge, and OG card
   - updated the site to use the SVG hero/chip/badge assets directly while regenerating PNG derivatives for social and icon use
+- Follow-up asset integration from the new transparent mascot renders:
+  - added web-sized mascot art derivatives for hero, VPS/self-host, FAQ, brand mark, and footer usage
+  - switched the landing page to use the transparent PNG scenes where they can sit on gradients and cards cleanly
+  - kept the reviewing scene as a framed hero image and refreshed the social preview image from the same artwork
+  - regenerated the favicon and Apple touch icon from the flying mascot render
+- Simplification pass after design feedback:
+  - recentered the page around a single value phrase: `AI code review, on your infrastructure.`
+  - removed the denser proof-strip and walkthrough sections in favor of a calmer hero, a simple value section, a self-hosting section, and a tighter control/FAQ flow
+  - shortened the copy so each section answers one follow-up question instead of trying to explain everything at once
+  - reduced mascot usage to the brand mark, the main review hero, and one VPS illustration
 - Added repository wiring:
   - `scripts/build-site.mjs`
   - `pnpm site:build`
@@ -272,8 +295,9 @@
   - `pnpm lint`
   - `pnpm typecheck`
   - `rg -n '(src|href)=\"/' dist/site website` (no root-relative asset paths found)
-- Remaining manual QA note:
-  - local HTTP preview could not be served inside the sandbox because binding a local port was denied, so final browser-level responsive inspection on the rendered Pages artifact is still recommended
+- Browser preview:
+  - served `dist/site` locally on `http://127.0.0.1:4173/`
+  - reopened the rendered Pages artifact in the browser after both the asset integration pass and the simplification pass
 - [x] Add/extend sanitizer-focused regression tests.
 - [x] Re-run lint, typecheck, and targeted publisher tests.
 - [x] Resolve addressed PR threads.

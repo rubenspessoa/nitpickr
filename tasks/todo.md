@@ -293,6 +293,15 @@
 - [x] Restore the supporting sections under the simplified hero without changing the hero itself.
 - [x] Rebuild and verify that the homepage keeps the one-CTA hero while restoring the product narrative below it.
 
+## Public Pages Launch
+
+- [x] Confirm the repository is clean before changing its GitHub visibility and Pages settings.
+- [x] Make `rubenspessoa/nitpickr` public.
+- [x] Enable GitHub Pages on the repo using the existing Actions workflow.
+- [x] Trigger a deployment and verify the published Pages URL.
+- [x] Point the Pages site at `nitpickr.rubenspessoa.dev` in GitHub Pages settings.
+- [ ] Add the DNS record for `nitpickr.rubenspessoa.dev` and verify HTTPS once the subdomain resolves.
+
 ## Results
 
 - Added a standalone marketing site under `website/` with:

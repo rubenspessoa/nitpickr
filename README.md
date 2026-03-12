@@ -1,5 +1,9 @@
 # nitpickr
 
+<p align="center">
+  <img src="assets/nitpickr-mascot.png" alt="nitpickr mascot" width="280" />
+</p>
+
 `nitpickr` is a source-available, self-hosted GitHub pull request reviewer.
 It runs as a GitHub App, reads the PR diff plus repository instructions, calls
 an LLM for review output, and publishes inline comments, a summary, and a

@@ -283,15 +283,15 @@ h3 {
 
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
-  gap: 4rem;
-  align-items: center;
+  grid-template-columns: minmax(0, 1.12fr) minmax(360px, 0.88fr);
+  gap: 3.25rem;
+  align-items: start;
 }
 
 .hero-copy {
-  max-width: 32rem;
+  max-width: 40rem;
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .split-grid {
@@ -318,8 +318,8 @@ h3 {
 }
 
 h1 {
-  font-size: clamp(3rem, 7vw, 6rem);
-  max-width: 10ch;
+  font-size: clamp(2.9rem, 6.2vw, 5.2rem);
+  max-width: 12ch;
 }
 
 h2 {
@@ -351,8 +351,8 @@ ul {
 }
 
 .hero-lead {
-  max-width: 36rem;
-  font-size: 1.08rem;
+  max-width: 34rem;
+  font-size: 1.04rem;
 }
 
 .hero-actions {
@@ -385,6 +385,7 @@ ul {
 
 .hero-visual {
   margin: 0;
+  padding-top: 0.4rem;
 }
 
 .hero-frame,

@@ -1,5 +1,9 @@
 # Lessons
 
+- Clarify source-available business goals before choosing a license:
+  - distinguish internal commercial use from offering the software itself as a hosted service
+  - if internal commercial use should stay allowed, do not default to non-commercial licenses
+  - protect name/logo/mascot separately with a trademark policy when "they cannot claim it as theirs" is part of the requirement
 - Keep prompt payload changes deterministic and reversible: ship with an explicit optimization mode flag and diagnostics before changing defaults further.
 - Keep trigger intent aligned with review depth:
   - automatic `pull_request` `opened` and `ready_for_review` should run `full` mode

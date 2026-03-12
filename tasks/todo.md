@@ -52,7 +52,6 @@
 - Opened PR for review:
   - `https://github.com/rubenspessoa/nitpickr/pull/4`
   - posted `@nitpickr review`
-
 # Prompt Token Optimization v1
 
 ## Plan

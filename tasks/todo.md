@@ -6,7 +6,7 @@
 - [x] Rewrite `README.md` for open-source onboarding, local setup, usage, and Railway deployment.
 - [x] Add `CONTRIBUTING.md` with development workflow, verification expectations, and PR guidance.
 - [x] Align supporting docs/examples with the new onboarding docs where needed.
-- [ ] Run verification for docs consistency and open a pull request for review.
+- [x] Run verification for docs consistency and open a pull request for review.
 
 ## Results
 
@@ -27,11 +27,15 @@
 - Updated `.env.example` to be a commented, public-ready template.
 - Added a repository `LICENSE` and package license metadata.
 - Aligned default OpenAI model examples and runtime defaults to `gpt-5-mini`.
+- Added the mascot asset to the README header for the public docs presentation.
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`
   - `pnpm test` (`51` files, `269` tests)
   - `pnpm eval:reviews`
+- Opened PR for review:
+  - `https://github.com/rubenspessoa/nitpickr/pull/4`
+  - posted `@nitpickr review`
 
 # Prompt Token Optimization v1
 

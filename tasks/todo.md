@@ -258,21 +258,24 @@
 
 - [x] Reduce the landing page to a calmer, roomier structure with fewer competing sections.
 - [x] Rewrite the copy to feel friendlier and easier to scan while preserving the key product truths.
+- [x] Use the mascot art more selectively so each illustration has a clear role instead of repeating throughout the page.
+- [x] Rebuild, re-open the browser preview, and verify the simplified page.
 
 # PR #5 Comment Sweep
 
 ## Plan
 
 - [x] Confirm the local branch state and whether there are any unpushed marketing-site changes.
-- [ ] Fetch the active PR comments and separate still-valid feedback from comments made obsolete by the latest landing-page simplification.
-- [ ] Apply the remaining valid fixes, verify the site again, and push any new commit.
-- [ ] Resolve obsolete or addressed review threads and summarize what remains.
+- [x] Fetch the active PR comments and separate still-valid feedback from comments made obsolete by the latest landing-page simplification.
+- [x] Apply the remaining valid fixes, verify the site again, and push any new commit.
+- [x] Resolve obsolete or addressed review threads and summarize what remains.
 
 ## Results
 
-- In progress.
-- [x] Use the mascot art more selectively so each illustration has a clear role instead of repeating throughout the page.
-- [x] Rebuild, re-open the browser preview, and verify the simplified page.
+- Re-triaged all nitpickr review threads on PR #5 and kept only the feedback that still matched the simplified marketing site.
+- Updated workflow robustness by moving `actions/setup-node` ahead of `pnpm/action-setup` and adding `pnpm site:build` to CI.
+- Switched the shared header mark to the smaller SVG chip, simplified the imprint header/footer, fixed the EU ODR link to `https`, and replaced the example model name with a neutral placeholder.
+- Removed stale mobile-nav JavaScript, tightened the hero height so the page stops feeling like a full-screen splash, pushed commit `49b935a`, and resolved all open nitpickr review threads.
 
 ## Imprint And Footer Pass
 

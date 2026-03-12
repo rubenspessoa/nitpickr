@@ -11,6 +11,9 @@
 - Keep trigger intent aligned with review depth:
   - automatic `pull_request` `opened` and `ready_for_review` should run `full` mode
   - automatic `pull_request` `synchronize` should remain `quick`
+- For mascot-driven marketing assets, do not stop at resized crops of the base character:
+  - create scene-based derivatives that show the mascot doing a product-relevant action
+  - keep the original look and feel, but add surrounding UI/context so the illustration communicates the product faster
 - Setup-required worker logs must be actionable and low-noise; include setup readiness fields and avoid repeating the same info-level message every poll.
 - OpenAI model compatibility is not uniform across parameters; when using optional tuning params like `temperature`, implement a guarded fallback path for provider/model-specific unsupported-value errors.
 - When fixing PR review feedback in bulk, run one deterministic sweep (code + tests + verification) before resolving threads; avoid resolving early and leaving follow-up reopen churn.
@@ -34,3 +37,18 @@
 - If literal markers are part of compatibility behavior, export a canonical marker plus variant list and keep sanitizer detection aware of both forms.
 - When compatibility variants are expected to grow, ship both ordered arrays and readonly sets from the constants module so callsites can choose iteration vs membership semantics without re-declaring structures.
 - Keep iteration callsites on ordered arrays and reserve sets for explicit membership checks to reduce allocation/readability churn.
+- When user-supplied marketing art has transparent backgrounds, preserve that transparency on-page:
+  - place the artwork on intentional gradients, cards, or framed surfaces instead of flattening it into opaque exports
+  - only convert scene art to opaque formats when the composition is already a full rectangular image, such as a hero banner or social preview
+- For marketing pages, force the message into one short value phrase before expanding the layout:
+  - if the page cannot be summarized in a simple sentence, the copy will feel dense no matter how polished the visuals are
+  - make each section answer one follow-up question from that phrase instead of stacking multiple product stories into the same block
+- Minimalist landing pages need a deliberate spacing system, not just less copy:
+  - tighten content width and increase section/card gaps together, otherwise the page still feels crowded
+  - keep legal pages on the same visual grid as the marketing page so the footer and imprint feel like part of one product surface
+- If the homepage promise is singular, the CTA count should be singular too:
+  - avoid mixing a primary conversion CTA with setup/docs CTAs in the hero when the page is meant to feel minimal
+  - remove decorative chips/tags when the headline already communicates the positioning clearly
+- When simplifying a landing page, separate the hero from page depth:
+  - a minimal hero does not mean removing the supporting sections
+  - keep the top singular, and let the sections underneath carry the extra detail

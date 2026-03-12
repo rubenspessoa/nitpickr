@@ -238,6 +238,111 @@
 
 - [x] Re-triage newly opened sanitizer-focused PR threads.
 - [x] Harden diagnostic serialization for bounded object payloads and `BigInt` values.
+
+# Marketing Website for GitHub Pages
+
+## Plan
+
+- [x] Add a standalone static marketing site source under `website/` with branded assets and source-accurate product copy.
+- [x] Add a small build pipeline and package script that emits a GitHub Pages-safe artifact using relative asset paths.
+- [x] Add a dedicated GitHub Pages Actions workflow for deployment from `main`.
+- [x] Verify the site build and key links, then document results.
+
+## Follow-up Asset Pass
+
+- [x] Turn the new mascot renders in `assets/` into web-sized landing page assets.
+- [x] Replace the placeholder mascot scenes with the stronger review, VPS, and motion illustrations.
+- [x] Rebuild the Pages artifact, re-open the browser preview, and document the verification results.
+
+## Simplification Pass
+
+- [x] Reduce the landing page to a calmer, roomier structure with fewer competing sections.
+- [x] Rewrite the copy to feel friendlier and easier to scan while preserving the key product truths.
+- [x] Rebuild, re-open the browser preview, and verify the simplified page.
+
+# PR #5 Comment Sweep
+
+## Results
+
+- Re-triaged all nitpickr review threads on PR #5 and kept only the feedback that still matched the simplified marketing site.
+- Restored a working GitHub Actions setup by keeping `pnpm/action-setup` ahead of cache-enabled `actions/setup-node`, and added `pnpm site:build` to CI.
+- Switched the shared header mark to the smaller SVG chip, simplified the imprint header/footer, fixed the EU ODR link to `https`, and replaced the example model name with a neutral placeholder.
+- Removed stale mobile-nav JavaScript, tightened the hero height so the page stops feeling like a full-screen splash, pushed commit [`49b935a`](https://github.com/rubenspessoa/nitpickr/commit/49b935a074b27499370d006e41cc36500bfef32b), and resolved all open nitpickr review threads.
+
+## Follow-up Sweep
+
+- [x] Confirm the branch is clean before looking for new feedback.
+- [ ] Wait two minutes, then requery PR comments and failing checks.
+- [ ] Fix the actionable issues, rerun verification, and push.
+- [ ] Requery once more, resolve stale nitpickr comments, and stop when the remaining feedback is no longer worth implementing.
+
+## Imprint And Footer Pass
+
+- [x] Add a dedicated imprint page in the shared site style using the existing legal identity details.
+- [x] Simplify the footer so the essential legal and navigation links are easy to scan.
+- [x] Rebuild the Pages artifact and verify both the home page and `/imprint/` locally.
+
+## Safari Hero Hardening
+
+- [x] Remove the browser-sensitive hero balance that still breaks on Safari desktop.
+- [x] Replace the hero with a simpler, more deterministic layout and heading flow.
+- [x] Rebuild, verify, and push the Safari-safe hero update.
+
+## Supporting Sections Restore
+
+- [x] Restore the supporting sections under the simplified hero without changing the hero itself.
+- [x] Rebuild and verify that the homepage keeps the one-CTA hero while restoring the product narrative below it.
+
+## Results
+
+- Added a standalone marketing site under `website/` with:
+  - branded hero, product walkthrough, self-host comparison, deployment, model-control, FAQ, and CTA/footer sections
+  - source-available licensing language aligned with `README.md`, `LICENSE`, and `TRADEMARKS.md`
+  - GitHub-first CTAs plus links to the GitHub App and Railway guides
+- Added branded web assets:
+  - self-hosted `Space Grotesk`, `IBM Plex Sans`, and `IBM Plex Mono` font files
+  - mascot-based SVG scene assets for hero, brand chip, badge, and watermark usage
+  - PNG derivatives retained for favicon, Apple touch icon, and Open Graph image usage
+  - SVG watermark background treatment
+- Follow-up asset refresh:
+  - replaced the flatter mascot derivatives with SVG scene compositions for the hero, brand chip, badge, and OG card
+  - updated the site to use the SVG hero/chip/badge assets directly while regenerating PNG derivatives for social and icon use
+- Follow-up asset integration from the new transparent mascot renders:
+  - added web-sized mascot art derivatives for hero, VPS/self-host, FAQ, brand mark, and footer usage
+  - switched the landing page to use the transparent PNG scenes where they can sit on gradients and cards cleanly
+  - kept the reviewing scene as a framed hero image and refreshed the social preview image from the same artwork
+  - regenerated the favicon and Apple touch icon from the flying mascot render
+- Simplification pass after design feedback:
+  - recentered the page around a single value phrase: `AI code review, on your infrastructure.`
+  - removed the denser proof-strip and walkthrough sections in favor of a calmer hero, a simple value section, a self-hosting section, and a tighter control/FAQ flow
+  - shortened the copy so each section answers one follow-up question instead of trying to explain everything at once
+  - reduced mascot usage to the brand mark, the main review hero, and one VPS illustration
+- Light/minimal refresh and legal page pass:
+  - moved the site to a lighter, warmer visual system with a simpler header and a quieter footer
+  - added `website/imprint/index.html` as a dedicated imprint page using the same shell and shared styles
+  - simplified the footer down to the core legal and navigation links, including the new imprint page
+  - increased spacing rhythm across the hero, sections, cards, footer, and imprint page for a less condensed layout
+- Safari-safe hero simplification:
+  - removed the browser-sensitive side-by-side hero balance in favor of a more deterministic stacked hero
+  - reduced the homepage to one value phrase and one primary GitHub CTA
+  - removed the secondary setup CTA and the hero tags to keep the first screen singular and calmer
+- Supporting sections restore after product-direction clarification:
+  - kept the minimal one-phrase hero and single GitHub CTA
+  - restored the explanatory sections underneath for product value, self-hosting, control, and FAQ context
+- Added repository wiring:
+  - `scripts/build-site.mjs`
+  - `pnpm site:build`
+  - `.github/workflows/pages.yml`
+  - Biome ignore for generated `dist/`
+- Verification completed:
+  - `pnpm site:build`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `rg -n '(src|href)=\"/' dist/site website` (no root-relative asset paths found)
+- Browser preview:
+  - served `dist/site` locally on `http://127.0.0.1:4173/`
+  - reopened the rendered Pages artifact in the browser after both the asset integration pass and the simplification pass
+  - verified the rebuilt Pages artifact contains both `dist/site/index.html` and `dist/site/imprint/index.html`
 - [x] Add/extend sanitizer-focused regression tests.
 - [x] Re-run lint, typecheck, and targeted publisher tests.
 - [x] Resolve addressed PR threads.

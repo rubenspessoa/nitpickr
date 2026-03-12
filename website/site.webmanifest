@@ -1,0 +1,20 @@
+{
+  "name": "nitpickr",
+  "short_name": "nitpickr",
+  "description": "AI code review, on your infrastructure.",
+  "display": "standalone",
+  "background_color": "#f6f1e8",
+  "theme_color": "#f6f1e8",
+  "icons": [
+    {
+      "src": "./assets/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "./assets/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

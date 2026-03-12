@@ -1,0 +1,95 @@
+<svg width="1200" height="1200" viewBox="0 0 1200 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="heroBackground" x1="150" y1="90" x2="1030" y2="1110" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1B2028" />
+      <stop offset="1" stop-color="#0F1217" />
+    </linearGradient>
+    <linearGradient id="heroCard" x1="344" y1="618" x2="878" y2="924" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#202734" />
+      <stop offset="1" stop-color="#131921" />
+    </linearGradient>
+    <linearGradient id="heroLaptop" x1="440" y1="686" x2="820" y2="910" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2F3746" />
+      <stop offset="1" stop-color="#1B212B" />
+    </linearGradient>
+    <linearGradient id="heroScreen" x1="470" y1="706" x2="804" y2="870" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#161C23" />
+      <stop offset="1" stop-color="#202834" />
+    </linearGradient>
+    <linearGradient id="heroAccent" x1="872" y1="162" x2="1014" y2="332" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#53D9D1" />
+      <stop offset="1" stop-color="#BEDF2A" />
+    </linearGradient>
+    <filter id="heroBlur" x="36" y="36" width="1128" height="1128" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="42" />
+    </filter>
+    <filter id="heroShadow" x="88" y="92" width="1042" height="1014" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feOffset dy="30" />
+      <feGaussianBlur stdDeviation="30" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.027451 0 0 0 0 0.0431373 0 0 0 0 0.0823529 0 0 0 0.42 0" />
+      <feBlend in2="SourceGraphic" result="shape" />
+    </filter>
+    <clipPath id="heroLaptopClip">
+      <rect x="452" y="718" width="350" height="198" rx="30" />
+    </clipPath>
+  </defs>
+  <rect x="44" y="44" width="1112" height="1112" rx="88" fill="url(#heroBackground)" />
+  <g filter="url(#heroBlur)" opacity="0.9">
+    <circle cx="342" cy="284" r="160" fill="#FF8F4A" fill-opacity="0.34" />
+    <circle cx="942" cy="252" r="144" fill="#53D9D1" fill-opacity="0.26" />
+    <circle cx="876" cy="882" r="176" fill="#BEDF2A" fill-opacity="0.18" />
+  </g>
+  <circle cx="584" cy="474" r="332" fill="#E8DFCF" fill-opacity="0.92" />
+  <path d="M286 346C358 258 494 206 654 214C804 222 938 304 998 424" stroke="#53D9D1" stroke-width="18" stroke-linecap="round" opacity="0.22" />
+  <path d="M224 930C364 1000 596 1026 820 962" stroke="#FF8F4A" stroke-width="14" stroke-linecap="round" opacity="0.22" />
+
+  <g filter="url(#heroShadow)">
+    <rect x="326" y="626" width="578" height="318" rx="48" fill="url(#heroCard)" />
+    <rect x="420" y="694" width="416" height="252" rx="36" fill="url(#heroLaptop)" />
+    <rect x="452" y="718" width="350" height="198" rx="30" fill="url(#heroScreen)" />
+    <g clip-path="url(#heroLaptopClip)">
+      <rect x="484" y="748" width="136" height="16" rx="8" fill="#53D9D1" fill-opacity="0.8" />
+      <rect x="484" y="782" width="276" height="12" rx="6" fill="#F5F2EB" fill-opacity="0.16" />
+      <rect x="484" y="806" width="246" height="12" rx="6" fill="#F5F2EB" fill-opacity="0.1" />
+      <rect x="484" y="848" width="188" height="20" rx="10" fill="#BEDF2A" fill-opacity="0.18" />
+      <rect x="686" y="836" width="92" height="66" rx="20" fill="#202B35" />
+      <circle cx="712" cy="864" r="10" fill="#53D9D1" />
+      <rect x="732" y="858" width="28" height="12" rx="6" fill="#F5F2EB" fill-opacity="0.7" />
+      <rect x="688" y="794" width="94" height="24" rx="12" fill="#FF8F4A" fill-opacity="0.16" />
+    </g>
+    <path d="M370 946H886C896.493 946 905 954.507 905 965C905 989.853 884.853 1010 860 1010H396C371.147 1010 351 989.853 351 965C351 954.507 359.507 946 370 946Z" fill="#2B3240" />
+    <rect x="546" y="972" width="150" height="12" rx="6" fill="#0F131A" fill-opacity="0.32" />
+  </g>
+
+  <g filter="url(#heroShadow)">
+    <image href="./nitpickr-mascot.png" x="204" y="154" width="606" height="606" />
+  </g>
+
+  <g>
+    <rect x="850" y="170" width="220" height="130" rx="28" fill="#131820" stroke="rgba(255,255,255,0.12)" />
+    <rect x="888" y="204" width="90" height="14" rx="7" fill="url(#heroAccent)" />
+    <rect x="888" y="234" width="130" height="12" rx="6" fill="#F5F2EB" fill-opacity="0.15" />
+    <rect x="888" y="260" width="114" height="12" rx="6" fill="#F5F2EB" fill-opacity="0.1" />
+    <circle cx="1000" cy="224" r="12" fill="#BEDF2A" />
+  </g>
+
+  <g>
+    <rect x="118" y="338" width="220" height="130" rx="30" fill="#171D25" stroke="rgba(255,255,255,0.1)" />
+    <text x="152" y="384" fill="#53D9D1" font-family="IBM Plex Mono, monospace" font-size="24">reviewing…</text>
+    <rect x="152" y="408" width="130" height="12" rx="6" fill="#F5F2EB" fill-opacity="0.18" />
+    <rect x="152" y="434" width="94" height="12" rx="6" fill="#FF8F4A" fill-opacity="0.34" />
+  </g>
+
+  <g>
+    <rect x="116" y="828" width="290" height="140" rx="30" fill="#171D25" stroke="rgba(255,255,255,0.1)" />
+    <text x="152" y="876" fill="#53D9D1" font-family="IBM Plex Mono, monospace" font-size="26">@nitpickr review</text>
+    <rect x="152" y="900" width="184" height="14" rx="7" fill="#F5F2EB" fill-opacity="0.18" />
+    <rect x="152" y="928" width="144" height="14" rx="7" fill="#FF8F4A" fill-opacity="0.34" />
+  </g>
+
+  <g opacity="0.72">
+    <path d="M788 468C846 492 900 544 934 602" stroke="#FF8F4A" stroke-width="12" stroke-linecap="round" />
+    <path d="M822 418C872 438 924 484 962 534" stroke="#53D9D1" stroke-width="10" stroke-linecap="round" />
+    <circle cx="980" cy="566" r="20" fill="#FF8F4A" fill-opacity="0.36" />
+  </g>
+</svg>

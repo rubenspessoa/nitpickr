@@ -84,6 +84,16 @@ If you must use an environment variable:
 
 `nitpickr` normalizes the escaped form at runtime.
 
+If you need to materialize the key as a PEM file for local testing or another
+tool, write it to disk with restrictive permissions:
+
+```bash
+printf '%b' "$GITHUB_PRIVATE_KEY" > github-app.private-key.pem
+chmod 600 github-app.private-key.pem
+```
+
+Delete the file when you are done with it and never commit it to the repository.
+
 ## 5. Install the app on repositories
 
 From the GitHub App page:

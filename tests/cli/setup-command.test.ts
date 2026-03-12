@@ -67,7 +67,7 @@ describe("SetupCommand", () => {
     expect(envFile).toContain(
       "DATABASE_URL=postgres://nitpickr:nitpickr@db:5432/nitpickr",
     );
-    expect(envFile).toContain("OPENAI_MODEL=gpt-4.1");
+    expect(envFile).toContain("OPENAI_MODEL=gpt-5-mini");
     expect(envFile).toContain("PORT=3000");
     expect(envFile).toContain("NITPICKR_LOG_LEVEL=info");
     expect(envFile).toContain("NITPICKR_WORKER_CONCURRENCY=4");

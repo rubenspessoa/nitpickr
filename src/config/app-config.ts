@@ -252,7 +252,7 @@ export function parseBootstrapConfig(
     baseUrl: deriveBaseUrl(parsed, port),
     secretKey: parsed.NITPICKR_SECRET_KEY ?? null,
     openAi: {
-      model: parsed.OPENAI_MODEL ?? "gpt-4.1",
+      model: parsed.OPENAI_MODEL ?? "gpt-5-mini",
       baseUrl: parsed.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
     },
     github: {

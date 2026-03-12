@@ -1,3 +1,38 @@
+# Open Source Documentation Readiness
+
+## Plan
+
+- [x] Audit all user-facing setup requirements against the codebase and current docs.
+- [x] Rewrite `README.md` for open-source onboarding, local setup, usage, and Railway deployment.
+- [x] Add `CONTRIBUTING.md` with development workflow, verification expectations, and PR guidance.
+- [x] Align supporting docs/examples with the new onboarding docs where needed.
+- [ ] Run verification for docs consistency and open a pull request for review.
+
+## Results
+
+- Rewrote `README.md` around a local-first setup story with:
+  - architecture overview and Mermaid diagram
+  - explicit environment variable sourcing guidance
+  - GitHub App setup summary and usage commands
+  - Railway deployment positioning as the hosted option
+  - model-cost guidance centered on `gpt-5-mini`
+  - roadmap and source-available licensing notes
+- Added `CONTRIBUTING.md` covering:
+  - local development workflow
+  - verification expectations
+  - pull request guidance
+  - contributor licensing expectations
+- Added `docs/github-app.md` for detailed GitHub App setup.
+- Reworked `docs/railway-deploy.md` to match the current deploy shape and env requirements.
+- Updated `.env.example` to be a commented, public-ready template.
+- Added a repository `LICENSE` and package license metadata.
+- Aligned default OpenAI model examples and runtime defaults to `gpt-5-mini`.
+- Verification completed:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test` (`51` files, `269` tests)
+  - `pnpm eval:reviews`
+
 # Prompt Token Optimization v1
 
 ## Plan

@@ -273,6 +273,11 @@
 - [x] Replace the hero with a simpler, more deterministic layout and heading flow.
 - [x] Rebuild, verify, and push the Safari-safe hero update.
 
+## Supporting Sections Restore
+
+- [x] Restore the supporting sections under the simplified hero without changing the hero itself.
+- [x] Rebuild and verify that the homepage keeps the one-CTA hero while restoring the product narrative below it.
+
 ## Results
 
 - Added a standalone marketing site under `website/` with:
@@ -306,6 +311,9 @@
   - removed the browser-sensitive side-by-side hero balance in favor of a more deterministic stacked hero
   - reduced the homepage to one value phrase and one primary GitHub CTA
   - removed the secondary setup CTA and the hero tags to keep the first screen singular and calmer
+- Supporting sections restore after product-direction clarification:
+  - kept the minimal one-phrase hero and single GitHub CTA
+  - restored the explanatory sections underneath for product value, self-hosting, control, and FAQ context
 - Added repository wiring:
   - `scripts/build-site.mjs`
   - `pnpm site:build`

@@ -49,3 +49,6 @@
 - If the homepage promise is singular, the CTA count should be singular too:
   - avoid mixing a primary conversion CTA with setup/docs CTAs in the hero when the page is meant to feel minimal
   - remove decorative chips/tags when the headline already communicates the positioning clearly
+- When simplifying a landing page, separate hero simplification from page-depth simplification:
+  - a minimal hero does not automatically mean the supporting product sections should be removed
+  - keep the top of the page singular, then let the sections underneath carry the explanatory detail

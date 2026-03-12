@@ -30,5 +30,7 @@ If you fork the project, you should rename the fork if there is any meaningful
 chance users could mistake it for the upstream project or an official offering.
 
 If you want to use the official `nitpickr` branding in a commercial context,
-open an issue in this repository describing the intended use, and the
-maintainer can move the conversation to a private channel if needed.
+contact the maintainer privately first if you already have a private channel.
+If you do not, open an issue requesting a private follow-up without posting
+confidential commercial details, and the maintainer can move the conversation
+to a private channel.

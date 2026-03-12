@@ -2,9 +2,9 @@
 
 ## Plan
 
-- [ ] Merge the latest `main` into `codex/open-source-docs`.
-- [ ] Re-triage active PR comments after the merge and separate real issues from stale noise.
-- [ ] Fix relevant findings, verify, and push the branch.
+- [x] Merge the latest `main` into `codex/open-source-docs`.
+- [x] Re-triage active PR comments after the merge and separate real issues from stale noise.
+- [x] Fix relevant findings, verify, and push the branch.
 - [ ] Resolve addressed threads, wait five minutes for new nitpickr comments, and iterate until clear.
 
 ## Results

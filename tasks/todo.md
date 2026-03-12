@@ -267,6 +267,12 @@
 - [x] Simplify the footer so the essential legal and navigation links are easy to scan.
 - [x] Rebuild the Pages artifact and verify both the home page and `/imprint/` locally.
 
+## Safari Hero Hardening
+
+- [x] Remove the browser-sensitive hero balance that still breaks on Safari desktop.
+- [x] Replace the hero with a simpler, more deterministic layout and heading flow.
+- [x] Rebuild, verify, and push the Safari-safe hero update.
+
 ## Results
 
 - Added a standalone marketing site under `website/` with:
@@ -296,6 +302,10 @@
   - added `website/imprint/index.html` as a dedicated imprint page using the same shell and shared styles
   - simplified the footer down to the core legal and navigation links, including the new imprint page
   - increased spacing rhythm across the hero, sections, cards, footer, and imprint page for a less condensed layout
+- Safari-safe hero simplification:
+  - removed the browser-sensitive side-by-side hero balance in favor of a more deterministic stacked hero
+  - reduced the homepage to one value phrase and one primary GitHub CTA
+  - removed the secondary setup CTA and the hero tags to keep the first screen singular and calmer
 - Added repository wiring:
   - `scripts/build-site.mjs`
   - `pnpm site:build`

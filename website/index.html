@@ -76,13 +76,6 @@
 
           <div class="header-actions">
             <a class="header-link" href="./imprint/">Imprint</a>
-            <a
-              class="button button-small button-outline"
-              href="https://github.com/rubenspessoa/nitpickr"
-              target="_blank"
-              rel="noreferrer"
-              >GitHub</a
-            >
           </div>
         </div>
       </header>
@@ -92,11 +85,10 @@
           <div class="container hero-grid">
             <div class="hero-copy">
               <p class="eyebrow reveal">GitHub-first AI review</p>
-              <h1 class="reveal">AI code review, on your infrastructure.</h1>
-              <p class="hero-lead reveal">
-                nitpickr reviews GitHub pull requests and lets you keep the model,
-                the rules, and the runtime under your control.
-              </p>
+              <h1 class="hero-title reveal">
+                <span>AI code review,</span>
+                <span>under your control.</span>
+              </h1>
 
               <div class="hero-actions reveal">
                 <a
@@ -106,20 +98,7 @@
                   rel="noreferrer"
                   >View on GitHub</a
                 >
-                <a
-                  class="button button-ghost"
-                  href="https://github.com/rubenspessoa/nitpickr/blob/main/docs/github-app.md"
-                  target="_blank"
-                  rel="noreferrer"
-                  >Read setup</a
-                >
               </div>
-
-              <ul class="hero-meta reveal" aria-label="Product highlights">
-                <li>Source-available</li>
-                <li>Self-hosted</li>
-                <li>GitHub App</li>
-              </ul>
             </div>
 
             <figure class="hero-visual reveal">
@@ -132,132 +111,7 @@
                   height="800"
                 />
               </div>
-              <figcaption>
-                Inline comments, a summary, and a status check directly in GitHub.
-              </figcaption>
             </figure>
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="container">
-            <div class="section-heading section-heading-centered reveal">
-              <p class="eyebrow">What it does</p>
-              <h2>Simple to explain.</h2>
-              <p>
-                nitpickr keeps the review loop in GitHub and keeps the control with
-                your team.
-              </p>
-            </div>
-
-            <div class="simple-grid">
-              <article class="simple-card reveal">
-                <h3>Reviews in GitHub</h3>
-                <p>Inline comments, a summary, and a <code>nitpickr / review</code> check.</p>
-              </article>
-
-              <article class="simple-card reveal">
-                <h3>Runs where you choose</h3>
-                <p>Start local, use Railway for uptime, or keep it on your own VPS.</p>
-              </article>
-
-              <article class="simple-card reveal">
-                <h3>Keeps the rules in Git</h3>
-                <p>Configuration lives in the repository, not inside a hosted dashboard.</p>
-              </article>
-            </div>
-          </div>
-        </section>
-
-        <section class="section section-soft" id="self-host">
-          <div class="container split-grid">
-            <div class="section-heading reveal">
-              <p class="eyebrow">Why self-host</p>
-              <h2>Pick the boundary that fits your team.</h2>
-              <p>
-                Local Docker is the fastest way to try nitpickr. Railway is the
-                simplest always-on path. A private VPS gives you the strongest
-                runtime boundary.
-              </p>
-            </div>
-
-            <div class="hosting-list">
-              <article class="hosting-card reveal">
-                <span class="tag">Local Docker</span>
-                <p>The fastest evaluation loop for a real repository.</p>
-              </article>
-
-              <article class="hosting-card hosting-card-featured reveal">
-                <span class="tag">Private VPS</span>
-                <p>Keep logs, secrets, and model traffic inside infrastructure you control.</p>
-              </article>
-
-              <article class="hosting-card reveal">
-                <span class="tag">Railway</span>
-                <p>The simplest always-on setup when you want a stable webhook endpoint.</p>
-              </article>
-            </div>
-          </div>
-        </section>
-
-        <section class="section" id="model-control">
-          <div class="container split-grid">
-            <div class="section-heading reveal">
-              <p class="eyebrow">Control</p>
-              <h2>You keep the important parts.</h2>
-              <p>
-                nitpickr is source-available, configured at runtime, and shaped by
-                the repository itself.
-              </p>
-            </div>
-
-            <aside class="config-card reveal">
-              <pre><code>OPENAI_MODEL=gpt-5-mini
-OPENAI_BASE_URL=https://api.openai.com/v1
-NITPICKR_PROMPT_OPTIMIZATION_MODE=balanced
-.nitpickr.yml
-AGENTS.md</code></pre>
-              <p>
-                Choose the model, keep the rules in Git, and inspect the code
-                yourself.
-              </p>
-            </aside>
-          </div>
-        </section>
-
-        <section class="section" id="faq">
-          <div class="container faq-shell">
-            <div class="section-heading section-heading-centered reveal">
-              <p class="eyebrow">FAQ</p>
-              <h2>Short answers.</h2>
-            </div>
-
-            <div class="faq-list">
-              <details class="faq-item reveal">
-                <summary>Is nitpickr open source?</summary>
-                <p>
-                  nitpickr should be described as <strong>source-available</strong>.
-                  The code is published under Elastic License 2.0.
-                </p>
-              </details>
-
-              <details class="faq-item reveal">
-                <summary>Why would I host this on my own VPS?</summary>
-                <p>
-                  Because some teams want the runtime, logs, secrets, and model
-                  traffic inside their own operational boundary.
-                </p>
-              </details>
-
-              <details class="faq-item reveal">
-                <summary>What can I control today?</summary>
-                <p>
-                  The deployment location, the repository rules, and the model
-                  endpoint through <code>OPENAI_MODEL</code> and
-                  <code>OPENAI_BASE_URL</code>.
-                </p>
-              </details>
-            </div>
           </div>
         </section>
       </main>
@@ -270,9 +124,6 @@ AGENTS.md</code></pre>
 
           <nav class="footer-links" aria-label="Footer">
             <a href="https://github.com/rubenspessoa/nitpickr" target="_blank" rel="noreferrer">GitHub</a>
-            <a href="https://github.com/rubenspessoa/nitpickr/blob/main/README.md" target="_blank" rel="noreferrer">Docs</a>
-            <a href="https://github.com/rubenspessoa/nitpickr/blob/main/LICENSE" target="_blank" rel="noreferrer">License</a>
-            <a href="https://github.com/rubenspessoa/nitpickr/blob/main/TRADEMARKS.md" target="_blank" rel="noreferrer">Trademark</a>
             <a href="./imprint/">Imprint</a>
             <a href="mailto:contact@rubenspessoa.dev">Contact</a>
           </nav>

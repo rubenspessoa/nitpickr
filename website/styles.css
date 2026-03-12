@@ -278,20 +278,26 @@ h3 {
 }
 
 .hero {
+  min-height: calc(100vh - var(--header-height));
   padding-top: 6rem;
+  padding-bottom: 4rem;
+  display: flex;
+  align-items: center;
 }
 
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(360px, 0.88fr);
-  gap: 3.25rem;
-  align-items: start;
+  grid-template-columns: 1fr;
+  gap: 2.75rem;
+  justify-items: center;
 }
 
 .hero-copy {
-  max-width: 40rem;
+  max-width: min(54rem, 100%);
   display: grid;
-  gap: 1rem;
+  gap: 1.4rem;
+  justify-items: center;
+  text-align: center;
 }
 
 .split-grid {
@@ -350,42 +356,18 @@ ul {
   color: var(--text-soft);
 }
 
-.hero-lead {
-  max-width: 34rem;
-  font-size: 1.04rem;
-}
-
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.9rem;
-  margin: 0.4rem 0 0.2rem;
-}
-
-.hero-meta {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.hero-meta li,
-.tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.5rem 0.78rem;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.46);
-  color: var(--text-soft);
-  font-size: 0.84rem;
+  margin: 0.3rem 0 0;
 }
 
 .hero-visual {
-  margin: 0;
-  padding-top: 0.4rem;
+  width: min(52rem, 100%);
+  margin: 0 auto;
+  padding-top: 0;
 }
 
 .hero-frame,
@@ -409,10 +391,13 @@ ul {
   height: auto;
 }
 
-.hero-visual figcaption {
-  margin-top: 1.1rem;
-  color: var(--text-muted);
-  font-size: 0.94rem;
+.hero-title {
+  max-width: 12ch;
+  font-size: clamp(3.2rem, 6.8vw, 5.8rem);
+}
+
+.hero-title span {
+  display: block;
 }
 
 .section-heading {
@@ -619,6 +604,10 @@ summary:focus-visible {
   .section-heading-centered {
     max-width: 100%;
   }
+
+  .hero-title {
+    max-width: 11ch;
+  }
 }
 
 @media (max-width: 720px) {
@@ -633,7 +622,9 @@ summary:focus-visible {
   }
 
   .hero {
-    padding-top: 3.5rem;
+    min-height: auto;
+    padding-top: 4rem;
+    padding-bottom: 3rem;
   }
 
   .hero-actions,

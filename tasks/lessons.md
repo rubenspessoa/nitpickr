@@ -46,3 +46,6 @@
 - Minimalist landing pages need a deliberate spacing system, not just less copy:
   - tighten content width and increase section/card gaps together, otherwise the page still feels crowded
   - keep legal pages on the same visual grid as the marketing page so the footer and imprint feel like part of one product surface
+- If the homepage promise is singular, the CTA count should be singular too:
+  - avoid mixing a primary conversion CTA with setup/docs CTAs in the hero when the page is meant to feel minimal
+  - remove decorative chips/tags when the headline already communicates the positioning clearly

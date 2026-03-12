@@ -1,0 +1,20 @@
+{
+  "name": "nitpickr",
+  "short_name": "nitpickr",
+  "description": "Source-available, self-hosted AI code review for GitHub pull requests.",
+  "display": "standalone",
+  "background_color": "#111318",
+  "theme_color": "#111318",
+  "icons": [
+    {
+      "src": "./assets/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "./assets/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

@@ -238,6 +238,38 @@
 
 - [x] Re-triage newly opened sanitizer-focused PR threads.
 - [x] Harden diagnostic serialization for bounded object payloads and `BigInt` values.
+
+# Marketing Website for GitHub Pages
+
+## Plan
+
+- [x] Add a standalone static marketing site source under `website/` with branded assets and source-accurate product copy.
+- [x] Add a small build pipeline and package script that emits a GitHub Pages-safe artifact using relative asset paths.
+- [x] Add a dedicated GitHub Pages Actions workflow for deployment from `main`.
+- [x] Verify the site build and key links, then document results.
+
+## Results
+
+- Added a standalone marketing site under `website/` with:
+  - branded hero, product walkthrough, self-host comparison, deployment, model-control, FAQ, and CTA/footer sections
+  - source-available licensing language aligned with `README.md`, `LICENSE`, and `TRADEMARKS.md`
+  - GitHub-first CTAs plus links to the GitHub App and Railway guides
+- Added branded web assets:
+  - self-hosted `Space Grotesk`, `IBM Plex Sans`, and `IBM Plex Mono` font files
+  - resized mascot derivatives for hero, badge, chip, favicon, Apple touch icon, and OG image usage
+  - SVG watermark background treatment
+- Added repository wiring:
+  - `scripts/build-site.mjs`
+  - `pnpm site:build`
+  - `.github/workflows/pages.yml`
+  - Biome ignore for generated `dist/`
+- Verification completed:
+  - `pnpm site:build`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `rg -n '(src|href)=\"/' dist/site website` (no root-relative asset paths found)
+- Remaining manual QA note:
+  - local HTTP preview could not be served inside the sandbox because binding a local port was denied, so final browser-level responsive inspection on the rendered Pages artifact is still recommended
 - [x] Add/extend sanitizer-focused regression tests.
 - [x] Re-run lint, typecheck, and targeted publisher tests.
 - [x] Resolve addressed PR threads.

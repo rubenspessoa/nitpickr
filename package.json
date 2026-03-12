@@ -2,7 +2,7 @@
   "name": "nitpickr",
   "version": "0.1.0",
   "private": true,
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "Elastic-2.0",
   "description": "Self-hosted AI code review service for GitHub pull requests.",
   "type": "module",
   "packageManager": "pnpm@10.0.0",

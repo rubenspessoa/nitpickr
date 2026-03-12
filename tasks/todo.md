@@ -25,9 +25,12 @@
 - Added `docs/github-app.md` for detailed GitHub App setup.
 - Reworked `docs/railway-deploy.md` to match the current deploy shape and env requirements.
 - Updated `.env.example` to be a commented, public-ready template.
-- Added a repository `LICENSE` and package license metadata.
+- Added a repository `LICENSE`, `TRADEMARKS.md`, and package license metadata.
 - Aligned default OpenAI model examples and runtime defaults to `gpt-5-mini`.
 - Added the mascot asset to the README header for the public docs presentation.
+- Switched licensing from PolyForm Noncommercial to Elastic License 2.0 so
+  internal commercial use is allowed while hosted/managed-service competition
+  remains restricted.
 - Verification completed:
   - `pnpm lint`
   - `pnpm typecheck`

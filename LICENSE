@@ -1,14 +1,16 @@
 nitpickr
 Copyright (c) 2026 Rubens Pessoa
 
-This repository is made available under the PolyForm Noncommercial License
-1.0.0.
+This repository is made available under the Elastic License 2.0.
 
-Required Notice:
-Copyright (c) 2026 Rubens Pessoa
+Authoritative license text and terms:
+https://www.elastic.co/licensing/elastic-license
 
-License terms:
-https://polyformproject.org/licenses/noncommercial/1.0.0/
+Practical summary:
 
-Commercial use is not granted under this license. If you want to use nitpickr
-commercially, contact the maintainer to arrange a separate license.
+- you may use, modify, and redistribute nitpickr, including for internal
+  commercial use
+- you may not provide nitpickr to third parties as a hosted or managed service
+- you may not remove or obscure licensing, copyright, or other notices
+
+See TRADEMARKS.md for rules covering the `nitpickr` name, logo, and mascot.

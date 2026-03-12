@@ -154,7 +154,7 @@ By submitting a contribution, you confirm that:
   commercial offerings
 
 That contributor grant is broader than the repository's public
-PolyForm-Noncommercial license and exists so the maintainer can operate hosted
-or commercially licensed versions of `nitpickr`.
+Elastic License 2.0 terms and exists so the maintainer can operate hosted,
+commercially licensed, or separately branded versions of `nitpickr`.
 
 If that is not acceptable, do not submit a code contribution.

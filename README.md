@@ -18,7 +18,8 @@ summary, and a `nitpickr / review` status check.
 - Runtime shape: API service + worker service + Postgres
 - Lowest-cost setup: local Docker Compose + public HTTPS tunnel
 - Easiest hosted setup: Railway
-- License: source-available, non-commercial by default
+- License: source-available, commercial internal use allowed, managed service
+  restricted
 
 The project is local-first on purpose:
 
@@ -27,7 +28,8 @@ The project is local-first on purpose:
 - keep the reviewed repository in control of its own instructions and review
   policy
 
-Commercial use is not covered by the repository license. See [LICENSE](LICENSE)
+Internal commercial use is allowed. Running `nitpickr` itself as a hosted or
+managed service is not. See [LICENSE](LICENSE) and [TRADEMARKS.md](TRADEMARKS.md)
 for details.
 
 ## Features
@@ -342,13 +344,17 @@ verification expectations, and pull request guidelines.
 ## License
 
 `nitpickr` is source-available under the
-[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/)
-license.
+[Elastic License 2.0](https://www.elastic.co/licensing/elastic-license).
 
 That means:
 
-- personal, educational, and other non-commercial use is allowed under the
-  license terms
-- commercial use requires a separate agreement with the maintainer
-- this repository should be described as source-available rather than
+- personal and internal commercial use are allowed under the license terms
+- you may not offer `nitpickr` itself to third parties as a hosted or managed
+  service without a separate agreement
+- you must keep licensing, copyright, and other notices intact
+- this repository should still be described as source-available rather than
   OSI-approved open source
+
+Branding is separate from the code license. See
+[TRADEMARKS.md](TRADEMARKS.md) for rules covering the `nitpickr` name, logo, and
+mascot.

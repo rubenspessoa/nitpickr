@@ -258,24 +258,23 @@
 
 - [x] Reduce the landing page to a calmer, roomier structure with fewer competing sections.
 - [x] Rewrite the copy to feel friendlier and easier to scan while preserving the key product truths.
-- [x] Use the mascot art more selectively so each illustration has a clear role instead of repeating throughout the page.
 - [x] Rebuild, re-open the browser preview, and verify the simplified page.
 
 # PR #5 Comment Sweep
 
-## Plan
-
-- [x] Confirm the local branch state and whether there are any unpushed marketing-site changes.
-- [x] Fetch the active PR comments and separate still-valid feedback from comments made obsolete by the latest landing-page simplification.
-- [x] Apply the remaining valid fixes, verify the site again, and push any new commit.
-- [x] Resolve obsolete or addressed review threads and summarize what remains.
-
 ## Results
 
 - Re-triaged all nitpickr review threads on PR #5 and kept only the feedback that still matched the simplified marketing site.
-- Updated workflow robustness by moving `actions/setup-node` ahead of `pnpm/action-setup` and adding `pnpm site:build` to CI.
+- Restored a working GitHub Actions setup by keeping `pnpm/action-setup` ahead of cache-enabled `actions/setup-node`, and added `pnpm site:build` to CI.
 - Switched the shared header mark to the smaller SVG chip, simplified the imprint header/footer, fixed the EU ODR link to `https`, and replaced the example model name with a neutral placeholder.
-- Removed stale mobile-nav JavaScript, tightened the hero height so the page stops feeling like a full-screen splash, pushed commit `49b935a`, and resolved all open nitpickr review threads.
+- Removed stale mobile-nav JavaScript, tightened the hero height so the page stops feeling like a full-screen splash, pushed commit [`49b935a`](https://github.com/rubenspessoa/nitpickr/commit/49b935a074b27499370d006e41cc36500bfef32b), and resolved all open nitpickr review threads.
+
+## Follow-up Sweep
+
+- [x] Confirm the branch is clean before looking for new feedback.
+- [ ] Wait two minutes, then requery PR comments and failing checks.
+- [ ] Fix the actionable issues, rerun verification, and push.
+- [ ] Requery once more, resolve stale nitpickr comments, and stop when the remaining feedback is no longer worth implementing.
 
 ## Imprint And Footer Pass
 

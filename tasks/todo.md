@@ -261,6 +261,12 @@
 - [x] Use the mascot art more selectively so each illustration has a clear role instead of repeating throughout the page.
 - [x] Rebuild, re-open the browser preview, and verify the simplified page.
 
+## Imprint And Footer Pass
+
+- [x] Add a dedicated imprint page in the shared site style using the existing legal identity details.
+- [x] Simplify the footer so the essential legal and navigation links are easy to scan.
+- [x] Rebuild the Pages artifact and verify both the home page and `/imprint/` locally.
+
 ## Results
 
 - Added a standalone marketing site under `website/` with:
@@ -285,6 +291,11 @@
   - removed the denser proof-strip and walkthrough sections in favor of a calmer hero, a simple value section, a self-hosting section, and a tighter control/FAQ flow
   - shortened the copy so each section answers one follow-up question instead of trying to explain everything at once
   - reduced mascot usage to the brand mark, the main review hero, and one VPS illustration
+- Light/minimal refresh and legal page pass:
+  - moved the site to a lighter, warmer visual system with a simpler header and a quieter footer
+  - added `website/imprint/index.html` as a dedicated imprint page using the same shell and shared styles
+  - simplified the footer down to the core legal and navigation links, including the new imprint page
+  - increased spacing rhythm across the hero, sections, cards, footer, and imprint page for a less condensed layout
 - Added repository wiring:
   - `scripts/build-site.mjs`
   - `pnpm site:build`
@@ -298,6 +309,7 @@
 - Browser preview:
   - served `dist/site` locally on `http://127.0.0.1:4173/`
   - reopened the rendered Pages artifact in the browser after both the asset integration pass and the simplification pass
+  - verified the rebuilt Pages artifact contains both `dist/site/index.html` and `dist/site/imprint/index.html`
 - [x] Add/extend sanitizer-focused regression tests.
 - [x] Re-run lint, typecheck, and targeted publisher tests.
 - [x] Resolve addressed PR threads.

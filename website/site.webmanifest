@@ -1,10 +1,10 @@
 {
   "name": "nitpickr",
   "short_name": "nitpickr",
-  "description": "Source-available, self-hosted AI code review for GitHub pull requests.",
+  "description": "AI code review, on your infrastructure.",
   "display": "standalone",
-  "background_color": "#111318",
-  "theme_color": "#111318",
+  "background_color": "#f6f1e8",
+  "theme_color": "#f6f1e8",
   "icons": [
     {
       "src": "./assets/favicon.png",

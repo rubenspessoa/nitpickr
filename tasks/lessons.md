@@ -43,3 +43,6 @@
 - For marketing pages, force the message into one short value phrase before expanding the layout:
   - if the page cannot be summarized in a simple sentence, the copy will feel dense no matter how polished the visuals are
   - make each section answer one follow-up question from that phrase instead of stacking multiple product stories into the same block
+- Minimalist landing pages need a deliberate spacing system, not just less copy:
+  - tighten content width and increase section/card gaps together, otherwise the page still feels crowded
+  - keep legal pages on the same visual grid as the marketing page so the footer and imprint feel like part of one product surface

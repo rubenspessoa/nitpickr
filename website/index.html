@@ -25,9 +25,10 @@
       property="og:description"
       content="Self-hosted AI code review for GitHub pull requests. Keep the model, rules, and runtime under your control."
     />
+    <meta property="og:url" content="https://rubenspessoa.dev/nitpickr/" />
     <meta
       property="og:image"
-      content="https://raw.githubusercontent.com/rubenspessoa/nitpickr/main/website/assets/og-preview.png"
+      content="https://rubenspessoa.dev/nitpickr/assets/og-preview.png"
     />
     <meta
       property="og:image:alt"
@@ -44,7 +45,11 @@
     />
     <meta
       name="twitter:image"
-      content="https://raw.githubusercontent.com/rubenspessoa/nitpickr/main/website/assets/og-preview.png"
+      content="https://rubenspessoa.dev/nitpickr/assets/og-preview.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="nitpickr owl mascot reviewing code on a laptop"
     />
     <link rel="icon" type="image/png" href="./assets/favicon.png" />
     <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png" />
@@ -63,10 +68,10 @@
           <a class="brand" href="./" aria-label="nitpickr home">
             <img
               class="brand-mark"
-              src="./assets/nitpickr-flying.png"
-              alt="nitpickr mascot in flight"
-              width="512"
-              height="512"
+              src="./assets/nitpickr-chip.svg"
+              alt="nitpickr mascot flying past a review panel"
+              width="56"
+              height="56"
             />
             <span class="brand-copy">
               <strong>nitpickr</strong>
@@ -202,7 +207,7 @@
             </div>
 
             <aside class="config-card reveal">
-              <pre><code>OPENAI_MODEL=gpt-5-mini
+              <pre><code>OPENAI_MODEL=&lt;your-model&gt;
 OPENAI_BASE_URL=https://api.openai.com/v1
 NITPICKR_PROMPT_OPTIMIZATION_MODE=balanced
 .nitpickr.yml

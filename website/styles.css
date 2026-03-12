@@ -278,9 +278,9 @@ h3 {
 }
 
 .hero {
-  min-height: calc(100vh - var(--header-height));
-  padding-top: 6rem;
-  padding-bottom: 4rem;
+  min-height: min(44rem, calc(100vh - var(--header-height)));
+  padding-top: 4.5rem;
+  padding-bottom: 2.5rem;
   display: flex;
   align-items: center;
 }

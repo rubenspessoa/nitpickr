@@ -1,25 +1,8 @@
-const navToggle = document.querySelector(".nav-toggle");
-const body = document.body;
 const shouldAnimate = !window.matchMedia("(prefers-reduced-motion: reduce)")
   .matches;
 
 if (shouldAnimate) {
   document.documentElement.classList.add("has-motion");
-}
-
-if (navToggle instanceof HTMLButtonElement) {
-  navToggle.addEventListener("click", () => {
-    const expanded = navToggle.getAttribute("aria-expanded") === "true";
-    navToggle.setAttribute("aria-expanded", String(!expanded));
-    body.classList.toggle("nav-open", !expanded);
-  });
-
-  for (const link of document.querySelectorAll(".primary-nav a")) {
-    link.addEventListener("click", () => {
-      navToggle.setAttribute("aria-expanded", "false");
-      body.classList.remove("nav-open");
-    });
-  }
 }
 
 const revealElements = document.querySelectorAll(".reveal");

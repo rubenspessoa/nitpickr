@@ -258,6 +258,19 @@
 
 - [x] Reduce the landing page to a calmer, roomier structure with fewer competing sections.
 - [x] Rewrite the copy to feel friendlier and easier to scan while preserving the key product truths.
+
+# PR #5 Comment Sweep
+
+## Plan
+
+- [x] Confirm the local branch state and whether there are any unpushed marketing-site changes.
+- [ ] Fetch the active PR comments and separate still-valid feedback from comments made obsolete by the latest landing-page simplification.
+- [ ] Apply the remaining valid fixes, verify the site again, and push any new commit.
+- [ ] Resolve obsolete or addressed review threads and summarize what remains.
+
+## Results
+
+- In progress.
 - [x] Use the mascot art more selectively so each illustration has a clear role instead of repeating throughout the page.
 - [x] Rebuild, re-open the browser preview, and verify the simplified page.
 

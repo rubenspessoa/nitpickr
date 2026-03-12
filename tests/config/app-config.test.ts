@@ -22,7 +22,7 @@ describe("parseAppConfig", () => {
     expect(config.port).toBe(3000);
     expect(config.worker.concurrency).toBe(4);
     expect(config.github.appId).toBe(123456);
-    expect(config.openAi.model).toBe("gpt-4.1");
+    expect(config.openAi.model).toBe("gpt-5-mini");
     expect(config.github.apiBaseUrl).toBe("https://api.github.com");
     expect(config.openAi.baseUrl).toBe("https://api.openai.com/v1");
     expect(config.github.botLogins).toEqual(["nitpickr", "getnitpickr"]);

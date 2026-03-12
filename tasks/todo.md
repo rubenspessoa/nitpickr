@@ -1,3 +1,57 @@
+# PR #4 Merge + Review Sweep
+
+## Plan
+
+- [x] Merge the latest `main` into `codex/open-source-docs`.
+- [x] Re-triage active PR comments after the merge and separate real issues from stale noise.
+- [x] Fix relevant findings, verify, and push the branch.
+- [ ] Resolve addressed threads, wait five minutes for new nitpickr comments, and iterate until clear.
+
+## Results
+
+- In progress.
+
+# Open Source Documentation Readiness
+
+## Plan
+
+- [x] Audit all user-facing setup requirements against the codebase and current docs.
+- [x] Rewrite `README.md` for open-source onboarding, local setup, usage, and Railway deployment.
+- [x] Add `CONTRIBUTING.md` with development workflow, verification expectations, and PR guidance.
+- [x] Align supporting docs/examples with the new onboarding docs where needed.
+- [x] Run verification for docs consistency and open a pull request for review.
+
+## Results
+
+- Rewrote `README.md` around a local-first setup story with:
+  - architecture overview and Mermaid diagram
+  - explicit environment variable sourcing guidance
+  - GitHub App setup summary and usage commands
+  - Railway deployment positioning as the hosted option
+  - model-cost guidance centered on `gpt-5-mini`
+  - roadmap and source-available licensing notes
+- Added `CONTRIBUTING.md` covering:
+  - local development workflow
+  - verification expectations
+  - pull request guidance
+  - contributor licensing expectations
+- Added `docs/github-app.md` for detailed GitHub App setup.
+- Reworked `docs/railway-deploy.md` to match the current deploy shape and env requirements.
+- Updated `.env.example` to be a commented, public-ready template.
+- Added a repository `LICENSE`, `TRADEMARKS.md`, and package license metadata.
+- Aligned default OpenAI model examples and runtime defaults to `gpt-5-mini`.
+- Added the mascot asset to the README header for the public docs presentation.
+- Switched licensing from PolyForm Noncommercial to Elastic License 2.0 so
+  internal commercial use is allowed while hosted/managed-service competition
+  remains restricted.
+- Verification completed:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test` (`51` files, `269` tests)
+  - `pnpm eval:reviews`
+- Opened PR for review:
+  - `https://github.com/rubenspessoa/nitpickr/pull/4`
+  - posted `@nitpickr review`
 # Prompt Token Optimization v1
 
 ## Plan

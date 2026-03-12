@@ -99,7 +99,7 @@ describe("buildRuntime", () => {
     });
     expect(openAiReviewModelConstructorMock).toHaveBeenCalledWith({
       apiKey: "sk-test-key",
-      model: "gpt-4.1",
+      model: "gpt-5-mini",
       baseUrl: "http://openai-stub:4020/v1",
     });
   });

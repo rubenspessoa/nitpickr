@@ -47,6 +47,10 @@ clear explanation of why a change exists.
    pnpm cli doctor
    ```
 
+   Windows note: if you are using PowerShell, prefer the Docker Compose flow or
+   load the variables with a PowerShell-specific env import before running the
+   CLI commands.
+
 5. Start the stack.
 
    ```bash
@@ -145,7 +149,12 @@ By submitting a contribution, you confirm that:
 
 - you have the right to submit the work
 - you are allowing it to be distributed under this repository's license
-- you are allowing the maintainer to use, sublicense, and relicense your
-  contribution as part of `nitpickr`, including commercial offerings
+- you are granting the maintainer the right to use, sublicense, and relicense
+  your contribution as part of `nitpickr`, including separately licensed
+  commercial offerings
+
+That contributor grant is broader than the repository's public
+PolyForm-Noncommercial license and exists so the maintainer can operate hosted
+or commercially licensed versions of `nitpickr`.
 
 If that is not acceptable, do not submit a code contribution.

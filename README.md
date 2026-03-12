@@ -4,10 +4,21 @@
   <img src="assets/nitpickr-mascot.png" alt="nitpickr mascot" width="280" />
 </p>
 
-`nitpickr` is a source-available, self-hosted GitHub pull request reviewer.
-It runs as a GitHub App, reads the PR diff plus repository instructions, calls
-an LLM for review output, and publishes inline comments, a summary, and a
-`nitpickr / review` status check.
+<p align="center">
+  Source-available, self-hosted AI code review for GitHub pull requests.
+</p>
+
+`nitpickr` runs as a GitHub App, reads the PR diff plus repository
+instructions, calls an LLM for review output, and publishes inline comments, a
+summary, and a `nitpickr / review` status check.
+
+## Status
+
+- Provider support today: GitHub App only
+- Runtime shape: API service + worker service + Postgres
+- Lowest-cost setup: local Docker Compose + public HTTPS tunnel
+- Easiest hosted setup: Railway
+- License: source-available, non-commercial by default
 
 The project is local-first on purpose:
 
@@ -19,7 +30,7 @@ The project is local-first on purpose:
 Commercial use is not covered by the repository license. See [LICENSE](LICENSE)
 for details.
 
-## Why nitpickr
+## Features
 
 - Lowest-cost path: local Docker + a public HTTPS tunnel means you mainly pay
   for model usage.
@@ -27,6 +38,9 @@ for details.
   `.nitpickr.yml`, `.nitpickr/`, and `AGENTS.md`.
 - Operationally simple: one API service, one worker service, one Postgres
   database.
+- Review output includes inline comments, a summary, and a GitHub status check.
+- Manual commands let authors request review, summary, recheck, and follow-up
+  explanations directly from the PR conversation.
 - Cost-aware by default: `gpt-5-mini` is a strong default for review quality
   per dollar, and you can switch to larger or cheaper models at any time.
 - Designed to grow: GitHub is first, but the internals are already split in a
@@ -60,33 +74,9 @@ At a high level:
 
 More background is available in [docs/architecture-plan.md](docs/architecture-plan.md).
 
-## Model guidance
+## Getting Started
 
-Recommended starting point:
-
-- `OPENAI_MODEL=gpt-5-mini`
-
-Why:
-
-- it is materially cheaper than flagship GPT-5-tier models
-- it still produces useful review comments for most small and medium PRs
-- it keeps self-hosting costs reasonable for indie teams
-
-Practical guidance:
-
-- use `gpt-5-mini` first unless you already know you need the strongest model
-- move to a larger GPT-5-family model if you want deeper reasoning and are
-  comfortable paying more per review
-- try a cheaper model only if you are intentionally optimizing for cost and can
-  tolerate lower recall
-
-Check the latest official model and pricing pages before locking in a hosted
-budget:
-
-- [OpenAI models](https://platform.openai.com/docs/models)
-- [OpenAI API pricing](https://openai.com/api/pricing/)
-
-## Requirements
+### Requirements
 
 - Node.js `>=20.9.0`
 - `pnpm` `10`
@@ -97,7 +87,7 @@ budget:
   - local: use a tunnel such as `cloudflared` or `ngrok`
   - hosted: use the public Railway domain
 
-## Quickstart: local-first and cheapest
+### Quickstart
 
 This is the recommended path for most people evaluating `nitpickr`.
 
@@ -156,29 +146,9 @@ This is the recommended path for most people evaluating `nitpickr`.
 9. Install the GitHub App on a repository, open a PR, and comment
    `@nitpickr review`.
 
-### Local development loop
+## Configuration
 
-Use Docker Compose for end-to-end validation. For faster code iteration, run
-the processes directly after exporting the `.env` file into your shell:
-
-```bash
-set -a
-source .env
-set +a
-pnpm migrate
-pnpm dev:api
-```
-
-In a second terminal:
-
-```bash
-set -a
-source .env
-set +a
-pnpm dev:worker
-```
-
-## Environment variables
+### Environment variables
 
 `.env.example` is the source of truth. These are the values most users need to
 understand first:
@@ -205,7 +175,74 @@ Useful optional settings:
 - `NITPICKR_PROMPT_OPTIMIZATION_MODE=balanced` to keep prompt sizes under
   control on larger PRs
 
-## GitHub App setup
+### Model guidance
+
+Recommended starting point:
+
+- `OPENAI_MODEL=gpt-5-mini`
+
+Why:
+
+- it is materially cheaper than flagship GPT-5-tier models
+- it still produces useful review comments for most small and medium PRs
+- it keeps self-hosting costs reasonable for indie teams
+
+Practical guidance:
+
+- use `gpt-5-mini` first unless you already know you need the strongest model
+- if your account does not have access to `gpt-5-mini`, set `OPENAI_MODEL` to
+  another supported model such as `gpt-4.1`
+- move to a larger GPT-5-family model if you want deeper reasoning and are
+  comfortable paying more per review
+- try a cheaper model only if you are intentionally optimizing for cost and can
+  tolerate lower recall
+
+Check the latest official model and pricing pages before locking in a hosted
+budget:
+
+- [OpenAI models](https://platform.openai.com/docs/models)
+- [OpenAI API pricing](https://openai.com/api/pricing/)
+
+## Development
+
+### Local development loop
+
+Use Docker Compose for end-to-end validation. For faster code iteration, run
+the processes directly after exporting the `.env` file into your shell:
+
+```bash
+set -a
+source .env
+set +a
+pnpm migrate
+pnpm dev:api
+```
+
+In a second terminal:
+
+```bash
+set -a
+source .env
+set +a
+pnpm dev:worker
+```
+
+### Useful commands
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm cli doctor
+pnpm cli migrate
+pnpm dev:api
+pnpm dev:worker
+pnpm eval:reviews
+```
+
+## Usage
+
+### GitHub App setup
 
 Use the full guide in [docs/github-app.md](docs/github-app.md).
 
@@ -225,28 +262,7 @@ The short version:
   - Pull request
   - Issue comment
 
-## Railway deployment
-
-If you want an always-on hosted setup, Railway is the simplest path today.
-
-The deployed shape is:
-
-- one public `api` service
-- one private `worker` service
-- one PostgreSQL database
-
-Use [docs/railway-deploy.md](docs/railway-deploy.md) for the full walkthrough.
-
-Cost note:
-
-- local Docker is the cheapest long-term option because you avoid managed infra
-  cost
-- Railway is the easiest managed option when you want a stable public endpoint
-- Railway pricing changes over time, but for early testing and small personal
-  use, its trial/free-plan budget is often enough to validate the setup before
-  moving to a paid plan
-
-## How to use nitpickr
+### Review commands
 
 Default behavior:
 
@@ -272,7 +288,7 @@ Reply commands for an existing nitpickr review comment:
 - `@nitpickr learn <team preference>`
 - `@nitpickr status`
 
-Example repository config:
+### Repository config example
 
 ```yaml
 version: 1
@@ -285,18 +301,26 @@ review:
     - migrations
 ```
 
-## Useful commands
+## Deployment
 
-```bash
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm cli doctor
-pnpm cli migrate
-pnpm dev:api
-pnpm dev:worker
-pnpm eval:reviews
-```
+If you want an always-on hosted setup, Railway is the simplest path today.
+
+The deployed shape is:
+
+- one public `api` service
+- one private `worker` service
+- one PostgreSQL database
+
+Use [docs/railway-deploy.md](docs/railway-deploy.md) for the full walkthrough.
+
+Cost note:
+
+- local Docker is the cheapest long-term option because you avoid managed infra
+  cost
+- Railway is the easiest managed option when you want a stable public endpoint
+- Railway pricing changes over time, but for early testing and small personal
+  use, its trial/free-plan budget is often enough to validate the setup before
+  moving to a paid plan
 
 For operational troubleshooting, see [docs/beta-runbook.md](docs/beta-runbook.md).
 

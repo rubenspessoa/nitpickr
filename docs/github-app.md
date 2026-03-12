@@ -70,10 +70,17 @@ After the app is created:
 4. Download the `.pem` file.
 5. Put the PEM contents into `GITHUB_PRIVATE_KEY`.
 
-`GITHUB_PRIVATE_KEY` can be stored either:
+Prefer storing the PEM in your secret manager and referencing it as a protected
+secret. Do not commit the private key.
 
-- as a real multiline PEM block in your secret manager
-- as a single-line string with newline characters escaped as `\n`
+If you must use an environment variable:
+
+- use the escaped single-line form with `\n` for newlines, or a protected
+  multiline secret if your deploy platform supports it
+- restrict access to the secret to the smallest set of people and services that
+  need it
+- ensure logs, screenshots, debug dumps, and support output never include the
+  raw `GITHUB_PRIVATE_KEY` value
 
 `nitpickr` normalizes the escaped form at runtime.
 

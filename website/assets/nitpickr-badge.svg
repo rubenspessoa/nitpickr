@@ -1,0 +1,42 @@
+<svg width="720" height="720" viewBox="0 0 720 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="badgeBackground" x1="102" y1="94" x2="624" y2="638" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#171C23" />
+      <stop offset="1" stop-color="#0F1218" />
+    </linearGradient>
+    <linearGradient id="badgeRing" x1="176" y1="134" x2="560" y2="584" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#53D9D1" />
+      <stop offset="0.5" stop-color="#BEDF2A" />
+      <stop offset="1" stop-color="#FF8F4A" />
+    </linearGradient>
+    <filter id="badgeShadow" x="54" y="64" width="620" height="604" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feOffset dy="24" />
+      <feGaussianBlur stdDeviation="28" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.027451 0 0 0 0 0.0431373 0 0 0 0 0.0823529 0 0 0 0.42 0" />
+      <feBlend in2="SourceGraphic" result="shape" />
+    </filter>
+  </defs>
+  <circle cx="360" cy="360" r="314" fill="url(#badgeBackground)" />
+  <circle cx="360" cy="360" r="276" stroke="url(#badgeRing)" stroke-width="18" opacity="0.28" />
+  <circle cx="360" cy="360" r="236" fill="#E8DFCF" fill-opacity="0.94" />
+  <path d="M154 476C238 550 394 596 542 558" stroke="#53D9D1" stroke-width="14" stroke-linecap="round" opacity="0.32" />
+  <path d="M206 178C286 126 402 114 500 154" stroke="#FF8F4A" stroke-width="12" stroke-linecap="round" opacity="0.24" />
+
+  <g filter="url(#badgeShadow)">
+    <image href="./nitpickr-mascot.png" x="140" y="132" width="438" height="438" transform="rotate(-10 359 352)" />
+  </g>
+
+  <path d="M468 472C518 488 570 530 604 580" stroke="#FF8F4A" stroke-width="16" stroke-linecap="round" />
+  <path d="M444 430C500 450 548 486 582 532" stroke="#BEDF2A" stroke-width="10" stroke-linecap="round" opacity="0.9" />
+
+  <g>
+    <rect x="126" y="522" width="210" height="68" rx="24" fill="#131820" stroke="rgba(255,255,255,0.12)" />
+    <circle cx="170" cy="556" r="10" fill="#53D9D1" />
+    <rect x="190" y="548" width="92" height="14" rx="7" fill="#F5F2EB" fill-opacity="0.72" />
+    <path d="M302 548L320 564L354 528" stroke="#BEDF2A" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <circle cx="556" cy="196" r="18" fill="#53D9D1" fill-opacity="0.24" />
+  <circle cx="590" cy="236" r="10" fill="#FF8F4A" fill-opacity="0.4" />
+  <circle cx="156" cy="236" r="12" fill="#BEDF2A" fill-opacity="0.28" />
+</svg>

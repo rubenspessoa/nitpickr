@@ -256,8 +256,12 @@
   - GitHub-first CTAs plus links to the GitHub App and Railway guides
 - Added branded web assets:
   - self-hosted `Space Grotesk`, `IBM Plex Sans`, and `IBM Plex Mono` font files
-  - resized mascot derivatives for hero, badge, chip, favicon, Apple touch icon, and OG image usage
+  - mascot-based SVG scene assets for hero, brand chip, badge, and watermark usage
+  - PNG derivatives retained for favicon, Apple touch icon, and Open Graph image usage
   - SVG watermark background treatment
+- Follow-up asset refresh:
+  - replaced the flatter mascot derivatives with SVG scene compositions for the hero, brand chip, badge, and OG card
+  - updated the site to use the SVG hero/chip/badge assets directly while regenerating PNG derivatives for social and icon use
 - Added repository wiring:
   - `scripts/build-site.mjs`
   - `pnpm site:build`

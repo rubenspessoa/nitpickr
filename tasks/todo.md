@@ -24,6 +24,9 @@
   - `pnpm lint`
   - built-site contract checks against `dist/site`
   - mocked DOM execution of `dist/site/script.js` covering toggle, `Escape`, link-click, and resize-close behavior
+- Follow-up nitpickr pass:
+  - added `rel="noopener noreferrer"` to the new GitHub nav links
+  - moved focus to the first nav link when the mobile menu opens
 - Attempted Safari WebDriver viewport verification, but `safaridriver --enable` required a local password prompt that could not be completed unattended from the agent session.
 
 # PR #4 Merge + Review Sweep

@@ -59,6 +59,11 @@ if (siteHeader && navToggle && siteNav) {
   const openMenu = () => {
     siteHeader.dataset.navOpen = "true";
     navToggle.setAttribute("aria-expanded", "true");
+
+    const firstNavLink = siteNav.querySelector("a");
+    if (firstNavLink) {
+      firstNavLink.focus();
+    }
   };
 
   const syncMenuWithViewport = () => {

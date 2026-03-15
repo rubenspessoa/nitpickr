@@ -41,7 +41,6 @@ if (
 
 document.documentElement.classList.add("has-js");
 
-
 const siteHeader = document.querySelector(".site-header");
 const navToggle = document.querySelector(".nav-toggle");
 const siteNav = document.getElementById("site-nav");

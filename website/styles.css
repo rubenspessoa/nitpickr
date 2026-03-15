@@ -423,6 +423,11 @@ ul {
   color: var(--text-soft);
 }
 
+.hero-lead {
+  max-width: 39rem;
+  font-size: clamp(1rem, 1.8vw, 1.16rem);
+}
+
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
@@ -877,5 +882,11 @@ summary:focus-visible {
   .reveal {
     opacity: 1;
     transform: none;
+  }
+
+  .nav-toggle,
+  .site-nav,
+  .nav-toggle-icon span {
+    transition: none;
   }
 }

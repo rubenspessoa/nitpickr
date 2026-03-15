@@ -6,54 +6,71 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>nitpickr | AI code review, on your infrastructure</title>
+    <title>nitpickr | Self-hosted AI code review for GitHub pull requests</title>
     <meta
       name="description"
-      content="Source-available AI code review for GitHub pull requests. Run nitpickr locally, on Railway, or on your own VPS while keeping the model, rules, and infrastructure under your control."
+      content="Source-available AI code review for GitHub pull requests. Run nitpickr on your own infrastructure, choose your model, and keep rules, logs, and runtime under your control."
     />
+    <link rel="canonical" href="https://nitpickr.rubenspessoa.dev/" />
     <meta
-      name="keywords"
-      content="nitpickr, self-hosted ai code review, github pull request review, source-available developer tools, ai code review"
+      name="robots"
+      content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"
     />
     <meta name="theme-color" content="#f6f1e8" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="nitpickr" />
+    <meta property="og:locale" content="en_US" />
     <meta
       property="og:title"
-      content="nitpickr | AI code review, on your infrastructure"
+      content="nitpickr | Self-hosted AI code review for GitHub pull requests"
     />
     <meta
       property="og:description"
-      content="Self-hosted AI code review for GitHub pull requests. Keep the model, rules, and runtime under your control."
+      content="Source-available AI code review for GitHub pull requests. Run nitpickr on your own infrastructure, choose your model, and keep rules, logs, and runtime under your control."
     />
-    <meta property="og:url" content="https://rubenspessoa.dev/nitpickr/" />
+    <meta property="og:url" content="https://nitpickr.rubenspessoa.dev/" />
     <meta
       property="og:image"
-      content="https://rubenspessoa.dev/nitpickr/assets/og-preview.png"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
     />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="nitpickr owl mascot reviewing code on a laptop"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="nitpickr | AI code review, on your infrastructure"
+      content="nitpickr | Self-hosted AI code review for GitHub pull requests"
     />
     <meta
       name="twitter:description"
-      content="Self-hosted AI code review for GitHub pull requests."
+      content="Source-available AI code review for GitHub pull requests. Run nitpickr on your own infrastructure, choose your model, and keep rules, logs, and runtime under your control."
     />
     <meta
       name="twitter:image"
-      content="https://rubenspessoa.dev/nitpickr/assets/og-preview.png"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
     />
     <meta
       name="twitter:image:alt"
-      content="nitpickr owl mascot reviewing code on a laptop"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
     />
-    <link rel="icon" type="image/png" href="./assets/favicon.png" />
-    <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png" />
-    <link rel="manifest" href="./site.webmanifest" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-96x96.png" sizes="96x96" type="image/png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "nitpickr",
+        "alternateName": "nitpickr AI code review",
+        "url": "https://nitpickr.rubenspessoa.dev/"
+      }
+    </script>
     <script>
       document.documentElement.classList.add("has-js");
     </script>
@@ -120,11 +137,15 @@
         <section class="hero section">
           <div class="container hero-grid">
             <div class="hero-copy">
-              <p class="eyebrow">GitHub-first AI review</p>
+              <p class="eyebrow">Self-hosted GitHub reviews</p>
               <h1 class="hero-title">
-                <span>AI code review,</span>
-                <span>under your control.</span>
+                <span>Self-hosted AI code review</span>
+                <span>for GitHub pull requests.</span>
               </h1>
+              <p class="hero-lead">
+                Run nitpickr on your own infrastructure, choose the model, and
+                keep repository rules, logs, and runtime under your control.
+              </p>
 
               <div class="hero-actions">
                 <a
@@ -145,6 +166,8 @@
                   alt="nitpickr mascot reviewing code on a laptop"
                   width="1200"
                   height="800"
+                  decoding="async"
+                  fetchpriority="high"
                 />
               </div>
             </figure>

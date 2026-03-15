@@ -1,3 +1,36 @@
+# Website Metadata + SEO Refresh
+
+## Plan
+
+- [x] Update homepage and imprint metadata for canonical URLs, robots directives, richer OG/Twitter tags, and `WebSite` JSON-LD.
+- [x] Add crawl/discovery files for the new canonical host, including `robots.txt`, `sitemap.xml`, and custom-domain support.
+- [x] Replace the share thumbnail and ship a simplified favicon/icon family plus expanded web manifest entries.
+- [x] Build and verify the static site output, then document the results.
+
+## Results
+
+- Updated the homepage and imprint head metadata to use the canonical `https://nitpickr.rubenspessoa.dev/` host, richer Open Graph and Twitter card fields, explicit robots directives, root favicon links, and homepage `WebSite` JSON-LD.
+- Tightened the homepage hero copy so the above-the-fold messaging now explicitly includes `self-hosted`, `AI code review`, and `GitHub pull requests`, while preserving the in-progress responsive navigation work.
+- Added and committed root-level crawl and host files:
+  - `website/robots.txt`
+  - `website/sitemap.xml`
+  - `website/CNAME`
+- Expanded `website/site.webmanifest` for root-scope install metadata and shipped a new root icon family:
+  - `favicon.svg`
+  - `favicon.ico`
+  - `favicon-96x96.png`
+  - `apple-touch-icon.png`
+  - `icon-192.png`
+  - `icon-512.png`
+  - `icon-maskable-512.png`
+- Replaced the social preview with a new branded `1200x630` share card at `website/assets/og-preview.jpg` and kept the editable SVG source at `website/assets/og-preview.svg`.
+- Verification completed:
+  - `pnpm site:build`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - local metadata validation against `dist/site` for canonical, robots, OG image, JSON-LD, and required output files
+
+
 # Responsive Website Hardening
 
 ## Plan

@@ -1,18 +1,34 @@
 {
   "name": "nitpickr",
   "short_name": "nitpickr",
-  "description": "AI code review, on your infrastructure.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "description": "Source-available AI code review for GitHub pull requests. Run nitpickr on your own infrastructure, choose your model, and keep rules, logs, and runtime under your control.",
   "display": "standalone",
   "background_color": "#f6f1e8",
   "theme_color": "#f6f1e8",
   "icons": [
     {
-      "src": "./assets/favicon.png",
-      "sizes": "64x64",
-      "type": "image/png"
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "./assets/apple-touch-icon.png",
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png"
     }

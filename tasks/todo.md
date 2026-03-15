@@ -11,7 +11,7 @@
 
 - Updated the homepage and imprint head metadata to use the canonical `https://nitpickr.rubenspessoa.dev/` host, richer Open Graph and Twitter card fields, explicit robots directives, root favicon links, and homepage `WebSite` JSON-LD.
 - Tightened the homepage hero copy so the above-the-fold messaging now explicitly includes `self-hosted`, `AI code review`, and `GitHub pull requests`, while preserving the in-progress responsive navigation work.
-- Added root-level crawl and host files:
+- Added and committed root-level crawl and host files:
   - `website/robots.txt`
   - `website/sitemap.xml`
   - `website/CNAME`

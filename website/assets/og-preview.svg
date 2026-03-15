@@ -1,33 +1,33 @@
 <svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="ogBackground" x1="60" y1="38" x2="1116" y2="632" gradientUnits="userSpaceOnUse">
+    <linearGradient id="nitpickr-og-background" x1="60" y1="38" x2="1116" y2="632" gradientUnits="userSpaceOnUse">
       <stop stop-color="#171C23" />
       <stop offset="1" stop-color="#0E1117" />
     </linearGradient>
-    <linearGradient id="heroCard" x1="118" y1="112" x2="628" y2="558" gradientUnits="userSpaceOnUse">
+    <linearGradient id="nitpickr-og-hero-card" x1="118" y1="112" x2="628" y2="558" gradientUnits="userSpaceOnUse">
       <stop stop-color="#202733" />
       <stop offset="1" stop-color="#141A22" />
     </linearGradient>
-    <linearGradient id="accentLine" x1="104" y1="86" x2="468" y2="86" gradientUnits="userSpaceOnUse">
+    <linearGradient id="nitpickr-og-accent-line" x1="104" y1="86" x2="468" y2="86" gradientUnits="userSpaceOnUse">
       <stop stop-color="#53D9D1" />
       <stop offset="1" stop-color="#BEDF2A" />
     </linearGradient>
-    <filter id="mascotShadow" x="608" y="44" width="548" height="536" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <filter id="nitpickr-og-mascot-shadow" x="608" y="44" width="548" height="536" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feOffset dy="24" />
       <feGaussianBlur stdDeviation="28" />
       <feColorMatrix type="matrix" values="0 0 0 0 0.027451 0 0 0 0 0.0431373 0 0 0 0 0.0823529 0 0 0 0.42 0" />
       <feBlend in2="SourceGraphic" result="shape" />
     </filter>
   </defs>
-  <rect width="1200" height="630" fill="url(#ogBackground)" />
+  <rect width="1200" height="630" fill="url(#nitpickr-og-background)" />
   <circle cx="942" cy="188" r="136" fill="#53D9D1" fill-opacity="0.12" />
   <circle cx="1030" cy="382" r="182" fill="#E8DFCF" fill-opacity="0.92" />
   <circle cx="842" cy="540" r="116" fill="#FF8F4A" fill-opacity="0.12" />
-  <path d="M118 92H466" stroke="url(#accentLine)" stroke-width="10" stroke-linecap="round" />
+  <path d="M118 92H466" stroke="url(#nitpickr-og-accent-line)" stroke-width="10" stroke-linecap="round" />
   <path d="M778 82C894 48 1022 66 1114 132" stroke="#53D9D1" stroke-opacity="0.26" stroke-width="14" stroke-linecap="round" />
   <path d="M730 566C864 626 1046 618 1150 546" stroke="#FF8F4A" stroke-opacity="0.18" stroke-width="12" stroke-linecap="round" />
 
-  <rect x="78" y="82" width="542" height="466" rx="40" fill="url(#heroCard)" stroke="#FFFFFF" stroke-opacity="0.08" />
+  <rect x="78" y="82" width="542" height="466" rx="40" fill="url(#nitpickr-og-hero-card)" stroke="#FFFFFF" stroke-opacity="0.08" />
   <text x="118" y="138" fill="#53D9D1" font-family="'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="3.2">SOURCE-AVAILABLE • SELF-HOSTED</text>
   <text x="118" y="244" fill="#F5F2EB" font-family="'Helvetica Neue', Arial, sans-serif" font-size="112" font-weight="700">nitpickr</text>
   <text x="118" y="324" fill="#F5F2EB" font-family="'Helvetica Neue', Arial, sans-serif" font-size="50" font-weight="700">Self-hosted AI code review</text>
@@ -42,7 +42,7 @@
     <text x="374" y="527" fill="#BEDF2A" font-family="'Helvetica Neue', Arial, sans-serif" font-size="22" font-weight="700">Review in GitHub</text>
   </g>
 
-  <g filter="url(#mascotShadow)">
+  <g filter="url(#nitpickr-og-mascot-shadow)">
     <image href="./nitpickr-flying.png" x="694" y="88" width="430" height="430" />
   </g>
 

@@ -46,6 +46,7 @@ const mobileNavBreakpoint = window.matchMedia("(max-width: 720px)");
 
 if (siteHeader && navToggle && siteNav) {
   const navLinks = siteNav.querySelectorAll("a");
+  const firstNavLink = siteNav.querySelector("a");
 
   const closeMenu = ({ returnFocus = false } = {}) => {
     siteHeader.dataset.navOpen = "false";
@@ -59,6 +60,10 @@ if (siteHeader && navToggle && siteNav) {
   const openMenu = () => {
     siteHeader.dataset.navOpen = "true";
     navToggle.setAttribute("aria-expanded", "true");
+
+    if (mobileNavBreakpoint.matches) {
+      firstNavLink?.focus();
+    }
   };
 
   const syncMenuWithViewport = () => {
@@ -71,7 +76,7 @@ if (siteHeader && navToggle && siteNav) {
   navToggle.setAttribute("aria-expanded", "false");
 
   navToggle.addEventListener("click", () => {
-    const isOpen = siteHeader.dataset.navOpen === "true";
+    const isOpen = navToggle.getAttribute("aria-expanded") === "true";
 
     if (isOpen) {
       closeMenu();

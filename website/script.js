@@ -62,7 +62,7 @@ if (siteHeader && navToggle && siteNav) {
 
     const firstNavLink = siteNav.querySelector("a");
     if (firstNavLink) {
-      firstNavLink.focus();
+      firstNavLink.focus({ preventScroll: true });
     }
   };
 

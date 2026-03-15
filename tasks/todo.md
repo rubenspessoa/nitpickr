@@ -27,6 +27,9 @@
 - Follow-up nitpickr pass:
   - added `rel="noopener noreferrer"` to the new GitHub nav links
   - moved focus to the first nav link when the mobile menu opens
+- Second nitpickr pass:
+  - hardened the remaining `target="_blank"` links on the site with `rel="noopener noreferrer"`
+  - switched first-link menu focus to `focus({ preventScroll: true })` to avoid mobile scroll jank
 - Attempted Safari WebDriver viewport verification, but `safaridriver --enable` required a local password prompt that could not be completed unattended from the agent session.
 
 # PR #4 Merge + Review Sweep

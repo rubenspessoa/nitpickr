@@ -30,7 +30,7 @@
   <body>
     <a class="skip-link" href="#content">Skip to content</a>
     <div class="site-shell">
-      <header class="site-header">
+      <header class="site-header" data-nav-open="false">
         <div class="container header-row">
           <a class="brand" href="../" aria-label="nitpickr home">
             <img
@@ -46,9 +46,40 @@
             </span>
           </a>
 
-          <div class="header-actions">
-            <a class="header-link" href="../">Home</a>
-          </div>
+          <button
+            class="nav-toggle"
+            type="button"
+            aria-controls="site-nav"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+          >
+            <span class="nav-toggle-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary">
+            <ul class="nav-list">
+              <li><a class="header-link" href="../">Home</a></li>
+              <li>
+                <a
+                  class="header-link"
+                  href="https://github.com/rubenspessoa/nitpickr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >GitHub</a
+                >
+              </li>
+              <li><a class="header-link" href="./" aria-current="page">Imprint</a></li>
+              <li>
+                <a class="header-link" href="mailto:contact@rubenspessoa.dev"
+                  >Contact</a
+                >
+              </li>
+            </ul>
+          </nav>
         </div>
       </header>
 
@@ -85,7 +116,7 @@
                 <a
                   href="https://www.ris.bka.gv.at"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   >www.ris.bka.gv.at</a
                 >
               </p>
@@ -96,7 +127,7 @@
                 <a
                   href="https://ec.europa.eu/odr"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   >https://ec.europa.eu/odr</a
                 >.
               </p>
@@ -116,7 +147,7 @@
           </p>
 
           <nav class="footer-links" aria-label="Footer">
-            <a href="https://github.com/rubenspessoa/nitpickr" target="_blank" rel="noreferrer">GitHub</a>
+            <a href="https://github.com/rubenspessoa/nitpickr" target="_blank" rel="noopener noreferrer">GitHub</a>
             <a href="./">Imprint</a>
             <a href="mailto:contact@rubenspessoa.dev">Contact</a>
           </nav>

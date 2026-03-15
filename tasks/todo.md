@@ -1,3 +1,41 @@
+# Responsive Website Hardening
+
+## Plan
+
+- [x] Replace the shared website header with a semantic primary nav and mobile hamburger menu on both pages.
+- [x] Update the shared stylesheet for phone and tablet breakpoints, including a clean mobile header row and tighter small-phone spacing.
+- [x] Extend the shared site script with accessible mobile-nav open and close behavior while preserving reveal animations.
+- [x] Rebuild the static site, verify the responsive states, and document the results.
+
+## Results
+
+- Updated `website/index.html` and `website/imprint/index.html` with a shared primary nav, current-page state, and an accessible hamburger toggle for phone widths.
+- Updated `website/styles.css` to:
+  - keep the mobile header on a single horizontal row
+  - collapse the nav into a JS-enhanced dropdown at `720px` and below
+  - tighten spacing and sizing again at `480px` and below
+  - reduce overflow risk in shared grids and long legal links
+- Extended `website/script.js` so the mobile nav:
+  - opens and closes via the toggle
+  - closes on `Escape`, nav-link click, and resize back above the mobile breakpoint
+  - returns focus to the toggle after keyboard dismissal
+- Verification completed:
+  - `pnpm site:build`
+  - `pnpm lint`
+  - built-site contract checks against `dist/site`
+  - mocked DOM execution of `dist/site/script.js` covering toggle, `Escape`, link-click, and resize-close behavior
+- Follow-up nitpickr pass:
+  - added `rel="noopener noreferrer"` to the new GitHub nav links
+  - moved focus to the first nav link when the mobile menu opens
+- Second nitpickr pass:
+  - hardened the remaining `target="_blank"` links on the site with `rel="noopener noreferrer"`
+  - switched first-link menu focus to `focus({ preventScroll: true })` to avoid mobile scroll jank
+- Third nitpickr pass:
+  - mirrored `.has-js` activation in the shared script so the CSS mobile-nav hooks are JS-owned as well as HTML-bootstrapped
+  - synchronized `aria-hidden` with the mobile nav open/closed state
+  - added a `MediaQueryList` change listener alongside resize handling for breakpoint transitions
+- Attempted Safari WebDriver viewport verification, but `safaridriver --enable` required a local password prompt that could not be completed unattended from the agent session.
+
 # PR #4 Merge + Review Sweep
 
 ## Plan

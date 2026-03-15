@@ -38,3 +38,92 @@ if (
     element.classList.add("is-visible");
   }
 }
+
+document.documentElement.classList.add("has-js");
+
+const siteHeader = document.querySelector(".site-header");
+const navToggle = document.querySelector(".nav-toggle");
+const siteNav = document.getElementById("site-nav");
+const mobileNavBreakpoint = window.matchMedia("(max-width: 720px)");
+
+if (siteHeader && navToggle && siteNav) {
+  const navLinks = siteNav.querySelectorAll("a");
+
+  const setMenuState = ({
+    open,
+    returnFocus = false,
+    focusFirstLink = false,
+  }) => {
+    const isMobileViewport = mobileNavBreakpoint.matches;
+
+    siteHeader.dataset.navOpen = open ? "true" : "false";
+    navToggle.setAttribute("aria-expanded", String(open));
+    siteNav.setAttribute(
+      "aria-hidden",
+      String(isMobileViewport ? !open : false),
+    );
+
+    if (open && focusFirstLink) {
+      const firstNavLink = siteNav.querySelector("a");
+      if (firstNavLink) {
+        firstNavLink.focus({ preventScroll: true });
+      }
+    }
+
+    if (returnFocus) {
+      navToggle.focus();
+    }
+  };
+
+  const closeMenu = ({ returnFocus = false } = {}) => {
+    setMenuState({ open: false, returnFocus });
+  };
+
+  const openMenu = () => {
+    setMenuState({ open: true, focusFirstLink: true });
+  };
+
+  const syncMenuWithViewport = () => {
+    if (!mobileNavBreakpoint.matches) {
+      closeMenu();
+      return;
+    }
+
+    setMenuState({ open: siteHeader.dataset.navOpen === "true" });
+  };
+
+  setMenuState({ open: false });
+
+  navToggle.addEventListener("click", () => {
+    const isOpen = siteHeader.dataset.navOpen === "true";
+
+    if (isOpen) {
+      closeMenu();
+      return;
+    }
+
+    openMenu();
+  });
+
+  for (const link of navLinks) {
+    link.addEventListener("click", () => {
+      if (!mobileNavBreakpoint.matches) {
+        return;
+      }
+
+      closeMenu();
+    });
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || siteHeader.dataset.navOpen !== "true") {
+      return;
+    }
+
+    closeMenu({ returnFocus: true });
+  });
+
+  window.addEventListener("resize", syncMenuWithViewport);
+  mobileNavBreakpoint.addEventListener("change", syncMenuWithViewport);
+  syncMenuWithViewport();
+}

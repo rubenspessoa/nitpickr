@@ -76,7 +76,9 @@ if (siteHeader && navToggle && siteNav) {
   navToggle.setAttribute("aria-expanded", "false");
 
   navToggle.addEventListener("click", () => {
-    const isOpen = navToggle.getAttribute("aria-expanded") === "true";
+    const isOpen =
+      siteHeader.dataset.navOpen === "true" ||
+      navToggle.getAttribute("aria-expanded") === "true";
 
     if (isOpen) {
       closeMenu();

@@ -52,3 +52,6 @@
 - When simplifying a landing page, separate the hero from page depth:
   - a minimal hero does not mean removing the supporting sections
   - keep the top singular, and let the sections underneath carry the extra detail
+- After pushing a PR follow-up commit, do not manually re-request nitpickr unless the user explicitly asks:
+  - a fresh push already retriggers the nitpickr review workflow
+  - avoid extra `@nitpickr review` comments that add noise to the PR timeline

@@ -30,6 +30,7 @@
   - `pnpm typecheck`
   - local metadata validation against `dist/site` for canonical, robots, OG image, JSON-LD, and required output files
 
+
 # Responsive Website Hardening
 
 ## Plan
@@ -56,6 +57,16 @@
   - `pnpm lint`
   - built-site contract checks against `dist/site`
   - mocked DOM execution of `dist/site/script.js` covering toggle, `Escape`, link-click, and resize-close behavior
+- Follow-up nitpickr pass:
+  - added `rel="noopener noreferrer"` to the new GitHub nav links
+  - moved focus to the first nav link when the mobile menu opens
+- Second nitpickr pass:
+  - hardened the remaining `target="_blank"` links on the site with `rel="noopener noreferrer"`
+  - switched first-link menu focus to `focus({ preventScroll: true })` to avoid mobile scroll jank
+- Third nitpickr pass:
+  - mirrored `.has-js` activation in the shared script so the CSS mobile-nav hooks are JS-owned as well as HTML-bootstrapped
+  - synchronized `aria-hidden` with the mobile nav open/closed state
+  - added a `MediaQueryList` change listener alongside resize handling for breakpoint transitions
 - Attempted Safari WebDriver viewport verification, but `safaridriver --enable` required a local password prompt that could not be completed unattended from the agent session.
 
 # PR #4 Merge + Review Sweep

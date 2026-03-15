@@ -247,7 +247,7 @@ h3 {
   appearance: none;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: var(--surface-strong);
+  background: rgba(255, 255, 255, 0.76);
   color: var(--text);
   font: inherit;
   box-shadow: 0 14px 28px rgba(75, 53, 28, 0.08);
@@ -259,7 +259,6 @@ h3 {
 .nav-toggle:hover,
 .nav-toggle:focus-visible {
   transform: translateY(-1px);
-  background: var(--bg-soft);
   border-color: rgba(31, 25, 19, 0.24);
 }
 
@@ -354,7 +353,9 @@ h3 {
   justify-items: center;
 }
 
-.split-grid > * {
+.hero-grid > *,
+.split-grid > *,
+.simple-grid > * {
   min-width: 0;
 }
 
@@ -721,7 +722,6 @@ summary:focus-visible {
     top: calc(100% + 0.55rem);
     left: 0;
     right: 0;
-    box-sizing: border-box;
     margin-left: 0;
     padding: 0.75rem;
     border: 1px solid var(--line);
@@ -735,8 +735,7 @@ summary:focus-visible {
     transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease;
   }
 
-  .has-js .site-header[data-nav-open="true"] .site-nav,
-  .has-js .nav-toggle[aria-expanded="true"] + .site-nav {
+  .has-js .site-header[data-nav-open="true"] .site-nav {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
@@ -755,25 +754,22 @@ summary:focus-visible {
     min-height: 0;
     padding: 0.78rem 0.95rem;
     border-radius: 1rem;
-    background: var(--surface);
+    background: rgba(255, 255, 255, 0.58);
   }
 
   .has-js .site-nav .header-link[aria-current="page"] {
-    background: var(--accent-soft);
+    background: rgba(222, 108, 48, 0.12);
   }
 
-  .site-header[data-nav-open="true"] .nav-toggle-icon span:nth-child(1),
-  .nav-toggle[aria-expanded="true"] .nav-toggle-icon span:nth-child(1) {
+  .site-header[data-nav-open="true"] .nav-toggle-icon span:nth-child(1) {
     transform: translateY(6px) rotate(45deg);
   }
 
-  .site-header[data-nav-open="true"] .nav-toggle-icon span:nth-child(2),
-  .nav-toggle[aria-expanded="true"] .nav-toggle-icon span:nth-child(2) {
+  .site-header[data-nav-open="true"] .nav-toggle-icon span:nth-child(2) {
     opacity: 0;
   }
 
-  .site-header[data-nav-open="true"] .nav-toggle-icon span:nth-child(3),
-  .nav-toggle[aria-expanded="true"] .nav-toggle-icon span:nth-child(3) {
+  .site-header[data-nav-open="true"] .nav-toggle-icon span:nth-child(3) {
     transform: translateY(-6px) rotate(-45deg);
   }
 

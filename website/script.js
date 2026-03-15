@@ -39,6 +39,8 @@ if (
   }
 }
 
+document.documentElement.classList.add("has-js");
+
 const siteHeader = document.querySelector(".site-header");
 const navToggle = document.querySelector(".nav-toggle");
 const siteNav = document.getElementById("site-nav");
@@ -47,33 +49,50 @@ const mobileNavBreakpoint = window.matchMedia("(max-width: 720px)");
 if (siteHeader && navToggle && siteNav) {
   const navLinks = siteNav.querySelectorAll("a");
 
-  const closeMenu = ({ returnFocus = false } = {}) => {
-    siteHeader.dataset.navOpen = "false";
-    navToggle.setAttribute("aria-expanded", "false");
+  const setMenuState = ({
+    open,
+    returnFocus = false,
+    focusFirstLink = false,
+  }) => {
+    const isMobileViewport = mobileNavBreakpoint.matches;
+
+    siteHeader.dataset.navOpen = open ? "true" : "false";
+    navToggle.setAttribute("aria-expanded", String(open));
+    siteNav.setAttribute(
+      "aria-hidden",
+      String(isMobileViewport ? !open : false),
+    );
+
+    if (open && focusFirstLink) {
+      const firstNavLink = siteNav.querySelector("a");
+      if (firstNavLink) {
+        firstNavLink.focus({ preventScroll: true });
+      }
+    }
 
     if (returnFocus) {
       navToggle.focus();
     }
   };
 
-  const openMenu = () => {
-    siteHeader.dataset.navOpen = "true";
-    navToggle.setAttribute("aria-expanded", "true");
+  const closeMenu = ({ returnFocus = false } = {}) => {
+    setMenuState({ open: false, returnFocus });
+  };
 
-    const firstNavLink = siteNav.querySelector("a");
-    if (firstNavLink) {
-      firstNavLink.focus({ preventScroll: true });
-    }
+  const openMenu = () => {
+    setMenuState({ open: true, focusFirstLink: true });
   };
 
   const syncMenuWithViewport = () => {
     if (!mobileNavBreakpoint.matches) {
       closeMenu();
+      return;
     }
+
+    setMenuState({ open: siteHeader.dataset.navOpen === "true" });
   };
 
-  siteHeader.dataset.navOpen = "false";
-  navToggle.setAttribute("aria-expanded", "false");
+  setMenuState({ open: false });
 
   navToggle.addEventListener("click", () => {
     const isOpen = siteHeader.dataset.navOpen === "true";
@@ -105,5 +124,6 @@ if (siteHeader && navToggle && siteNav) {
   });
 
   window.addEventListener("resize", syncMenuWithViewport);
+  mobileNavBreakpoint.addEventListener("change", syncMenuWithViewport);
   syncMenuWithViewport();
 }

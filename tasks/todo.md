@@ -30,6 +30,10 @@
 - Second nitpickr pass:
   - hardened the remaining `target="_blank"` links on the site with `rel="noopener noreferrer"`
   - switched first-link menu focus to `focus({ preventScroll: true })` to avoid mobile scroll jank
+- Third nitpickr pass:
+  - mirrored `.has-js` activation in the shared script so the CSS mobile-nav hooks are JS-owned as well as HTML-bootstrapped
+  - synchronized `aria-hidden` with the mobile nav open/closed state
+  - added a `MediaQueryList` change listener alongside resize handling for breakpoint transitions
 - Attempted Safari WebDriver viewport verification, but `safaridriver --enable` required a local password prompt that could not be completed unattended from the agent session.
 
 # PR #4 Merge + Review Sweep

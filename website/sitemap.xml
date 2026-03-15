@@ -2,8 +2,30 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://nitpickr.rubenspessoa.dev/</loc>
+    <lastmod>2026-03-15</lastmod>
   </url>
   <url>
     <loc>https://nitpickr.rubenspessoa.dev/imprint/</loc>
+    <lastmod>2026-03-15</lastmod>
+  </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/docs/</loc>
+    <lastmod>2026-03-15</lastmod>
+  </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/docs/getting-started/</loc>
+    <lastmod>2026-03-15</lastmod>
+  </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/compare/nitpickr-vs-coderabbit/</loc>
+    <lastmod>2026-03-15</lastmod>
+  </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/compare/nitpickr-vs-greptile/</loc>
+    <lastmod>2026-03-15</lastmod>
+  </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/benchmark/</loc>
+    <lastmod>2026-03-15</lastmod>
   </url>
 </urlset>

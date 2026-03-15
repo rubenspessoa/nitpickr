@@ -12,6 +12,7 @@
       content="Source-available AI code review for GitHub pull requests. Run nitpickr on your own infrastructure, choose your model, and keep rules, logs, and runtime under your control."
     />
     <link rel="canonical" href="https://nitpickr.rubenspessoa.dev/" />
+    <meta name="author" content="Rubens Pessoa" />
     <meta
       name="robots"
       content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"
@@ -71,6 +72,28 @@
         "url": "https://nitpickr.rubenspessoa.dev/"
       }
     </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "nitpickr",
+        "description": "Source-available AI code review for GitHub pull requests. Run nitpickr on your own infrastructure, choose your model, and keep rules, logs, and runtime under your control.",
+        "url": "https://nitpickr.rubenspessoa.dev/",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Linux, macOS, Windows (via Docker)",
+        "author": {
+          "@type": "Person",
+          "name": "Rubens Pessoa"
+        },
+        "license": "https://www.elastic.co/licensing/elastic-license",
+        "downloadUrl": "https://github.com/rubenspessoa/nitpickr",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
     <script>
       document.documentElement.classList.add("has-js");
     </script>
@@ -113,6 +136,7 @@
           <nav class="site-nav" id="site-nav" aria-label="Primary">
             <ul class="nav-list">
               <li><a class="header-link" href="./" aria-current="page">Home</a></li>
+              <li><a class="header-link" href="./docs/">Docs</a></li>
               <li>
                 <a
                   class="header-link"
@@ -192,6 +216,7 @@
                   Inline comments, a summary, and a
                   <code>nitpickr / review</code> check.
                 </p>
+                <p><a href="./docs/getting-started/">Get started</a></p>
               </article>
 
               <article class="simple-card reveal">
@@ -199,6 +224,7 @@
                 <p>
                   Start local, use Railway for uptime, or keep it on your own VPS.
                 </p>
+                <p><a href="./docs/">Read the docs</a></p>
               </article>
 
               <article class="simple-card reveal">
@@ -207,6 +233,7 @@
                   Configuration lives in the repository, not inside a hosted
                   dashboard.
                 </p>
+                <p><a href="./docs/getting-started/">Learn how</a></p>
               </article>
             </div>
           </div>
@@ -320,6 +347,7 @@ AGENTS.md</code></pre>
 
           <nav class="footer-links" aria-label="Footer">
             <a href="https://github.com/rubenspessoa/nitpickr" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="./docs/">Docs</a>
             <a href="./imprint/">Imprint</a>
             <a href="mailto:contact@rubenspessoa.dev">Contact</a>
           </nav>

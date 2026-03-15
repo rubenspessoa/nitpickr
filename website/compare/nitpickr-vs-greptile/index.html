@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>nitpickr vs Greptile | AI Code Review Comparison</title>
+    <meta
+      name="description"
+      content="Compare nitpickr and Greptile for AI code review. Self-hosted vs SaaS, model control, codebase understanding, pricing, and deployment differences."
+    />
+    <meta name="author" content="Rubens Pessoa" />
+    <link rel="canonical" href="https://nitpickr.rubenspessoa.dev/compare/nitpickr-vs-greptile/" />
+    <meta
+      name="robots"
+      content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+    />
+    <meta name="theme-color" content="#f6f1e8" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="nitpickr" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="nitpickr vs Greptile | AI Code Review Comparison" />
+    <meta
+      property="og:description"
+      content="Compare nitpickr and Greptile for AI code review. Self-hosted vs SaaS, model control, codebase understanding, pricing, and deployment differences."
+    />
+    <meta property="og:url" content="https://nitpickr.rubenspessoa.dev/compare/nitpickr-vs-greptile/" />
+    <meta
+      property="og:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="nitpickr vs Greptile | AI Code Review Comparison" />
+    <meta
+      name="twitter:description"
+      content="Compare nitpickr and Greptile for AI code review. Self-hosted vs SaaS, model control, codebase understanding, pricing, and deployment differences."
+    />
+    <meta
+      name="twitter:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-96x96.png" sizes="96x96" type="image/png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is the main difference between nitpickr and Greptile?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "nitpickr is a self-hosted, source-available AI code reviewer focused on pull request review with model-agnostic design. Greptile is a SaaS platform focused on codebase-aware AI, offering code review as one of several API-driven features. nitpickr keeps your code on your own infrastructure, while Greptile processes code on their servers."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does nitpickr index the entire codebase like Greptile?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "nitpickr currently focuses on diff-first analysis: it reviews changed files and hunks with surrounding context. Full codebase indexing and semantic analysis are on the roadmap. Greptile indexes your entire codebase to provide broader context. For most pull request reviews, diff-focused analysis with repository instructions produces high-quality results."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I use nitpickr without sending code to a third-party server?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. nitpickr runs entirely on your infrastructure. Your code is sent only to the LLM provider you configure (such as OpenAI or a self-hosted model endpoint). With Greptile, your code is sent to their servers for indexing and analysis."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does the pricing model differ between nitpickr and Greptile?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "nitpickr has no subscription or per-seat fees. You pay for your own LLM API usage and hosting. Greptile offers usage-based pricing through API access. For teams running frequent reviews, nitpickr's bring-your-own-key model often results in lower total cost."
+            }
+          }
+        ]
+      }
+    </script>
+    <script>
+      document.documentElement.classList.add("has-js");
+    </script>
+    <link rel="stylesheet" href="../../styles.css" />
+    <script src="../../script.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <div class="site-shell">
+      <header class="site-header" data-nav-open="false">
+        <div class="container header-row">
+          <a class="brand" href="../../" aria-label="nitpickr home">
+            <img
+              class="brand-mark"
+              src="../../assets/nitpickr-flying.png"
+              alt="nitpickr owl mascot in flight"
+              width="56"
+              height="56"
+            />
+            <span class="brand-copy">
+              <strong>nitpickr</strong>
+              <span>AI code review</span>
+            </span>
+          </a>
+
+          <button
+            class="nav-toggle"
+            type="button"
+            aria-controls="site-nav"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+          >
+            <span class="nav-toggle-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary">
+            <ul class="nav-list">
+              <li><a class="header-link" href="../../">Home</a></li>
+              <li><a class="header-link" href="../../docs/">Docs</a></li>
+              <li>
+                <a
+                  class="header-link"
+                  href="https://github.com/rubenspessoa/nitpickr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >GitHub</a
+                >
+              </li>
+              <li><a class="header-link" href="../../imprint/">Imprint</a></li>
+              <li>
+                <a class="header-link" href="mailto:contact@rubenspessoa.dev"
+                  >Contact</a
+                >
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </header>
+
+      <main id="content">
+        <section class="section legal-page">
+          <div class="container legal-shell">
+            <nav class="breadcrumb" aria-label="Breadcrumb">
+              <ol class="breadcrumb-list">
+                <li><a href="../../">Home</a></li>
+                <li><a href="../../docs/">Docs</a></li>
+                <li aria-current="page">nitpickr vs Greptile</li>
+              </ol>
+            </nav>
+
+            <div class="section-heading">
+              <p class="eyebrow">Comparison</p>
+              <h1>nitpickr vs Greptile</h1>
+              <p>
+                A self-hosted pull request reviewer versus an API-driven
+                codebase intelligence platform. Different approaches to AI
+                code review.
+              </p>
+            </div>
+
+            <div class="legal-divider"></div>
+
+            <article class="legal-card legal-prose">
+              <h2>Overview</h2>
+              <p>
+                nitpickr and Greptile take different approaches to AI-assisted
+                code review. nitpickr is a self-hosted, source-available tool
+                focused on reviewing GitHub pull requests with the model of
+                your choice. Greptile is a SaaS platform that indexes your
+                entire codebase and offers code review as part of a broader
+                AI-powered developer toolkit.
+              </p>
+
+              <div class="comparison-table-wrapper">
+                <table class="comparison-table">
+                  <thead>
+                    <tr>
+                      <th>Feature</th>
+                      <th>nitpickr</th>
+                      <th>Greptile</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Hosting</td>
+                      <td>Self-hosted (your infra)</td>
+                      <td>SaaS (their servers)</td>
+                    </tr>
+                    <tr>
+                      <td>Primary focus</td>
+                      <td>Pull request review</td>
+                      <td>Codebase intelligence + review</td>
+                    </tr>
+                    <tr>
+                      <td>Model choice</td>
+                      <td>Any OpenAI-compatible model</td>
+                      <td>Platform-managed models</td>
+                    </tr>
+                    <tr>
+                      <td>Data privacy</td>
+                      <td>Code stays on your infra</td>
+                      <td>Code indexed on their servers</td>
+                    </tr>
+                    <tr>
+                      <td>Pricing</td>
+                      <td>Pay only for LLM API + hosting</td>
+                      <td>Usage-based API pricing</td>
+                    </tr>
+                    <tr>
+                      <td>Source code</td>
+                      <td>Source-available (Elastic License 2.0)</td>
+                      <td>Proprietary, closed source</td>
+                    </tr>
+                    <tr>
+                      <td>Codebase indexing</td>
+                      <td>Diff-first (full indexing on roadmap)</td>
+                      <td>Full codebase indexing</td>
+                    </tr>
+                    <tr>
+                      <td>Configuration</td>
+                      <td>In-repo (<code>.nitpickr.yml</code>, <code>AGENTS.md</code>)</td>
+                      <td>API + dashboard</td>
+                    </tr>
+                    <tr>
+                      <td>Review output</td>
+                      <td>Inline comments, summary, status check</td>
+                      <td>Inline comments, summary</td>
+                    </tr>
+                    <tr>
+                      <td>Setup</td>
+                      <td>Docker Compose + GitHub App</td>
+                      <td>API integration or marketplace install</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2>Self-hosted vs SaaS</h2>
+              <p>
+                nitpickr runs on your own infrastructure: a Docker Compose
+                stack, a VPS, or Railway. Your source code is sent only to
+                the LLM provider you configure. You control the deployment,
+                secrets, and logs.
+              </p>
+              <p>
+                Greptile is a cloud platform. It indexes your repositories and
+                stores that index on their servers. This enables broader
+                codebase understanding but means your code is processed and
+                stored externally.
+              </p>
+
+              <h2>Review approach</h2>
+              <p>
+                nitpickr uses diff-first analysis: it reviews changed files
+                and hunks with surrounding context, repository instructions,
+                and review memory. This keeps reviews fast and focused on the
+                actual changes.
+              </p>
+              <p>
+                Greptile indexes the entire codebase to provide deeper context
+                about how changes relate to the rest of the project. This can
+                catch cross-file issues but requires external indexing.
+              </p>
+
+              <h2>Model control</h2>
+              <p>
+                nitpickr is model-agnostic. Set <code>OPENAI_MODEL</code> and
+                <code>OPENAI_BASE_URL</code> to point at GPT-4, GPT-5-mini,
+                Claude, Gemini, or a self-hosted model. Switch models without
+                changing your workflow.
+              </p>
+              <p>
+                Greptile manages the model selection on their platform. You
+                typically cannot bring your own API keys or choose a specific
+                model version.
+              </p>
+
+              <h2>Pricing</h2>
+              <p>
+                nitpickr has no subscription or per-seat fees. You pay for your
+                own LLM API usage and whatever hosting you choose. Running
+                locally with Docker Compose means you mainly pay for model
+                API calls.
+              </p>
+              <p>
+                Greptile offers usage-based pricing through their API. Costs
+                scale with the number of queries and the size of indexed
+                repositories.
+              </p>
+
+              <h2>When to choose nitpickr</h2>
+              <ul>
+                <li>You want code to stay on your own infrastructure</li>
+                <li>You want to choose and switch AI models freely</li>
+                <li>You want source-available software you can inspect</li>
+                <li>You prefer paying only for actual API usage</li>
+                <li>Pull request review is your primary use case</li>
+              </ul>
+
+              <h2>When to choose Greptile</h2>
+              <ul>
+                <li>You need deep codebase understanding across all files</li>
+                <li>You want AI-powered search and Q&A beyond code review</li>
+                <li>You prefer a managed API without running your own infrastructure</li>
+                <li>You need the broadest possible context for each review</li>
+              </ul>
+
+              <h2>Frequently asked questions</h2>
+
+              <h3>What is the main difference between nitpickr and Greptile?</h3>
+              <p>
+                nitpickr is a self-hosted, source-available AI code reviewer
+                focused on pull request review with model-agnostic design.
+                Greptile is a SaaS platform focused on codebase-aware AI,
+                offering code review as one of several API-driven features.
+                nitpickr keeps your code on your own infrastructure, while
+                Greptile processes code on their servers.
+              </p>
+
+              <h3>Does nitpickr index the entire codebase like Greptile?</h3>
+              <p>
+                nitpickr currently focuses on diff-first analysis: it reviews
+                changed files and hunks with surrounding context. Full
+                codebase indexing and semantic analysis are on the roadmap.
+                For most pull request reviews, diff-focused analysis with
+                repository instructions produces high-quality results.
+              </p>
+
+              <h3>Can I use nitpickr without sending code to a third-party server?</h3>
+              <p>
+                Yes. nitpickr runs entirely on your infrastructure. Your code
+                is sent only to the LLM provider you configure (such as
+                OpenAI or a self-hosted model endpoint). With Greptile, your
+                code is sent to their servers for indexing and analysis.
+              </p>
+
+              <h3>How does the pricing model differ between nitpickr and Greptile?</h3>
+              <p>
+                nitpickr has no subscription or per-seat fees. You pay for
+                your own LLM API usage and hosting. Greptile offers
+                usage-based pricing through API access. For teams running
+                frequent reviews, nitpickr's bring-your-own-key model often
+                results in lower total cost.
+              </p>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="container footer-row">
+          <p class="footer-copy">
+            Source-available AI code review for GitHub pull requests.
+          </p>
+
+          <nav class="footer-links" aria-label="Footer">
+            <a href="https://github.com/rubenspessoa/nitpickr" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="../../docs/">Docs</a>
+            <a href="../../imprint/">Imprint</a>
+            <a href="mailto:contact@rubenspessoa.dev">Contact</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

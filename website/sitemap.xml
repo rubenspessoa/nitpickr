@@ -6,4 +6,19 @@
   <url>
     <loc>https://nitpickr.rubenspessoa.dev/imprint/</loc>
   </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/docs/</loc>
+  </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/docs/getting-started/</loc>
+  </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/compare/nitpickr-vs-coderabbit/</loc>
+  </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/compare/nitpickr-vs-greptile/</loc>
+  </url>
+  <url>
+    <loc>https://nitpickr.rubenspessoa.dev/benchmark/</loc>
+  </url>
 </urlset>

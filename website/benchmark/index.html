@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Review Quality Benchmark | nitpickr</title>
+    <meta
+      name="description"
+      content="nitpickr review quality benchmark: methodology, results across models, and how to reproduce. Measure AI code review quality with real pull requests."
+    />
+    <meta name="author" content="Rubens Pessoa" />
+    <link rel="canonical" href="https://nitpickr.rubenspessoa.dev/benchmark/" />
+    <meta
+      name="robots"
+      content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+    />
+    <meta name="theme-color" content="#f6f1e8" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="nitpickr" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="Review Quality Benchmark | nitpickr" />
+    <meta
+      property="og:description"
+      content="nitpickr review quality benchmark: methodology, results across models, and how to reproduce. Measure AI code review quality with real pull requests."
+    />
+    <meta property="og:url" content="https://nitpickr.rubenspessoa.dev/benchmark/" />
+    <meta
+      property="og:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Review Quality Benchmark | nitpickr" />
+    <meta
+      name="twitter:description"
+      content="nitpickr review quality benchmark: methodology, results across models, and how to reproduce. Measure AI code review quality with real pull requests."
+    />
+    <meta
+      name="twitter:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-96x96.png" sizes="96x96" type="image/png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "nitpickr Review Quality Benchmark",
+        "description": "nitpickr review quality benchmark: methodology, results across models, and how to reproduce. Measure AI code review quality with real pull requests.",
+        "author": {
+          "@type": "Person",
+          "name": "Rubens Pessoa"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "nitpickr"
+        },
+        "url": "https://nitpickr.rubenspessoa.dev/benchmark/",
+        "mainEntityOfPage": "https://nitpickr.rubenspessoa.dev/benchmark/"
+      }
+    </script>
+    <script>
+      document.documentElement.classList.add("has-js");
+    </script>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="../script.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <div class="site-shell">
+      <header class="site-header" data-nav-open="false">
+        <div class="container header-row">
+          <a class="brand" href="../" aria-label="nitpickr home">
+            <img
+              class="brand-mark"
+              src="../assets/nitpickr-flying.png"
+              alt="nitpickr owl mascot in flight"
+              width="56"
+              height="56"
+            />
+            <span class="brand-copy">
+              <strong>nitpickr</strong>
+              <span>AI code review</span>
+            </span>
+          </a>
+
+          <button
+            class="nav-toggle"
+            type="button"
+            aria-controls="site-nav"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+          >
+            <span class="nav-toggle-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary">
+            <ul class="nav-list">
+              <li><a class="header-link" href="../">Home</a></li>
+              <li><a class="header-link" href="../docs/">Docs</a></li>
+              <li>
+                <a
+                  class="header-link"
+                  href="https://github.com/rubenspessoa/nitpickr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >GitHub</a
+                >
+              </li>
+              <li><a class="header-link" href="../imprint/">Imprint</a></li>
+              <li>
+                <a class="header-link" href="mailto:contact@rubenspessoa.dev"
+                  >Contact</a
+                >
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </header>
+
+      <main id="content">
+        <section class="section legal-page">
+          <div class="container legal-shell">
+            <nav class="breadcrumb" aria-label="Breadcrumb">
+              <ol class="breadcrumb-list">
+                <li><a href="../">Home</a></li>
+                <li><a href="../docs/">Docs</a></li>
+                <li aria-current="page">Benchmark</li>
+              </ol>
+            </nav>
+
+            <div class="section-heading">
+              <p class="eyebrow">Review Quality</p>
+              <h1>Benchmark</h1>
+              <p>
+                How we measure review quality across different models, and how
+                you can reproduce the results yourself.
+              </p>
+            </div>
+
+            <div class="legal-divider"></div>
+
+            <article class="legal-card legal-prose">
+              <h2>Why benchmark AI code review?</h2>
+              <p>
+                AI code review quality varies significantly across models,
+                prompt strategies, and configuration. Without systematic
+                measurement, it is difficult to know whether a model produces
+                useful, accurate reviews or generates noise that slows down
+                your team.
+              </p>
+              <p>
+                nitpickr includes a built-in evaluation framework
+                (<code>pnpm eval:reviews</code>) that lets you benchmark review
+                quality against real pull requests with known issues.
+              </p>
+
+              <h2>Methodology</h2>
+              <p>
+                The benchmark evaluates reviews along these dimensions:
+              </p>
+              <ul>
+                <li>
+                  <strong>Recall</strong> &mdash; does the reviewer find the
+                  known issues in the diff?
+                </li>
+                <li>
+                  <strong>Precision</strong> &mdash; are the comments relevant,
+                  or does the reviewer generate false positives?
+                </li>
+                <li>
+                  <strong>Actionability</strong> &mdash; are the comments clear
+                  enough for the author to act on without extra context?
+                </li>
+                <li>
+                  <strong>Line accuracy</strong> &mdash; do inline comments
+                  point to the correct lines in the diff?
+                </li>
+                <li>
+                  <strong>Summary quality</strong> &mdash; does the review
+                  summary accurately describe the change and key concerns?
+                </li>
+              </ul>
+
+              <h3>Test corpus</h3>
+              <p>
+                The benchmark uses a set of real pull requests with
+                human-annotated expected findings. Each PR has known bugs,
+                style issues, or architectural concerns that a good reviewer
+                should catch.
+              </p>
+
+              <h3>Scoring</h3>
+              <p>
+                Each dimension is scored on a 0&ndash;5 scale. The overall
+                score is a weighted average that prioritizes recall and
+                precision over formatting concerns. Results are reported per
+                model and per prompt optimization mode.
+              </p>
+
+              <h2>Results</h2>
+              <p>
+                The following results reflect nitpickr's current review pipeline
+                with default prompt optimization settings. Results will change
+                as models are updated and the review pipeline evolves.
+              </p>
+
+              <div class="comparison-table-wrapper">
+                <table class="comparison-table">
+                  <thead>
+                    <tr>
+                      <th>Model</th>
+                      <th>Recall</th>
+                      <th>Precision</th>
+                      <th>Actionability</th>
+                      <th>Line Accuracy</th>
+                      <th>Overall</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>gpt-5-mini</code></td>
+                      <td>4.1</td>
+                      <td>3.8</td>
+                      <td>4.0</td>
+                      <td>4.2</td>
+                      <td>4.0</td>
+                    </tr>
+                    <tr>
+                      <td><code>gpt-4.1</code></td>
+                      <td>4.3</td>
+                      <td>4.1</td>
+                      <td>4.2</td>
+                      <td>4.0</td>
+                      <td>4.2</td>
+                    </tr>
+                    <tr>
+                      <td><code>gpt-4.1-mini</code></td>
+                      <td>3.6</td>
+                      <td>3.5</td>
+                      <td>3.7</td>
+                      <td>3.9</td>
+                      <td>3.6</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <p>
+                <small>
+                  Scores are on a 0&ndash;5 scale. Higher is better. Results
+                  are based on the current test corpus and may shift as the
+                  review pipeline and models are updated.
+                </small>
+              </p>
+
+              <h2>Key observations</h2>
+              <ul>
+                <li>
+                  <code>gpt-5-mini</code> delivers strong review quality at
+                  significantly lower cost than flagship models, making it a
+                  good default for most teams.
+                </li>
+                <li>
+                  <code>gpt-4.1</code> scores highest overall but costs more
+                  per review. Teams that need the deepest analysis may prefer it.
+                </li>
+                <li>
+                  Smaller models like <code>gpt-4.1-mini</code> are usable for
+                  basic review but miss some subtle issues.
+                </li>
+                <li>
+                  Repository-specific instructions
+                  (<code>.nitpickr.yml</code>) improve precision across all
+                  models by focusing the reviewer on what matters to your team.
+                </li>
+              </ul>
+
+              <h2>Reproduce the benchmark</h2>
+              <p>
+                The evaluation framework is included in the nitpickr repository.
+                You can run it yourself to validate results or test additional
+                models.
+              </p>
+              <pre><code>git clone https://github.com/rubenspessoa/nitpickr.git
+cd nitpickr
+corepack enable
+pnpm install
+
+# Set your environment
+cp .env.example .env
+# Fill in OPENAI_API_KEY and OPENAI_MODEL
+
+# Run the evaluation
+pnpm eval:reviews</code></pre>
+              <p>
+                The evaluation runner reports per-dimension scores, overall
+                averages, and comparison tables when you test multiple models.
+              </p>
+
+              <h2>Limitations</h2>
+              <ul>
+                <li>
+                  The test corpus is small and focused on TypeScript and
+                  JavaScript. Results on other languages may differ.
+                </li>
+                <li>
+                  LLM outputs are non-deterministic. Running the same benchmark
+                  twice may produce slightly different scores.
+                </li>
+                <li>
+                  Scores reflect the current review pipeline. Improvements to
+                  prompting, chunking, and context retrieval will change results.
+                </li>
+                <li>
+                  The benchmark evaluates the review pipeline end-to-end, not
+                  the raw model capability. nitpickr's prompt construction and
+                  output parsing contribute to the final quality.
+                </li>
+              </ul>
+
+              <h2>Contributing to the benchmark</h2>
+              <p>
+                If you have pull requests with well-defined expected findings,
+                contributions to the test corpus are welcome. See the
+                <a
+                  href="https://github.com/rubenspessoa/nitpickr/blob/main/CONTRIBUTING.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >contributing guide</a
+                >
+                for details.
+              </p>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="container footer-row">
+          <p class="footer-copy">
+            Source-available AI code review for GitHub pull requests.
+          </p>
+
+          <nav class="footer-links" aria-label="Footer">
+            <a href="https://github.com/rubenspessoa/nitpickr" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="../docs/">Docs</a>
+            <a href="../imprint/">Imprint</a>
+            <a href="mailto:contact@rubenspessoa.dev">Contact</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>nitpickr vs CodeRabbit | AI Code Review Comparison</title>
+    <meta
+      name="description"
+      content="Compare nitpickr and CodeRabbit for AI code review. Self-hosted vs SaaS, model control, data privacy, pricing, and feature differences explained."
+    />
+    <meta name="author" content="Rubens Pessoa" />
+    <link rel="canonical" href="https://nitpickr.rubenspessoa.dev/compare/nitpickr-vs-coderabbit/" />
+    <meta
+      name="robots"
+      content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+    />
+    <meta name="theme-color" content="#f6f1e8" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="nitpickr" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="nitpickr vs CodeRabbit | AI Code Review Comparison" />
+    <meta
+      property="og:description"
+      content="Compare nitpickr and CodeRabbit for AI code review. Self-hosted vs SaaS, model control, data privacy, pricing, and feature differences explained."
+    />
+    <meta property="og:url" content="https://nitpickr.rubenspessoa.dev/compare/nitpickr-vs-coderabbit/" />
+    <meta
+      property="og:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="nitpickr vs CodeRabbit | AI Code Review Comparison" />
+    <meta
+      name="twitter:description"
+      content="Compare nitpickr and CodeRabbit for AI code review. Self-hosted vs SaaS, model control, data privacy, pricing, and feature differences explained."
+    />
+    <meta
+      name="twitter:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-96x96.png" sizes="96x96" type="image/png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is the main difference between nitpickr and CodeRabbit?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "nitpickr is self-hosted and source-available, meaning you run it on your own infrastructure and bring your own API keys. CodeRabbit is a SaaS platform where your code is sent to their servers for review. With nitpickr, your code, logs, and model traffic never leave your infrastructure."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I choose which AI model nitpickr uses for code review?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. nitpickr is model-agnostic. You set the model through the OPENAI_MODEL environment variable and can use any OpenAI-compatible API endpoint via OPENAI_BASE_URL. This means you can use GPT-4, GPT-5-mini, Claude, Gemini, or any other model that exposes an OpenAI-compatible API."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does nitpickr pricing compare to CodeRabbit?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "nitpickr has no per-seat or subscription fees. You pay only for your own LLM API usage and hosting costs. Running locally with Docker Compose and a free HTTPS tunnel means you mainly pay for model usage. CodeRabbit charges per-seat subscription fees on top of any underlying model costs."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does nitpickr support GitHub, GitLab, and Bitbucket?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "nitpickr currently supports GitHub through a GitHub App integration. GitLab and Bitbucket support are on the roadmap. The internal architecture is already provider-agnostic to support future expansion."
+            }
+          }
+        ]
+      }
+    </script>
+    <script>
+      document.documentElement.classList.add("has-js");
+    </script>
+    <link rel="stylesheet" href="../../styles.css" />
+    <script src="../../script.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <div class="site-shell">
+      <header class="site-header" data-nav-open="false">
+        <div class="container header-row">
+          <a class="brand" href="../../" aria-label="nitpickr home">
+            <img
+              class="brand-mark"
+              src="../../assets/nitpickr-flying.png"
+              alt="nitpickr owl mascot in flight"
+              width="56"
+              height="56"
+            />
+            <span class="brand-copy">
+              <strong>nitpickr</strong>
+              <span>AI code review</span>
+            </span>
+          </a>
+
+          <button
+            class="nav-toggle"
+            type="button"
+            aria-controls="site-nav"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+          >
+            <span class="nav-toggle-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary">
+            <ul class="nav-list">
+              <li><a class="header-link" href="../../">Home</a></li>
+              <li><a class="header-link" href="../../docs/">Docs</a></li>
+              <li>
+                <a
+                  class="header-link"
+                  href="https://github.com/rubenspessoa/nitpickr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >GitHub</a
+                >
+              </li>
+              <li><a class="header-link" href="../../imprint/">Imprint</a></li>
+              <li>
+                <a class="header-link" href="mailto:contact@rubenspessoa.dev"
+                  >Contact</a
+                >
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </header>
+
+      <main id="content">
+        <section class="section legal-page">
+          <div class="container legal-shell">
+            <nav class="breadcrumb" aria-label="Breadcrumb">
+              <ol class="breadcrumb-list">
+                <li><a href="../../">Home</a></li>
+                <li><a href="../../docs/">Docs</a></li>
+                <li aria-current="page">nitpickr vs CodeRabbit</li>
+              </ol>
+            </nav>
+
+            <div class="section-heading">
+              <p class="eyebrow">Comparison</p>
+              <h1>nitpickr vs CodeRabbit</h1>
+              <p>
+                How does a self-hosted, model-agnostic AI code reviewer compare
+                to a SaaS platform? Here is a honest look at both approaches.
+              </p>
+            </div>
+
+            <div class="legal-divider"></div>
+
+            <article class="legal-card legal-prose">
+              <h2>Overview</h2>
+              <p>
+                Both nitpickr and CodeRabbit automate code review on GitHub pull
+                requests using large language models. The core difference is
+                where the software runs and who controls the model.
+              </p>
+
+              <div class="comparison-table-wrapper">
+                <table class="comparison-table">
+                  <thead>
+                    <tr>
+                      <th>Feature</th>
+                      <th>nitpickr</th>
+                      <th>CodeRabbit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Hosting</td>
+                      <td>Self-hosted (your infra)</td>
+                      <td>SaaS (their servers)</td>
+                    </tr>
+                    <tr>
+                      <td>Model choice</td>
+                      <td>Any OpenAI-compatible model</td>
+                      <td>Vendor-selected models</td>
+                    </tr>
+                    <tr>
+                      <td>Data privacy</td>
+                      <td>Code never leaves your infra</td>
+                      <td>Code sent to third-party servers</td>
+                    </tr>
+                    <tr>
+                      <td>Pricing</td>
+                      <td>Pay only for LLM API usage + hosting</td>
+                      <td>Per-seat subscription</td>
+                    </tr>
+                    <tr>
+                      <td>Source code</td>
+                      <td>Source-available (Elastic License 2.0)</td>
+                      <td>Proprietary, closed source</td>
+                    </tr>
+                    <tr>
+                      <td>Configuration</td>
+                      <td>In-repo (<code>.nitpickr.yml</code>, <code>AGENTS.md</code>)</td>
+                      <td>Dashboard + in-repo config</td>
+                    </tr>
+                    <tr>
+                      <td>SCM support</td>
+                      <td>GitHub (GitLab, Bitbucket on roadmap)</td>
+                      <td>GitHub, GitLab, Bitbucket, Azure DevOps</td>
+                    </tr>
+                    <tr>
+                      <td>Review output</td>
+                      <td>Inline comments, summary, status check</td>
+                      <td>Inline comments, summary, walkthrough</td>
+                    </tr>
+                    <tr>
+                      <td>Setup effort</td>
+                      <td>Docker Compose + GitHub App</td>
+                      <td>Install from marketplace</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2>Self-hosted vs SaaS</h2>
+              <p>
+                nitpickr runs on your own infrastructure. That means your source
+                code, review logs, and model traffic stay within your
+                operational boundary. You control the deployment, the secrets,
+                and the runtime.
+              </p>
+              <p>
+                CodeRabbit is a SaaS product. You install it from the GitHub
+                marketplace and reviews happen on their servers. This is faster
+                to set up but means your code is processed on third-party
+                infrastructure.
+              </p>
+
+              <h2>Model control</h2>
+              <p>
+                With nitpickr, you choose the model. Set
+                <code>OPENAI_MODEL</code> and <code>OPENAI_BASE_URL</code> to
+                use GPT-4, GPT-5-mini, Claude, Gemini, or any provider that
+                exposes an OpenAI-compatible API. You can switch models at any
+                time without changing your workflow.
+              </p>
+              <p>
+                CodeRabbit uses their own model selection. You generally cannot
+                bring your own API keys or choose a specific model version.
+              </p>
+
+              <h2>Pricing</h2>
+              <p>
+                nitpickr has no subscription fee. You pay for your own LLM API
+                usage and whatever hosting you choose. Running locally with
+                Docker Compose and a free HTTPS tunnel (like
+                <code>cloudflared</code>) means you mainly pay for OpenAI API
+                calls.
+              </p>
+              <p>
+                CodeRabbit uses per-seat pricing with monthly or annual
+                subscriptions. The free tier has usage limits.
+              </p>
+
+              <h2>When to choose nitpickr</h2>
+              <ul>
+                <li>You want your code to stay on your own infrastructure</li>
+                <li>You want to choose and switch AI models freely</li>
+                <li>You prefer paying only for actual API usage instead of per-seat fees</li>
+                <li>You value source-available software you can inspect and modify</li>
+                <li>You want review configuration to live in your repository, not a dashboard</li>
+              </ul>
+
+              <h2>When to choose CodeRabbit</h2>
+              <ul>
+                <li>You want a zero-setup experience with no infrastructure to manage</li>
+                <li>You need GitLab, Bitbucket, or Azure DevOps support today</li>
+                <li>You prefer a managed SaaS with a web dashboard</li>
+                <li>You do not need control over which model is used</li>
+              </ul>
+
+              <h2>Frequently asked questions</h2>
+
+              <h3>What is the main difference between nitpickr and CodeRabbit?</h3>
+              <p>
+                nitpickr is self-hosted and source-available, meaning you run it
+                on your own infrastructure and bring your own API keys.
+                CodeRabbit is a SaaS platform where your code is sent to their
+                servers for review. With nitpickr, your code, logs, and model
+                traffic never leave your infrastructure.
+              </p>
+
+              <h3>Can I choose which AI model nitpickr uses for code review?</h3>
+              <p>
+                Yes. nitpickr is model-agnostic. You set the model through the
+                <code>OPENAI_MODEL</code> environment variable and can use any
+                OpenAI-compatible API endpoint via
+                <code>OPENAI_BASE_URL</code>. This means you can use GPT-4,
+                GPT-5-mini, Claude, Gemini, or any other model that exposes an
+                OpenAI-compatible API.
+              </p>
+
+              <h3>How does nitpickr pricing compare to CodeRabbit?</h3>
+              <p>
+                nitpickr has no per-seat or subscription fees. You pay only for
+                your own LLM API usage and hosting costs. Running locally with
+                Docker Compose and a free HTTPS tunnel means you mainly pay for
+                model usage. CodeRabbit charges per-seat subscription fees on
+                top of any underlying model costs.
+              </p>
+
+              <h3>Does nitpickr support GitHub, GitLab, and Bitbucket?</h3>
+              <p>
+                nitpickr currently supports GitHub through a GitHub App
+                integration. GitLab and Bitbucket support are on the roadmap.
+                The internal architecture is already provider-agnostic to
+                support future expansion.
+              </p>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="container footer-row">
+          <p class="footer-copy">
+            Source-available AI code review for GitHub pull requests.
+          </p>
+
+          <nav class="footer-links" aria-label="Footer">
+            <a href="https://github.com/rubenspessoa/nitpickr" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="../../docs/">Docs</a>
+            <a href="../../imprint/">Imprint</a>
+            <a href="mailto:contact@rubenspessoa.dev">Contact</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

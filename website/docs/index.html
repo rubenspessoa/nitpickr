@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Documentation | nitpickr</title>
+    <meta
+      name="description"
+      content="nitpickr documentation hub. Guides for getting started, configuring your GitHub App, deploying on Railway, and running self-hosted AI code reviews."
+    />
+    <meta name="author" content="Rubens Pessoa" />
+    <link rel="canonical" href="https://nitpickr.rubenspessoa.dev/docs/" />
+    <meta
+      name="robots"
+      content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+    />
+    <meta name="theme-color" content="#f6f1e8" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="nitpickr" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="Documentation | nitpickr" />
+    <meta
+      property="og:description"
+      content="nitpickr documentation hub. Guides for getting started, configuring your GitHub App, deploying on Railway, and running self-hosted AI code reviews."
+    />
+    <meta property="og:url" content="https://nitpickr.rubenspessoa.dev/docs/" />
+    <meta
+      property="og:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Documentation | nitpickr" />
+    <meta
+      name="twitter:description"
+      content="nitpickr documentation hub. Guides for getting started, configuring your GitHub App, deploying on Railway, and running self-hosted AI code reviews."
+    />
+    <meta
+      name="twitter:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-96x96.png" sizes="96x96" type="image/png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "nitpickr Documentation",
+        "description": "nitpickr documentation hub. Guides for getting started, configuring your GitHub App, deploying on Railway, and running self-hosted AI code reviews.",
+        "author": {
+          "@type": "Person",
+          "name": "Rubens Pessoa"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "nitpickr"
+        },
+        "url": "https://nitpickr.rubenspessoa.dev/docs/",
+        "mainEntityOfPage": "https://nitpickr.rubenspessoa.dev/docs/"
+      }
+    </script>
+    <script>
+      document.documentElement.classList.add("has-js");
+    </script>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="../script.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <div class="site-shell">
+      <header class="site-header" data-nav-open="false">
+        <div class="container header-row">
+          <a class="brand" href="../" aria-label="nitpickr home">
+            <img
+              class="brand-mark"
+              src="../assets/nitpickr-flying.png"
+              alt="nitpickr owl mascot in flight"
+              width="56"
+              height="56"
+            />
+            <span class="brand-copy">
+              <strong>nitpickr</strong>
+              <span>AI code review</span>
+            </span>
+          </a>
+
+          <button
+            class="nav-toggle"
+            type="button"
+            aria-controls="site-nav"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+          >
+            <span class="nav-toggle-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary">
+            <ul class="nav-list">
+              <li><a class="header-link" href="../">Home</a></li>
+              <li><a class="header-link" href="./" aria-current="page">Docs</a></li>
+              <li>
+                <a
+                  class="header-link"
+                  href="https://github.com/rubenspessoa/nitpickr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >GitHub</a
+                >
+              </li>
+              <li><a class="header-link" href="../imprint/">Imprint</a></li>
+              <li>
+                <a class="header-link" href="mailto:contact@rubenspessoa.dev"
+                  >Contact</a
+                >
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </header>
+
+      <main id="content">
+        <section class="section legal-page">
+          <div class="container legal-shell">
+            <nav class="breadcrumb" aria-label="Breadcrumb">
+              <ol class="breadcrumb-list">
+                <li><a href="../">Home</a></li>
+                <li aria-current="page">Docs</li>
+              </ol>
+            </nav>
+
+            <div class="section-heading">
+              <p class="eyebrow">Documentation</p>
+              <h1>nitpickr Docs</h1>
+              <p>
+                Everything you need to set up, configure, and run nitpickr as
+                your self-hosted AI code reviewer for GitHub pull requests.
+              </p>
+            </div>
+
+            <div class="legal-divider"></div>
+
+            <div class="simple-grid docs-grid">
+              <a href="./getting-started/" class="simple-card docs-card reveal">
+                <h3>Getting Started</h3>
+                <p>
+                  Clone the repo, configure your GitHub App, and run your first
+                  AI code review with Docker Compose in under ten minutes.
+                </p>
+              </a>
+
+              <a href="https://github.com/rubenspessoa/nitpickr/blob/main/docs/github-app.md" target="_blank" rel="noopener noreferrer" class="simple-card docs-card reveal">
+                <h3>GitHub App Setup</h3>
+                <p>
+                  Create a GitHub App, set permissions, generate a private key,
+                  and install the app on your repositories.
+                </p>
+              </a>
+
+              <a href="https://github.com/rubenspessoa/nitpickr/blob/main/docs/railway-deploy.md" target="_blank" rel="noopener noreferrer" class="simple-card docs-card reveal">
+                <h3>Railway Deployment</h3>
+                <p>
+                  Deploy nitpickr to Railway for an always-on webhook endpoint
+                  with a public API service, a private worker, and Postgres.
+                </p>
+              </a>
+
+              <a href="https://github.com/rubenspessoa/nitpickr/blob/main/docs/beta-runbook.md" target="_blank" rel="noopener noreferrer" class="simple-card docs-card reveal">
+                <h3>Beta Runbook</h3>
+                <p>
+                  First-run checklist, important log messages to watch, common
+                  failure modes, and recovery steps.
+                </p>
+              </a>
+
+              <a href="https://github.com/rubenspessoa/nitpickr/blob/main/docs/architecture-plan.md" target="_blank" rel="noopener noreferrer" class="simple-card docs-card reveal">
+                <h3>Architecture</h3>
+                <p>
+                  Understand the internal design: webhook ingress, review
+                  workers, memory system, provider-agnostic domain model.
+                </p>
+              </a>
+
+              <a href="../benchmark/" class="simple-card docs-card reveal">
+                <h3>Benchmark</h3>
+                <p>
+                  Review quality benchmark results: methodology, scoring, and
+                  how nitpickr compares across different models.
+                </p>
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="container footer-row">
+          <p class="footer-copy">
+            Source-available AI code review for GitHub pull requests.
+          </p>
+
+          <nav class="footer-links" aria-label="Footer">
+            <a href="https://github.com/rubenspessoa/nitpickr" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="./">Docs</a>
+            <a href="../imprint/">Imprint</a>
+            <a href="mailto:contact@rubenspessoa.dev">Contact</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -9,18 +9,50 @@
     <title>Imprint | nitpickr</title>
     <meta
       name="description"
-      content="Legal notice and company information for nitpickr."
+      content="Legal notice and company information for nitpickr, the self-hosted AI code review service for GitHub pull requests."
     />
+    <link rel="canonical" href="https://nitpickr.rubenspessoa.dev/imprint/" />
+    <meta name="robots" content="noindex,follow" />
     <meta name="theme-color" content="#f6f1e8" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="nitpickr" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content="Imprint | nitpickr" />
     <meta
       property="og:description"
-      content="Legal notice and company information for nitpickr."
+      content="Legal notice and company information for nitpickr, the self-hosted AI code review service for GitHub pull requests."
     />
-    <link rel="icon" type="image/png" href="../assets/favicon.png" />
-    <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png" />
-    <link rel="manifest" href="../site.webmanifest" />
+    <meta property="og:url" content="https://nitpickr.rubenspessoa.dev/imprint/" />
+    <meta
+      property="og:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Imprint | nitpickr" />
+    <meta
+      name="twitter:description"
+      content="Legal notice and company information for nitpickr, the self-hosted AI code review service for GitHub pull requests."
+    />
+    <meta
+      name="twitter:image"
+      content="https://nitpickr.rubenspessoa.dev/assets/og-preview.jpg"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="nitpickr share card with the owl mascot and the text 'nitpickr' and 'Self-hosted AI code review'"
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-96x96.png" sizes="96x96" type="image/png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
     <script>
       document.documentElement.classList.add("has-js");
     </script>
@@ -30,7 +62,7 @@
   <body>
     <a class="skip-link" href="#content">Skip to content</a>
     <div class="site-shell">
-      <header class="site-header">
+      <header class="site-header" data-nav-open="false">
         <div class="container header-row">
           <a class="brand" href="../" aria-label="nitpickr home">
             <img
@@ -46,9 +78,40 @@
             </span>
           </a>
 
-          <div class="header-actions">
-            <a class="header-link" href="../">Home</a>
-          </div>
+          <button
+            class="nav-toggle"
+            type="button"
+            aria-controls="site-nav"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+          >
+            <span class="nav-toggle-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary">
+            <ul class="nav-list">
+              <li><a class="header-link" href="../">Home</a></li>
+              <li>
+                <a
+                  class="header-link"
+                  href="https://github.com/rubenspessoa/nitpickr"
+                  target="_blank"
+                  rel="noreferrer"
+                  >GitHub</a
+                >
+              </li>
+              <li><a class="header-link" href="./" aria-current="page">Imprint</a></li>
+              <li>
+                <a class="header-link" href="mailto:contact@rubenspessoa.dev"
+                  >Contact</a
+                >
+              </li>
+            </ul>
+          </nav>
         </div>
       </header>
 

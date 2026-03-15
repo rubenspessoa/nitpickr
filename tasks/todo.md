@@ -1,3 +1,63 @@
+# Website Metadata + SEO Refresh
+
+## Plan
+
+- [x] Update homepage and imprint metadata for canonical URLs, robots directives, richer OG/Twitter tags, and `WebSite` JSON-LD.
+- [x] Add crawl/discovery files for the new canonical host, including `robots.txt`, `sitemap.xml`, and custom-domain support.
+- [x] Replace the share thumbnail and ship a simplified favicon/icon family plus expanded web manifest entries.
+- [x] Build and verify the static site output, then document the results.
+
+## Results
+
+- Updated the homepage and imprint head metadata to use the canonical `https://nitpickr.rubenspessoa.dev/` host, richer Open Graph and Twitter card fields, explicit robots directives, root favicon links, and homepage `WebSite` JSON-LD.
+- Tightened the homepage hero copy so the above-the-fold messaging now explicitly includes `self-hosted`, `AI code review`, and `GitHub pull requests`, while preserving the in-progress responsive navigation work.
+- Added root-level crawl and host files:
+  - `website/robots.txt`
+  - `website/sitemap.xml`
+  - `website/CNAME`
+- Expanded `website/site.webmanifest` for root-scope install metadata and shipped a new root icon family:
+  - `favicon.svg`
+  - `favicon.ico`
+  - `favicon-96x96.png`
+  - `apple-touch-icon.png`
+  - `icon-192.png`
+  - `icon-512.png`
+  - `icon-maskable-512.png`
+- Replaced the social preview with a new branded `1200x630` share card at `website/assets/og-preview.jpg` and kept the editable SVG source at `website/assets/og-preview.svg`.
+- Verification completed:
+  - `pnpm site:build`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - local metadata validation against `dist/site` for canonical, robots, OG image, JSON-LD, and required output files
+
+# Responsive Website Hardening
+
+## Plan
+
+- [x] Replace the shared website header with a semantic primary nav and mobile hamburger menu on both pages.
+- [x] Update the shared stylesheet for phone and tablet breakpoints, including a clean mobile header row and tighter small-phone spacing.
+- [x] Extend the shared site script with accessible mobile-nav open and close behavior while preserving reveal animations.
+- [x] Rebuild the static site, verify the responsive states, and document the results.
+
+## Results
+
+- Updated `website/index.html` and `website/imprint/index.html` with a shared primary nav, current-page state, and an accessible hamburger toggle for phone widths.
+- Updated `website/styles.css` to:
+  - keep the mobile header on a single horizontal row
+  - collapse the nav into a JS-enhanced dropdown at `720px` and below
+  - tighten spacing and sizing again at `480px` and below
+  - reduce overflow risk in shared grids and long legal links
+- Extended `website/script.js` so the mobile nav:
+  - opens and closes via the toggle
+  - closes on `Escape`, nav-link click, and resize back above the mobile breakpoint
+  - returns focus to the toggle after keyboard dismissal
+- Verification completed:
+  - `pnpm site:build`
+  - `pnpm lint`
+  - built-site contract checks against `dist/site`
+  - mocked DOM execution of `dist/site/script.js` covering toggle, `Escape`, link-click, and resize-close behavior
+- Attempted Safari WebDriver viewport verification, but `safaridriver --enable` required a local password prompt that could not be completed unattended from the agent session.
+
 # PR #4 Merge + Review Sweep
 
 ## Plan

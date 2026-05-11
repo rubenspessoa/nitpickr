@@ -576,9 +576,10 @@ function splitIntoChunks(
   return chunks;
 }
 
-// severityWeight is re-exported from evidence-gate so the ordering of
-// "low" < "medium" < "high" < "critical" has one source of truth across
-// the gate, the round-aware floor, and the engine's deduplicator.
+// severityWeight is imported from evidence-gate (see the top of this file)
+// so the ordering of "low" < "medium" < "high" < "critical" has one source
+// of truth across the gate, the round-aware floor (severity-floor.ts), and
+// the engine's deduplicator/ranker below.
 
 function dedupeKey(finding: ReviewFinding): string {
   return fingerprintFinding(finding);

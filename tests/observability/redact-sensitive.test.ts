@@ -176,12 +176,31 @@ describe("redactSensitive", () => {
     const b = Object.create(null) as Record<string, unknown>;
     b.authorization = "Bearer xyz";
     b.harmless = "ok-b";
+    const input = [a, b];
 
-    const out = redactSensitive([a, b]) as Array<Record<string, unknown>>;
-    expect(out[0]?.apiKey).toBe("[redacted]");
-    expect(out[0]?.harmless).toBe("ok-a");
-    expect(out[1]?.authorization).toBe("[redacted]");
-    expect(out[1]?.harmless).toBe("ok-b");
+    const out = redactSensitive(input);
+    expect(Array.isArray(out)).toBe(true);
+    const arr = out as Array<Record<string, unknown>>;
+    expect(arr).toHaveLength(2);
+
+    const first = arr[0];
+    const second = arr[1];
+    if (!first || !second) {
+      throw new Error("expected two elements in redacted output");
+    }
+    expect(first.apiKey).toBe("[redacted]");
+    expect(first.harmless).toBe("ok-a");
+    expect(second.authorization).toBe("[redacted]");
+    expect(second.harmless).toBe("ok-b");
+
+    // Input array and source objects must not be mutated.
+    expect(input).toHaveLength(2);
+    expect(input[0]).toBe(a);
+    expect(input[1]).toBe(b);
+    expect(a.apiKey).toBe("sk-a");
+    expect(a.harmless).toBe("ok-a");
+    expect(b.authorization).toBe("Bearer xyz");
+    expect(b.harmless).toBe("ok-b");
   });
 
   it("returns primitives unchanged", () => {

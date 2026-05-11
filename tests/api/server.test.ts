@@ -335,6 +335,7 @@ describe("createApiServer", () => {
         component: "api-server",
         method: "POST",
         url: "/webhooks/github",
+        correlationId: "delivery-3",
         error: "boom",
       },
     });
@@ -480,7 +481,10 @@ describe("createApiServer", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(logger.entries).toEqual([]);
+    // Access log lines are fine; we just must never log the request body.
+    const serialized = JSON.stringify(logger.entries);
+    expect(serialized).not.toContain("secret-value");
+    expect(serialized).not.toContain('"token":');
   });
 
   it("accepts webhook requests with application/json content type parameters", async () => {

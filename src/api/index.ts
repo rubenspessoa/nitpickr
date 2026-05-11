@@ -1,5 +1,6 @@
 import { env } from "node:process";
 
+import { initSentry } from "../observability/sentry.js";
 import { buildRuntime } from "../runtime/build-runtime.js";
 import { createApiServer } from "./server.js";
 import { createSetupAwareGitHubWebhookHandler } from "./setup-aware-webhook-handler.js";
@@ -8,6 +9,12 @@ async function main(): Promise<void> {
   const runtime = buildRuntime(env);
   const logger = runtime.logger.child({
     component: "api",
+  });
+  initSentry({
+    dsn: runtime.config.sentry.dsn,
+    environment: runtime.config.nodeEnv,
+    tracesSampleRate: runtime.config.sentry.tracesSampleRate,
+    logger,
   });
   const githubWebhookService = createSetupAwareGitHubWebhookHandler({
     logger,

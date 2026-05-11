@@ -373,7 +373,11 @@ describe("WorkerRunner", () => {
       message: "Published review result.",
       fields: {
         component: "worker-runner",
+        workerId: "worker_1",
         jobId: "job_1",
+        jobType: "review_requested",
+        tenantId: "github-installation:123456",
+        repositoryId: "github:99",
         reviewRunId: "review_run_1",
         publishedReviewId: "review_1",
         findingCount: 0,
@@ -983,7 +987,11 @@ describe("WorkerRunner", () => {
       message: "Processed memory ingestion job.",
       fields: {
         component: "worker-runner",
+        workerId: "worker_1",
         jobId: "job_2",
+        jobType: "memory_ingest",
+        tenantId: "github-installation:123456",
+        repositoryId: "github:99",
         discussionCount: 1,
         savedEntries: 0,
         acknowledged: false,
@@ -1251,17 +1259,24 @@ describe("WorkerRunner", () => {
         reviewRunId: "review_run_1",
       },
     ]);
-    expect(logger.entries).toContainEqual({
-      level: "error",
-      message: "Worker job failed.",
-      fields: {
-        component: "worker-runner",
-        jobId: "job_3",
-        jobType: "review_requested",
-        failureClass: "openai_model_output",
-        error: "boom",
-      },
-    });
+    expect(logger.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "error",
+          message: "Worker job failed.",
+          fields: expect.objectContaining({
+            component: "worker-runner",
+            workerId: "worker_1",
+            jobId: "job_3",
+            jobType: "review_requested",
+            tenantId: "github-installation:123456",
+            repositoryId: "github:99",
+            failureClass: "openai_model_output",
+            error: "boom",
+          }),
+        }),
+      ]),
+    );
   });
 
   it("publishes a summary-only result when repo config filters out all files", async () => {
@@ -1416,7 +1431,10 @@ describe("WorkerRunner", () => {
         "Skipping inline review; no reviewable files remained after planning.",
       fields: {
         component: "worker-runner",
+        workerId: "worker_1",
         jobId: "job_4",
+        jobType: "review_requested",
+        tenantId: "github-installation:123456",
         repositoryId: "github:99",
       },
     });
@@ -1761,16 +1779,23 @@ describe("WorkerRunner", () => {
           'GitHub request failed with status 403: {"message":"Resource not accessible by integration"}',
       },
     });
-    expect(logger.entries).toContainEqual({
-      level: "error",
-      message: "Worker job failed.",
-      fields: {
-        component: "worker-runner",
-        jobId: "job_6",
-        jobType: "review_requested",
-        failureClass: "openai_model_output",
-        error: "boom",
-      },
-    });
+    expect(logger.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "error",
+          message: "Worker job failed.",
+          fields: expect.objectContaining({
+            component: "worker-runner",
+            workerId: "worker_1",
+            jobId: "job_6",
+            jobType: "review_requested",
+            tenantId: "github-installation:123456",
+            repositoryId: "github:99",
+            failureClass: "openai_model_output",
+            error: "boom",
+          }),
+        }),
+      ]),
+    );
   });
 });

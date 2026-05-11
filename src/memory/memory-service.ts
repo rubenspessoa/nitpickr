@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { type Logger, noopLogger } from "../logging/logger.js";
+
 export type MemoryKind =
   | "preferred_pattern"
   | "false_positive"
@@ -85,6 +87,7 @@ export interface MemoryStore {
 export interface MemoryServiceDependencies {
   classifier?: MemoryClassifier;
   embedder?: MemoryEmbedder;
+  logger?: Logger;
   now?: () => Date;
   createId?: () => string;
 }
@@ -179,6 +182,7 @@ export class MemoryService {
   readonly #store: MemoryStore;
   #classifier: MemoryClassifier | null;
   #embedder: MemoryEmbedder | null;
+  readonly #logger: Logger;
   readonly #now: () => Date;
   readonly #createId: () => string;
 
@@ -189,6 +193,9 @@ export class MemoryService {
     this.#store = store;
     this.#classifier = dependencies.classifier ?? null;
     this.#embedder = dependencies.embedder ?? null;
+    this.#logger = (dependencies.logger ?? noopLogger).child({
+      component: "memory-service",
+    });
     this.#now = dependencies.now ?? (() => new Date());
     this.#createId = dependencies.createId ?? randomUUID;
   }
@@ -214,6 +221,7 @@ export class MemoryService {
       path: string | null;
     }>;
   }): Promise<MemoryIngestionResult> {
+    const startedAt = process.hrtime.bigint();
     const now = this.#now().toISOString();
     const acknowledgments: string[] = [];
     const savedEntries: MemoryEntry[] = [];
@@ -235,6 +243,14 @@ export class MemoryService {
         }
       }
     }
+
+    this.#logger.info("memory.ingest_discussion", {
+      tenantId: input.tenantId,
+      repositoryId: input.repositoryId,
+      discussionCount: input.discussions.length,
+      savedEntries: savedEntries.length,
+      durationMs: Number((process.hrtime.bigint() - startedAt) / 1_000_000n),
+    });
 
     return {
       acknowledgments,
@@ -471,6 +487,7 @@ export class MemoryService {
     minConfidence?: number;
     unusedForMs?: number;
   }): Promise<MemoryMaintenanceResult> {
+    const startedAt = process.hrtime.bigint();
     const minConfidence = input.minConfidence ?? 0.3;
     const unusedForMs = input.unusedForMs ?? 90 * 24 * 60 * 60 * 1000;
     const now = this.#now();
@@ -572,6 +589,13 @@ export class MemoryService {
       }
     }
 
+    this.#logger.info("memory.run_maintenance", {
+      tenantId: input.tenantId,
+      repositoryId: input.repositoryId,
+      evicted,
+      merged,
+      durationMs: Number((process.hrtime.bigint() - startedAt) / 1_000_000n),
+    });
     return { evicted, merged };
   }
 
@@ -582,6 +606,7 @@ export class MemoryService {
     reviewContext: string;
     charBudget: number;
   }): Promise<MemoryEntry[]> {
+    const startedAt = process.hrtime.bigint();
     const candidates = await this.#store.listByRepository({
       tenantId: input.tenantId,
       repositoryId: input.repositoryId,
@@ -660,6 +685,16 @@ export class MemoryService {
         });
     }
 
+    this.#logger.info("memory.select_for_review", {
+      tenantId: input.tenantId,
+      repositoryId: input.repositoryId,
+      candidatesScanned: active.length,
+      selected: selected.length,
+      charBudget: input.charBudget,
+      charBudgetUsed: consumed,
+      queryEmbedded: queryEmbedding !== null,
+      durationMs: Number((process.hrtime.bigint() - startedAt) / 1_000_000n),
+    });
     return selected;
   }
 }

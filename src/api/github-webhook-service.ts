@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { type Logger, noopLogger } from "../logging/logger.js";
+import { captureError } from "../observability/sentry.js";
 import type {
   GitHubAdapter,
   GitHubNormalizedEvent,
@@ -87,6 +88,7 @@ function buildReviewStatusFields(
 
 function buildReviewJobInput(
   event: Extract<GitHubNormalizedEvent, { kind: "review_requested" }>,
+  correlationId: string,
 ): EnqueueJobInput {
   return {
     type: "review_requested",
@@ -96,6 +98,7 @@ function buildReviewJobInput(
     dedupeKey: `${event.repository.repositoryId}:${event.pullNumber}:${event.mode}`,
     priority: event.trigger.type === "manual_command" ? 100 : 50,
     payload: {
+      correlationId,
       installationId: event.installationId,
       repository: {
         owner: event.repository.owner,
@@ -110,6 +113,7 @@ function buildReviewJobInput(
 
 function buildInteractionJobInput(
   event: Extract<GitHubNormalizedEvent, { kind: "interaction_requested" }>,
+  correlationId: string,
 ): EnqueueJobInput {
   return {
     type: "interaction_requested",
@@ -119,6 +123,7 @@ function buildInteractionJobInput(
     dedupeKey: `${event.repository.repositoryId}:${event.pullNumber}:${event.command}:${event.source.commentId}`,
     priority: 80,
     payload: {
+      correlationId,
       installationId: event.installationId,
       repository: {
         owner: event.repository.owner,
@@ -221,13 +226,18 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
 
   async handle(input: GitHubWebhookRequest): Promise<GitHubWebhookResult> {
     const parsed = webhookRequestSchema.parse(input);
+    const requestLogger = this.#logger.child({
+      correlationId: parsed.deliveryId,
+      deliveryId: parsed.deliveryId,
+      eventName: parsed.eventName,
+    });
     // Signature validation is async through the GitHub adapter and must stay awaited.
     const signatureValid = await this.verifySignature(
       parsed.rawBody,
       parsed.signature,
     );
     if (!signatureValid) {
-      this.#logger.warn("Rejected GitHub webhook with invalid signature.", {
+      requestLogger.warn("Rejected GitHub webhook with invalid signature.", {
         eventName: parsed.eventName,
       });
       return {
@@ -248,12 +258,17 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
         payload: parsed.payload,
       });
     } catch (error) {
-      this.#logger.error("GitHub webhook delivery registration failed.", {
-        deliveryId: parsed.deliveryId,
-        eventName: parsed.eventName,
+      requestLogger.error("GitHub webhook delivery registration failed.", {
         alertable: true,
         monitoringKey: "webhook_delivery_registration_failure",
         error: toErrorMessage(error, "Unknown delivery registration failure."),
+      });
+      captureError(error, {
+        tags: { area: "webhook_delivery_registration" },
+        extra: {
+          deliveryId: parsed.deliveryId,
+          eventName: parsed.eventName,
+        },
       });
       return {
         statusCode: 500,
@@ -263,10 +278,7 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
     }
 
     if (delivery === "duplicate") {
-      this.#logger.warn("Ignored duplicate GitHub webhook delivery.", {
-        deliveryId: parsed.deliveryId,
-        eventName: parsed.eventName,
-      });
+      requestLogger.warn("Ignored duplicate GitHub webhook delivery.", {});
       return {
         statusCode: 202,
         accepted: false,
@@ -279,15 +291,13 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
         this.#adapter.reactToMention(parsed.eventName, parsed.payload),
       );
       if (reaction) {
-        this.#logger.info("Reacted to GitHub bot mention.", {
-          eventName: parsed.eventName,
+        requestLogger.info("Reacted to GitHub bot mention.", {
           commentId: reaction.commentId,
           content: reaction.content,
         });
       }
     } catch (error) {
-      this.#logger.warn("Failed to react to GitHub bot mention.", {
-        eventName: parsed.eventName,
+      requestLogger.warn("Failed to react to GitHub bot mention.", {
         error:
           error instanceof Error ? error.message : "Unknown reaction failure.",
       });
@@ -306,8 +316,7 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
           "Unknown webhook normalization failure.",
         ),
       });
-      this.#logger.error("GitHub webhook event normalization failed.", {
-        eventName: parsed.eventName,
+      requestLogger.error("GitHub webhook event normalization failed.", {
         error: toErrorMessage(error, "Unknown webhook normalization failure."),
       });
       return {
@@ -319,8 +328,7 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
 
     if (normalized.kind === "ignored") {
       await this.#updateWebhookEventStatus(parsed.deliveryId, "ignored");
-      this.#logger.info("Ignored GitHub webhook event.", {
-        eventName: parsed.eventName,
+      requestLogger.info("Ignored GitHub webhook event.", {
         reason: normalized.reason,
       });
       return {
@@ -333,18 +341,17 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
     try {
       await this.#queueScheduler.enqueue(
         normalized.kind === "review_requested"
-          ? buildReviewJobInput(normalized)
-          : buildInteractionJobInput(normalized),
+          ? buildReviewJobInput(normalized, parsed.deliveryId)
+          : buildInteractionJobInput(normalized, parsed.deliveryId),
       );
       await this.#updateWebhookEventStatus(parsed.deliveryId, "queued", {
         ...buildReviewStatusFields(normalized),
       });
-      this.#logger.info(
+      requestLogger.info(
         normalized.kind === "review_requested"
           ? "Queued GitHub review job."
           : "Queued GitHub interaction job.",
         {
-          eventName: parsed.eventName,
           installationId: normalized.installationId,
           repositoryId: normalized.repository.repositoryId,
           pullNumber: normalized.pullNumber,
@@ -369,11 +376,19 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
           "Unknown webhook queueing failure.",
         ),
       });
-      this.#logger.error("GitHub webhook queueing failed.", {
-        eventName: parsed.eventName,
+      requestLogger.error("GitHub webhook queueing failed.", {
         repositoryId: normalized.repository.repositoryId,
         pullNumber: normalized.pullNumber,
         error: toErrorMessage(error, "Unknown webhook queueing failure."),
+      });
+      captureError(error, {
+        tags: { area: "webhook_queueing" },
+        extra: {
+          deliveryId: parsed.deliveryId,
+          eventName: parsed.eventName,
+          repositoryId: normalized.repository.repositoryId,
+          pullNumber: normalized.pullNumber,
+        },
       });
       return {
         statusCode: 500,

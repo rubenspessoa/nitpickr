@@ -149,6 +149,26 @@ describe("redactSensitive", () => {
     expect(out.obj).toBe(instance);
   });
 
+  it("treats null-prototype objects as plain and redacts their sensitive keys", () => {
+    const bare = Object.create(null) as Record<string, unknown>;
+    bare.apiKey = "sk-bare";
+    bare.harmless = "ok";
+
+    const out = redactSensitive(bare) as Record<string, unknown>;
+    expect(out.apiKey).toBe("[redacted]");
+    expect(out.harmless).toBe("ok");
+  });
+
+  it("recurses into null-prototype objects nested inside plain objects", () => {
+    const inner = Object.create(null) as Record<string, unknown>;
+    inner.password = "p4ss";
+
+    const out = redactSensitive({ wrapped: inner }) as {
+      wrapped: Record<string, unknown>;
+    };
+    expect(out.wrapped.password).toBe("[redacted]");
+  });
+
   it("returns primitives unchanged", () => {
     expect(redactSensitive("plain")).toBe("plain");
     expect(redactSensitive(42)).toBe(42);

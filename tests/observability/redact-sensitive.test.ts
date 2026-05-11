@@ -179,19 +179,19 @@ describe("redactSensitive", () => {
     const input = [a, b];
 
     const out = redactSensitive(input);
-    expect(Array.isArray(out)).toBe(true);
-    const arr = out as Array<Record<string, unknown>>;
-    expect(arr).toHaveLength(2);
 
-    const first = arr[0];
-    const second = arr[1];
-    if (!first || !second) {
-      throw new Error("expected two elements in redacted output");
-    }
-    expect(first.apiKey).toBe("[redacted]");
-    expect(first.harmless).toBe("ok-a");
-    expect(second.authorization).toBe("[redacted]");
-    expect(second.harmless).toBe("ok-b");
+    // Shape: a 2-element array whose entries match the redacted contract.
+    // expect.objectContaining gives explicit per-element assertions without
+    // TS-narrowing gymnastics, and toEqual implicitly checks length.
+    expect(out).toEqual([
+      expect.objectContaining({ apiKey: "[redacted]", harmless: "ok-a" }),
+      expect.objectContaining({
+        authorization: "[redacted]",
+        harmless: "ok-b",
+      }),
+    ]);
+    // New array reference — the redactor must not return the input.
+    expect(out).not.toBe(input);
 
     // Input array and source objects must not be mutated.
     expect(input).toHaveLength(2);

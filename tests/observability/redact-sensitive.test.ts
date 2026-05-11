@@ -169,6 +169,21 @@ describe("redactSensitive", () => {
     expect(out.wrapped.password).toBe("[redacted]");
   });
 
+  it("recurses into null-prototype objects nested inside arrays", () => {
+    const a = Object.create(null) as Record<string, unknown>;
+    a.apiKey = "sk-a";
+    a.harmless = "ok-a";
+    const b = Object.create(null) as Record<string, unknown>;
+    b.authorization = "Bearer xyz";
+    b.harmless = "ok-b";
+
+    const out = redactSensitive([a, b]) as Array<Record<string, unknown>>;
+    expect(out[0]?.apiKey).toBe("[redacted]");
+    expect(out[0]?.harmless).toBe("ok-a");
+    expect(out[1]?.authorization).toBe("[redacted]");
+    expect(out[1]?.harmless).toBe("ok-b");
+  });
+
   it("returns primitives unchanged", () => {
     expect(redactSensitive("plain")).toBe("plain");
     expect(redactSensitive(42)).toBe(42);

@@ -1,10 +1,11 @@
+import * as Sentry from "@sentry/node";
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { z } from "zod";
 
 import type { ReadinessStatus } from "../health/readiness-service.js";
 import { generateCorrelationId } from "../logging/correlation.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
-import { captureError, setRequestScope } from "../observability/sentry.js";
+import { setRequestScope } from "../observability/sentry.js";
 import type { SetupStatus } from "../setup/runtime-config-service.js";
 import type { GitHubWebhookHandler } from "./github-webhook-service.js";
 import {
@@ -156,6 +157,11 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
   const logger = (input.logger ?? noopLogger).child({
     component: "api-server",
   });
+
+  // Register Sentry's Fastify hook BEFORE any route so unhandled errors
+  // bubble into Sentry. Sentry skill: "Add BEFORE routes (unlike Express!)".
+  // No-op when SENTRY_DSN is unset because Sentry.getClient() returns undefined.
+  Sentry.setupFastifyErrorHandler(server);
 
   server.addContentTypeParser(
     "application/json",
@@ -335,13 +341,9 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
       correlationId,
       error: errorMessage,
     });
-    captureError(error, {
-      tags: {
-        route: request.routeOptions?.url ?? request.url,
-        method: request.method,
-      },
-      extra: { correlationId, url: request.url },
-    });
+    // Sentry capture is handled by setupFastifyErrorHandler above, with the
+    // correlationId/route/method tags already attached via setRequestScope
+    // in onRequest.
 
     void reply.status(500).send({
       accepted: false,

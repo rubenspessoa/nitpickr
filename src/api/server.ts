@@ -2,13 +2,22 @@ import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { z } from "zod";
 
 import type { ReadinessStatus } from "../health/readiness-service.js";
+import { generateCorrelationId } from "../logging/correlation.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
+import { captureError, setRequestScope } from "../observability/sentry.js";
 import type { SetupStatus } from "../setup/runtime-config-service.js";
 import type { GitHubWebhookHandler } from "./github-webhook-service.js";
 import {
   InMemoryWebhookRateLimiter,
   type WebhookRateLimiter,
 } from "./webhook-rate-limiter.js";
+
+declare module "fastify" {
+  interface FastifyRequest {
+    correlationId: string;
+    startedAt: bigint;
+  }
+}
 
 const webhookPayloadSchema = z.custom<Record<string, unknown>>(
   (value): value is Record<string, unknown> =>
@@ -156,6 +165,45 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
     },
   );
 
+  server.decorateRequest("correlationId", "");
+  server.decorateRequest("startedAt", 0n);
+
+  server.addHook("onRequest", async (request) => {
+    const headerDeliveryId = request.headers["x-github-delivery"];
+    const correlationId =
+      typeof headerDeliveryId === "string" && headerDeliveryId.length > 0
+        ? headerDeliveryId
+        : generateCorrelationId();
+    request.correlationId = correlationId;
+    request.startedAt = process.hrtime.bigint();
+    setRequestScope({
+      correlationId,
+      route: request.routeOptions?.url ?? request.url,
+      method: request.method,
+    });
+  });
+
+  server.addHook("onResponse", async (request, reply) => {
+    const durationMs =
+      request.startedAt === 0n
+        ? 0
+        : Number((process.hrtime.bigint() - request.startedAt) / 1_000_000n);
+    const fields = {
+      method: request.method,
+      url: request.url,
+      statusCode: reply.statusCode,
+      durationMs,
+      correlationId: request.correlationId,
+    };
+    if (reply.statusCode >= 500) {
+      logger.error("http.request_completed", fields);
+    } else if (reply.statusCode >= 400) {
+      logger.warn("http.request_completed", fields);
+    } else {
+      logger.info("http.request_completed", fields);
+    }
+  });
+
   server.get("/healthz", async () => ({
     ok: true,
   }));
@@ -280,10 +328,19 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
   server.setErrorHandler((error, request, reply) => {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown API error.";
+    const correlationId = request.correlationId;
     logger.error("API request failed.", {
       method: request.method,
       url: request.url,
+      correlationId,
       error: errorMessage,
+    });
+    captureError(error, {
+      tags: {
+        route: request.routeOptions?.url ?? request.url,
+        method: request.method,
+      },
+      extra: { correlationId, url: request.url },
     });
 
     void reply.status(500).send({

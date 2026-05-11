@@ -79,7 +79,7 @@ export function buildRuntime(
   const memoryStore = new PostgresMemoryStore(sql);
   const discussionAcknowledgmentStore =
     new PostgresDiscussionAcknowledgmentStore(sql);
-  const memoryService = new MemoryService(memoryStore);
+  const memoryService = new MemoryService(memoryStore, { logger });
   const feedbackService = new ReviewFeedbackService(
     new PostgresReviewFeedbackStore(sql),
   );
@@ -146,6 +146,7 @@ export function buildRuntime(
     });
     const githubRestClient = new GitHubRestClient(githubAuth, undefined, {
       baseUrl: operationalConfig.github.apiBaseUrl,
+      logger,
     });
     const githubAdapter = new GitHubAdapter({
       apiClient: githubRestClient,
@@ -156,17 +157,20 @@ export function buildRuntime(
         apiKey: operationalConfig.openAiApiKey,
         model: operationalConfig.openAi.model,
         baseUrl: operationalConfig.openAi.baseUrl,
+        logger,
       }),
     );
     const memoryClassifier = new OpenAiMemoryClassifier({
       apiKey: operationalConfig.openAiApiKey,
       model: "gpt-4o-mini",
       baseUrl: operationalConfig.openAi.baseUrl,
+      logger,
     });
     const memoryEmbedder = new OpenAiMemoryEmbedder({
       apiKey: operationalConfig.openAiApiKey,
       model: "text-embedding-3-small",
       baseUrl: operationalConfig.openAi.baseUrl,
+      logger,
     });
     memoryService.configureBackends({
       classifier: memoryClassifier,

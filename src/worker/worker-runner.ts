@@ -1,9 +1,11 @@
 import { type ReviewRun, parseReviewTrigger } from "../domain/types.js";
 import type { ReviewFeedbackService } from "../feedback/review-feedback-service.js";
 import type { InstructionBundle } from "../instructions/instruction-loader.js";
+import { withTiming } from "../logging/correlation.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
 import type { DiscussionAcknowledgmentStore } from "../memory/discussion-acknowledgment-store.js";
 import type { MemoryEntry, MemoryService } from "../memory/memory-service.js";
+import { captureError } from "../observability/sentry.js";
 import type {
   GitHubAdapter,
   GitHubChangeRequestContext,
@@ -535,6 +537,7 @@ const noopStatusPublisher: Pick<
 };
 
 function parseReviewJobPayload(payload: QueueJob["payload"]): {
+  correlationId: string | null;
   installationId: string;
   repository: {
     owner: string;
@@ -548,6 +551,11 @@ function parseReviewJobPayload(payload: QueueJob["payload"]): {
   const repository = payload.repository as Record<string, unknown> | undefined;
   const pullNumber = payload.pullNumber;
   const mode = payload.mode;
+  const correlationId =
+    typeof payload.correlationId === "string" &&
+    payload.correlationId.trim().length > 0
+      ? payload.correlationId
+      : null;
 
   if (
     typeof installationId !== "string" ||
@@ -577,6 +585,7 @@ function parseReviewJobPayload(payload: QueueJob["payload"]): {
   }
 
   return {
+    correlationId,
     installationId,
     repository: {
       owner: repository.owner,
@@ -668,6 +677,7 @@ function parseMemoryJobPayload(payload: QueueJob["payload"]): {
 }
 
 function parseInteractionJobPayload(payload: QueueJob["payload"]): {
+  correlationId: string | null;
   installationId: string;
   repository: {
     owner: string;
@@ -699,6 +709,11 @@ function parseInteractionJobPayload(payload: QueueJob["payload"]): {
   const actorLogin = payload.actorLogin;
   const command = payload.command;
   const source = payload.source as Record<string, unknown> | undefined;
+  const correlationId =
+    typeof payload.correlationId === "string" &&
+    payload.correlationId.trim().length > 0
+      ? payload.correlationId
+      : null;
 
   if (
     typeof installationId !== "string" ||
@@ -755,6 +770,7 @@ function parseInteractionJobPayload(payload: QueueJob["payload"]): {
     }
 
     return {
+      correlationId,
       installationId,
       repository: {
         owner: repository.owner,
@@ -787,6 +803,7 @@ function parseInteractionJobPayload(payload: QueueJob["payload"]): {
     typeof source.body === "string"
   ) {
     return {
+      correlationId,
       installationId,
       repository: {
         owner: repository.owner,
@@ -940,38 +957,62 @@ export class WorkerRunner {
       return false;
     }
 
-    this.#logger.info("Claimed worker job.", {
+    const payloadCorrelationId =
+      typeof job.payload?.correlationId === "string" &&
+      job.payload.correlationId.trim().length > 0
+        ? job.payload.correlationId
+        : null;
+    const jobLogger = this.#logger.child({
       workerId: input.workerId,
       jobId: job.id,
       jobType: job.type,
       tenantId: job.tenantId,
       repositoryId: job.repositoryId,
+      ...(payloadCorrelationId ? { correlationId: payloadCorrelationId } : {}),
     });
+
+    const jobStartedAt = process.hrtime.bigint();
+    jobLogger.info("Claimed worker job.", {});
 
     try {
       if (job.type === "memory_ingest") {
-        await this.#processMemoryJob(job);
+        await this.#processMemoryJob(job, jobLogger);
       } else if (job.type === "interaction_requested") {
-        await this.#processInteractionJob(job);
+        await this.#processInteractionJob(job, jobLogger);
       } else {
-        await this.#processReviewJob(job);
+        await this.#processReviewJob(job, jobLogger);
       }
 
       await this.#queueScheduler.completeJob(job.id);
-      this.#logger.info("Completed worker job.", {
-        jobId: job.id,
-        jobType: job.type,
+      jobLogger.info("Completed worker job.", {
+        durationMs: Number(
+          (process.hrtime.bigint() - jobStartedAt) / 1_000_000n,
+        ),
       });
       return true;
     } catch (error) {
-      this.#logger.error("Worker job failed.", {
-        jobId: job.id,
-        jobType: job.type,
-        failureClass:
-          error instanceof ReviewJobError
-            ? error.failureClass
-            : "internal_processing",
+      const failureClass =
+        error instanceof ReviewJobError
+          ? error.failureClass
+          : "internal_processing";
+      jobLogger.error("Worker job failed.", {
+        durationMs: Number(
+          (process.hrtime.bigint() - jobStartedAt) / 1_000_000n,
+        ),
+        failureClass,
         error: toErrorMessage(error),
+      });
+      captureError(error, {
+        tags: {
+          jobType: job.type,
+          failureClass,
+        },
+        extra: {
+          jobId: job.id,
+          tenantId: job.tenantId,
+          repositoryId: job.repositoryId,
+          correlationId: payloadCorrelationId ?? undefined,
+        },
       });
       await this.#queueScheduler.failJob(job.id, toErrorMessage(error), {
         retryable: error instanceof ReviewJobError ? error.retryable : false,
@@ -980,13 +1021,14 @@ export class WorkerRunner {
     }
   }
 
-  async #processReviewJob(job: QueueJob): Promise<void> {
+  async #processReviewJob(job: QueueJob, jobLogger: Logger): Promise<void> {
     let payload: ReturnType<typeof parseReviewJobPayload>;
     try {
       payload = parseReviewJobPayload(job.payload);
     } catch (error) {
       throw classifyReviewError("config", error);
     }
+    const logger = jobLogger;
 
     let reviewRunId: string | null = null;
     let checkRunId: string | null = null;
@@ -997,13 +1039,19 @@ export class WorkerRunner {
     try {
       let context: GitHubChangeRequestContext;
       try {
-        context = await this.#githubAdapter.fetchChangeRequestContext({
-          installationId: payload.installationId,
-          repository: payload.repository,
-          pullNumber: payload.pullNumber,
-          tenantId: job.tenantId,
-          repositoryId: job.repositoryId,
-        });
+        context = await withTiming(
+          logger,
+          "fetch_change_request_context",
+          () =>
+            this.#githubAdapter.fetchChangeRequestContext({
+              installationId: payload.installationId,
+              repository: payload.repository,
+              pullNumber: payload.pullNumber,
+              tenantId: job.tenantId,
+              repositoryId: job.repositoryId,
+            }),
+          { pullNumber: payload.pullNumber },
+        );
       } catch (error) {
         throw classifyReviewError("github", error);
       }
@@ -1049,7 +1097,7 @@ export class WorkerRunner {
           headSha: context.changeRequest.headSha,
         });
       if (supersededCount > 0) {
-        this.#logger.info("Superseded queued review jobs for newer head SHA.", {
+        logger.info("Superseded queued review jobs for newer head SHA.", {
           jobId: job.id,
           repositoryId: job.repositoryId,
           changeRequestId:
@@ -1060,8 +1108,11 @@ export class WorkerRunner {
 
       let instructionBundle: InstructionBundle;
       try {
-        instructionBundle =
-          await this.#instructionBundleLoader.loadForReview(context);
+        instructionBundle = await withTiming(
+          logger,
+          "load_instruction_bundle",
+          () => this.#instructionBundleLoader.loadForReview(context),
+        );
       } catch (error) {
         throw classifyReviewError("github", error);
       }
@@ -1077,7 +1128,7 @@ export class WorkerRunner {
         })),
       });
 
-      this.#logger.info("Planned review job.", {
+      logger.info("Planned review job.", {
         jobId: job.id,
         repositoryId: job.repositoryId,
         mode: payload.mode,
@@ -1133,7 +1184,7 @@ export class WorkerRunner {
         );
         if (pendingCheckRunId) {
           checkRunId = pendingCheckRunId;
-          this.#logger.info("Published pending review status.", {
+          logger.info("Published pending review status.", {
             jobId: job.id,
             reviewRunId: startedReviewRunId,
             checkRunId,
@@ -1152,20 +1203,22 @@ export class WorkerRunner {
       ]
         .join("\n")
         .slice(0, 2_000);
-      const memories = this.#memoryService.selectMemoriesForReview
-        ? await this.#memoryService.selectMemoriesForReview({
-            tenantId: job.tenantId,
-            repositoryId: job.repositoryId,
-            reviewedPaths: reviewPlan.files.map((file) => file.path),
-            reviewContext,
-            charBudget: memoryCharBudget,
-          })
-        : await this.#memoryService.getRelevantMemories({
-            tenantId: job.tenantId,
-            repositoryId: job.repositoryId,
-            paths: reviewPlan.files.map((file) => file.path),
-            limit: Math.max(reviewPlan.commentBudget, 1),
-          });
+      const memories = await withTiming(logger, "select_memories", () =>
+        this.#memoryService.selectMemoriesForReview
+          ? this.#memoryService.selectMemoriesForReview({
+              tenantId: job.tenantId,
+              repositoryId: job.repositoryId,
+              reviewedPaths: reviewPlan.files.map((file) => file.path),
+              reviewContext,
+              charBudget: memoryCharBudget,
+            })
+          : this.#memoryService.getRelevantMemories({
+              tenantId: job.tenantId,
+              repositoryId: job.repositoryId,
+              paths: reviewPlan.files.map((file) => file.path),
+              limit: Math.max(reviewPlan.commentBudget, 1),
+            }),
+      );
       const existingNitpickrThreads = this.#githubAdapter
         .listNitpickrReviewThreads
         ? await this.#githubAdapter.listNitpickrReviewThreads({
@@ -1207,19 +1260,27 @@ export class WorkerRunner {
       });
 
       const fileContentsByPath = this.#githubAdapter.getFileContent
-        ? await fetchPrimaryFileContents({
-            files: reviewPlan.files.map((file) => ({
-              path: file.path,
-              patch: file.patch,
-            })),
-            headSha: context.changeRequest.headSha,
-            installationId: payload.installationId,
-            repository: payload.repository,
-            getFileContent: this.#githubAdapter.getFileContent.bind(
-              this.#githubAdapter,
-            ),
-            logger: this.#logger,
-          })
+        ? await withTiming(
+            logger,
+            "fetch_primary_file_contents",
+            () =>
+              fetchPrimaryFileContents({
+                files: reviewPlan.files.map((file) => ({
+                  path: file.path,
+                  patch: file.patch,
+                })),
+                headSha: context.changeRequest.headSha,
+                installationId: payload.installationId,
+                repository: payload.repository,
+                getFileContent: (
+                  this.#githubAdapter.getFileContent as NonNullable<
+                    GitHubAdapter["getFileContent"]
+                  >
+                ).bind(this.#githubAdapter),
+                logger,
+              }),
+            { fileCount: reviewPlan.files.length },
+          )
         : new Map<string, string>();
 
       const diagnostics =
@@ -1291,20 +1352,29 @@ export class WorkerRunner {
                     : {}),
                 };
 
-                if (this.#reviewEngine.reviewWithDiagnostics) {
-                  return await this.#reviewEngine.reviewWithDiagnostics(
-                    reviewInput,
-                  );
-                }
-
-                return {
-                  result: await this.#reviewEngine.review(reviewInput),
-                  rejectedFindings: [],
-                  promptUsage: {
-                    beforeCompaction: emptyPromptUsageSnapshot(),
-                    afterCompaction: emptyPromptUsageSnapshot(),
+                return await withTiming(
+                  logger,
+                  "review_engine_run",
+                  async () => {
+                    if (this.#reviewEngine.reviewWithDiagnostics) {
+                      return await this.#reviewEngine.reviewWithDiagnostics(
+                        reviewInput,
+                      );
+                    }
+                    return {
+                      result: await this.#reviewEngine.review(reviewInput),
+                      rejectedFindings: [],
+                      promptUsage: {
+                        beforeCompaction: emptyPromptUsageSnapshot(),
+                        afterCompaction: emptyPromptUsageSnapshot(),
+                      },
+                    };
                   },
-                };
+                  {
+                    fileCount: reviewPlan.files.length,
+                    scope: reviewScope,
+                  },
+                );
               } catch (error) {
                 throw classifyReviewError("review", error);
               }
@@ -1324,21 +1394,21 @@ export class WorkerRunner {
         : selectPublishableResult(result, payload.trigger);
 
       if (diagnostics.rejectedFindings.length > 0) {
-        this.#logger.info("Suppressed findings after evidence gating.", {
+        logger.info("Suppressed findings after evidence gating.", {
           jobId: job.id,
           reviewRunId: startedReviewRunId,
           suppressedFindingCount: diagnostics.rejectedFindings.length,
         });
       }
 
-      this.#logger.info("Review prompt usage before compaction.", {
+      logger.info("Review prompt usage before compaction.", {
         jobId: job.id,
         reviewRunId: startedReviewRunId,
         scope: reviewScope,
         optimizationMode: this.#promptOptimizationMode,
         ...diagnostics.promptUsage.beforeCompaction,
       });
-      this.#logger.info("Review prompt usage after compaction.", {
+      logger.info("Review prompt usage after compaction.", {
         jobId: job.id,
         reviewRunId: startedReviewRunId,
         scope: reviewScope,
@@ -1347,7 +1417,7 @@ export class WorkerRunner {
       });
 
       if (reviewPlan.files.length === 0) {
-        this.#logger.info(
+        logger.info(
           "Skipping inline review; no reviewable files remained after planning.",
           {
             jobId: job.id,
@@ -1355,7 +1425,7 @@ export class WorkerRunner {
           },
         );
       } else {
-        this.#logger.info("Generated review result.", {
+        logger.info("Generated review result.", {
           jobId: job.id,
           reviewRunId: startedReviewRunId,
           findingCount: publishableResult.findings.length,
@@ -1389,15 +1459,12 @@ export class WorkerRunner {
               resolvedThreadCount += 1;
             }
           } catch (error) {
-            this.#logger.warn(
-              "Failed to resolve stale nitpickr review thread.",
-              {
-                jobId: job.id,
-                reviewRunId: startedReviewRunId,
-                threadId,
-                error: toErrorMessage(error),
-              },
-            );
+            logger.warn("Failed to resolve stale nitpickr review thread.", {
+              jobId: job.id,
+              reviewRunId: startedReviewRunId,
+              threadId,
+              error: toErrorMessage(error),
+            });
           }
         }
         if (resolvedThreadCount > 0) {
@@ -1420,31 +1487,38 @@ export class WorkerRunner {
           }
         }
       }
-      const publishedReview = await (async () => {
-        try {
-          return await this.#publisher.publish({
-            reviewRunId: startedReviewRunId,
-            installationId: payload.installationId,
-            repository: payload.repository,
-            pullNumber: payload.pullNumber,
-            publishMode:
-              reviewScope === "commit_delta" ? "commit_summary" : "pr_summary",
-            reviewedCommitSha: context.changeRequest.headSha,
-            commitSummaryCounts: {
-              newFindings: publishableResult.findings.length,
-              resolvedThreads: resolvedThreadCount,
-              stillRelevantFindings: publishableResult.findings.length,
-            },
-            result: publishableResult as ReviewEngineResult,
-            files: reviewPlan.files.map((file) => ({
-              path: file.path,
-              patch: file.patch,
-            })),
-          });
-        } catch (error) {
-          throw classifyReviewError("publish", error);
-        }
-      })();
+      const publishedReview = await withTiming(
+        logger,
+        "publish_review",
+        async () => {
+          try {
+            return await this.#publisher.publish({
+              reviewRunId: startedReviewRunId,
+              installationId: payload.installationId,
+              repository: payload.repository,
+              pullNumber: payload.pullNumber,
+              publishMode:
+                reviewScope === "commit_delta"
+                  ? "commit_summary"
+                  : "pr_summary",
+              reviewedCommitSha: context.changeRequest.headSha,
+              commitSummaryCounts: {
+                newFindings: publishableResult.findings.length,
+                resolvedThreads: resolvedThreadCount,
+                stillRelevantFindings: publishableResult.findings.length,
+              },
+              result: publishableResult as ReviewEngineResult,
+              files: reviewPlan.files.map((file) => ({
+                path: file.path,
+                patch: file.patch,
+              })),
+            });
+          } catch (error) {
+            throw classifyReviewError("publish", error);
+          }
+        },
+        { findingCount: publishableResult.findings.length },
+      );
       const nitpickrThreads = this.#githubAdapter.listNitpickrReviewThreads
         ? await this.#githubAdapter.listNitpickrReviewThreads({
             installationId: payload.installationId,
@@ -1495,7 +1569,7 @@ export class WorkerRunner {
               }),
           );
           if (published !== null) {
-            this.#logger.info("Published final review status.", {
+            logger.info("Published final review status.", {
               jobId: job.id,
               reviewRunId: startedReviewRunId,
               checkRunId,
@@ -1526,7 +1600,7 @@ export class WorkerRunner {
               }),
           );
           if (published !== null) {
-            this.#logger.info("Published final review status.", {
+            logger.info("Published final review status.", {
               jobId: job.id,
               reviewRunId: startedReviewRunId,
               checkRunId,
@@ -1537,7 +1611,7 @@ export class WorkerRunner {
           }
         }
       }
-      this.#logger.info("Published review result.", {
+      logger.info("Published review result.", {
         jobId: job.id,
         reviewRunId: startedReviewRunId,
         publishedReviewId: publishedReview.reviewId,
@@ -1583,7 +1657,7 @@ export class WorkerRunner {
             }),
         );
         if (published !== null) {
-          this.#logger.info("Published failed review status.", {
+          logger.info("Published failed review status.", {
             jobId: job.id,
             reviewRunId,
             checkRunId,
@@ -1599,7 +1673,11 @@ export class WorkerRunner {
     }
   }
 
-  async #processInteractionJob(job: QueueJob): Promise<void> {
+  async #processInteractionJob(
+    job: QueueJob,
+    jobLogger: Logger,
+  ): Promise<void> {
+    const logger = jobLogger;
     const payload = parseInteractionJobPayload(job.payload);
     const latestReview = this.#reviewLifecycle.getLatestCompletedReview
       ? await this.#reviewLifecycle.getLatestCompletedReview(
@@ -1682,7 +1760,7 @@ export class WorkerRunner {
       });
     }
 
-    this.#logger.info("Processed reviewer interaction job.", {
+    logger.info("Processed reviewer interaction job.", {
       jobId: job.id,
       repositoryId: job.repositoryId,
       command: payload.command,
@@ -1690,7 +1768,8 @@ export class WorkerRunner {
     });
   }
 
-  async #processMemoryJob(job: QueueJob): Promise<void> {
+  async #processMemoryJob(job: QueueJob, jobLogger: Logger): Promise<void> {
+    const logger = jobLogger;
     const payload = parseMemoryJobPayload(job.payload);
     const ack = payload.acknowledgment;
     const ackStore = this.#discussionAcknowledgmentStore;
@@ -1701,7 +1780,7 @@ export class WorkerRunner {
         providerCommentId: ack.providerCommentId,
       });
       if (already) {
-        this.#logger.info(
+        logger.info(
           "Skipping memory ingestion — discussion already acknowledged.",
           {
             jobId: job.id,
@@ -1721,14 +1800,11 @@ export class WorkerRunner {
           content: "eyes",
         });
       } catch (error) {
-        this.#logger.warn(
-          "Failed to post 👀 reaction on user discussion comment.",
-          {
-            jobId: job.id,
-            providerCommentId: ack.providerCommentId,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        );
+        logger.warn("Failed to post 👀 reaction on user discussion comment.", {
+          jobId: job.id,
+          providerCommentId: ack.providerCommentId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
@@ -1764,7 +1840,7 @@ export class WorkerRunner {
           });
         }
       } catch (error) {
-        this.#logger.warn("Failed to post acknowledgment reply.", {
+        logger.warn("Failed to post acknowledgment reply.", {
           jobId: job.id,
           providerCommentId: ack.providerCommentId,
           error: error instanceof Error ? error.message : String(error),
@@ -1780,7 +1856,7 @@ export class WorkerRunner {
       }
     }
 
-    this.#logger.info("Processed memory ingestion job.", {
+    logger.info("Processed memory ingestion job.", {
       jobId: job.id,
       discussionCount: payload.discussions.length,
       savedEntries: ingestion.savedEntries.length,
@@ -1810,11 +1886,12 @@ export class WorkerRunner {
     phase: ReviewStatusPhase,
     fields: Record<string, unknown>,
     publish: () => Promise<T>,
+    logger: Logger = this.#logger,
   ): Promise<T | null> {
     try {
       return await publish();
     } catch (error) {
-      this.#logger.warn("Review status update failed.", {
+      logger.warn("Review status update failed.", {
         ...fields,
         statusPhase: phase,
         error: toErrorMessage(error),

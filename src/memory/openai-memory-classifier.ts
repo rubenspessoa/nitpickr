@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { type Logger, noopLogger } from "../logging/logger.js";
 import { normalizeOpenAiBaseUrl } from "../shared/openai-base-url.js";
 import type {
   MemoryClassifier,
@@ -12,6 +13,7 @@ export interface OpenAiMemoryClassifierConfig {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  logger?: Logger;
 }
 
 export type FetchLike = typeof fetch;
@@ -58,6 +60,7 @@ const SYSTEM_PROMPT = [
 export class OpenAiMemoryClassifier implements MemoryClassifier {
   readonly #config: OpenAiMemoryClassifierConfig;
   readonly #fetch: FetchLike;
+  readonly #logger: Logger;
 
   constructor(
     config: OpenAiMemoryClassifierConfig,
@@ -65,6 +68,10 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
   ) {
     this.#config = config;
     this.#fetch = fetchFn;
+    this.#logger = (config.logger ?? noopLogger).child({
+      component: "openai-memory-classifier",
+      model: config.model,
+    });
   }
 
   async extract(input: {
@@ -80,24 +87,40 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
       input.body,
     ].join("\n");
 
-    const response = await this.#fetch(endpoint, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${this.#config.apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.#config.model,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPayload },
-        ],
-      }),
-    });
+    const startedAt = process.hrtime.bigint();
+    this.#logger.debug("memory_classifier.extract started", {});
+    let response: Response;
+    try {
+      response = await this.#fetch(endpoint, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.#config.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: this.#config.model,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: userPayload },
+          ],
+        }),
+      });
+    } catch (error) {
+      this.#logger.error("memory_classifier.extract transport_error", {
+        durationMs: Number((process.hrtime.bigint() - startedAt) / 1_000_000n),
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
 
     if (!response.ok) {
       const details = await response.text();
+      this.#logger.error("memory_classifier.extract failed", {
+        status: response.status,
+        durationMs: Number((process.hrtime.bigint() - startedAt) / 1_000_000n),
+        errorBody: details.slice(0, 500),
+      });
       throw new Error(
         `OpenAI memory classifier failed with status ${response.status}: ${details}`,
       );
@@ -109,10 +132,22 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
           content?: string | null;
         };
       }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
     };
+
+    const durationMs = Number(
+      (process.hrtime.bigint() - startedAt) / 1_000_000n,
+    );
 
     const content = payload.choices?.[0]?.message?.content;
     if (!content) {
+      this.#logger.error("memory_classifier.extract empty_response", {
+        durationMs,
+      });
       throw new Error("OpenAI memory classifier returned no content.");
     }
 
@@ -120,8 +155,18 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
     try {
       parsed = JSON.parse(content);
     } catch {
+      this.#logger.error("memory_classifier.extract invalid_json", {
+        durationMs,
+      });
       throw new Error("OpenAI memory classifier returned invalid JSON.");
     }
+
+    this.#logger.info("memory_classifier.extract succeeded", {
+      durationMs,
+      promptTokens: payload.usage?.prompt_tokens,
+      completionTokens: payload.usage?.completion_tokens,
+      totalTokens: payload.usage?.total_tokens,
+    });
 
     const validated = responseSchema.parse(parsed);
     const entries: MemoryClassifierResultEntry[] = validated.entries.map(

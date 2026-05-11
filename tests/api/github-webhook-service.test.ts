@@ -189,6 +189,8 @@ describe("GitHubWebhookService", () => {
       message: "Queued GitHub review job.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-1",
+        deliveryId: "delivery-1",
         eventName: "pull_request",
         installationId: "123456",
         repositoryId: "github:99",
@@ -228,6 +230,8 @@ describe("GitHubWebhookService", () => {
       message: "Reacted to GitHub bot mention.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-2",
+        deliveryId: "delivery-2",
         eventName: "issue_comment",
         commentId: 9001,
         content: "eyes",
@@ -318,6 +322,8 @@ describe("GitHubWebhookService", () => {
       message: "Failed to react to GitHub bot mention.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-3",
+        deliveryId: "delivery-3",
         eventName: "issue_comment",
         error: "reaction failed",
       },
@@ -353,6 +359,8 @@ describe("GitHubWebhookService", () => {
       message: "Failed to react to GitHub bot mention.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-sync-reaction",
+        deliveryId: "delivery-sync-reaction",
         eventName: "issue_comment",
         error: "sync reaction failed",
       },
@@ -388,6 +396,8 @@ describe("GitHubWebhookService", () => {
       message: "Rejected GitHub webhook with invalid signature.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-4",
+        deliveryId: "delivery-4",
         eventName: "pull_request",
       },
     });
@@ -426,6 +436,8 @@ describe("GitHubWebhookService", () => {
       message: "Ignored GitHub webhook event.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-5",
+        deliveryId: "delivery-5",
         eventName: "issue_comment",
         reason: "unsupported",
       },
@@ -465,6 +477,7 @@ describe("GitHubWebhookService", () => {
       message: "Ignored duplicate GitHub webhook delivery.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-dup",
         deliveryId: "delivery-dup",
         eventName: "pull_request",
       },
@@ -505,6 +518,7 @@ describe("GitHubWebhookService", () => {
       message: "GitHub webhook delivery registration failed.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-store-fail",
         deliveryId: "delivery-store-fail",
         eventName: "pull_request",
         error: "db unavailable",
@@ -588,6 +602,8 @@ describe("GitHubWebhookService", () => {
       message: "GitHub webhook event normalization failed.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-fail",
+        deliveryId: "delivery-fail",
         eventName: "pull_request",
         error: "boom",
       },
@@ -625,6 +641,8 @@ describe("GitHubWebhookService", () => {
       message: "GitHub webhook queueing failed.",
       fields: {
         component: "github-webhook",
+        correlationId: "delivery-queue-fail",
+        deliveryId: "delivery-queue-fail",
         eventName: "pull_request",
         repositoryId: "github:99",
         pullNumber: 42,

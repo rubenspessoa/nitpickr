@@ -87,9 +87,9 @@ describe("buildRuntime", () => {
     expect(githubRestClientConstructorMock).toHaveBeenCalledWith(
       expect.anything(),
       undefined,
-      {
+      expect.objectContaining({
         baseUrl: "http://github-stub:4010",
-      },
+      }),
     );
     expect(githubAdapterConstructorMock).toHaveBeenCalledWith({
       apiClient: expect.anything(),
@@ -97,11 +97,13 @@ describe("buildRuntime", () => {
         botLogins: ["getnitpickr", "nitpickr"],
       }),
     });
-    expect(openAiReviewModelConstructorMock).toHaveBeenCalledWith({
-      apiKey: "sk-test-key",
-      model: "gpt-5-mini",
-      baseUrl: "http://openai-stub:4020/v1",
-    });
+    expect(openAiReviewModelConstructorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: "sk-test-key",
+        model: "gpt-5-mini",
+        baseUrl: "http://openai-stub:4020/v1",
+      }),
+    );
   });
 
   it("stays in setup_required mode when no runtime secrets are configured", async () => {

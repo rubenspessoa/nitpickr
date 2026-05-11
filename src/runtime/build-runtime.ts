@@ -15,7 +15,10 @@ import { ReadinessService } from "../health/readiness-service.js";
 import { WorkerHeartbeatService } from "../health/worker-heartbeat-service.js";
 import { GitHubInstructionBundleLoader } from "../instructions/github-instruction-bundle-loader.js";
 import { createLogger } from "../logging/logger.js";
+import { PostgresDiscussionAcknowledgmentStore } from "../memory/discussion-acknowledgment-store.js";
 import { MemoryService } from "../memory/memory-service.js";
+import { OpenAiMemoryClassifier } from "../memory/openai-memory-classifier.js";
+import { OpenAiMemoryEmbedder } from "../memory/openai-memory-embedder.js";
 import { PostgresMemoryStore } from "../memory/postgres-memory-store.js";
 import { GitHubAdapter } from "../providers/github/github-adapter.js";
 import { GitHubAppAuth } from "../providers/github/github-app-auth.js";
@@ -49,6 +52,7 @@ export interface AppRuntime {
   sql: ReturnType<typeof createPostgresClient>;
   queueScheduler: QueueScheduler;
   memoryService: MemoryService;
+  discussionAcknowledgmentStore: PostgresDiscussionAcknowledgmentStore;
   feedbackService: ReviewFeedbackService;
   reviewPlanner: ReviewPlanner;
   reviewLifecycle: ReviewLifecycleService;
@@ -72,7 +76,10 @@ export function buildRuntime(
   });
   const sql = createPostgresClient(config.databaseUrl);
   const queueScheduler = new QueueScheduler(new PostgresJobStore(sql));
-  const memoryService = new MemoryService(new PostgresMemoryStore(sql));
+  const memoryStore = new PostgresMemoryStore(sql);
+  const discussionAcknowledgmentStore =
+    new PostgresDiscussionAcknowledgmentStore(sql);
+  const memoryService = new MemoryService(memoryStore);
   const feedbackService = new ReviewFeedbackService(
     new PostgresReviewFeedbackStore(sql),
   );
@@ -151,6 +158,20 @@ export function buildRuntime(
         baseUrl: operationalConfig.openAi.baseUrl,
       }),
     );
+    const memoryClassifier = new OpenAiMemoryClassifier({
+      apiKey: operationalConfig.openAiApiKey,
+      model: "gpt-4o-mini",
+      baseUrl: operationalConfig.openAi.baseUrl,
+    });
+    const memoryEmbedder = new OpenAiMemoryEmbedder({
+      apiKey: operationalConfig.openAiApiKey,
+      model: "text-embedding-3-small",
+      baseUrl: operationalConfig.openAi.baseUrl,
+    });
+    memoryService.configureBackends({
+      classifier: memoryClassifier,
+      embedder: memoryEmbedder,
+    });
     const publisher = new ReviewPublisher({
       listPullRequestReviews: async ({
         installationId,
@@ -253,6 +274,7 @@ export function buildRuntime(
     sql,
     queueScheduler,
     memoryService,
+    discussionAcknowledgmentStore,
     feedbackService,
     reviewPlanner,
     reviewLifecycle,

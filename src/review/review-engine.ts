@@ -12,7 +12,7 @@ import {
   gateAndRankFindings,
 } from "./evidence-gate.js";
 import { fingerprintFinding } from "./finding-fingerprint.js";
-import { PromptBuilder } from "./prompt-builder.js";
+import { type PriorThread, PromptBuilder } from "./prompt-builder.js";
 import {
   type PromptOptimizationMode,
   PromptPayloadOptimizer,
@@ -498,6 +498,7 @@ export interface ReviewEngineInput {
     additions: number;
     deletions: number;
     patch: string | null;
+    fileContent?: string | null;
   }>;
   contextFiles?: Array<{
     path: string;
@@ -515,6 +516,7 @@ export interface ReviewEngineInput {
   optimizationMode?: PromptOptimizationMode;
   feedbackSignals?: ReviewFeedbackSignal[];
   publishableFindingTypes?: ReviewFinding["findingType"][];
+  priorThreads?: PriorThread[];
 }
 
 export interface ReviewEngineResult {
@@ -753,6 +755,10 @@ export class ReviewEngine {
 
     const responses = await Promise.all(
       chunks.map(async (files, index) => {
+        const chunkPaths = new Set(files.map((file) => file.path));
+        const chunkPriorThreads = input.priorThreads
+          ? input.priorThreads.filter((thread) => chunkPaths.has(thread.path))
+          : undefined;
         const prompt = this.#promptBuilder.build({
           changeRequest: input.changeRequest,
           chunk: {
@@ -766,6 +772,9 @@ export class ReviewEngine {
           ...(optimized.contextFiles === undefined
             ? {}
             : { contextFiles: optimized.contextFiles }),
+          ...(chunkPriorThreads && chunkPriorThreads.length > 0
+            ? { priorThreads: chunkPriorThreads }
+            : {}),
         });
 
         const response = await this.#model.generateStructuredReview(prompt);

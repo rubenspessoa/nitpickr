@@ -440,6 +440,10 @@ class FakeGitHubApi implements GitHubApiClient {
     return this.comparedFiles.length > 0 ? this.comparedFiles : this.files;
   }
 
+  async getFileContent(): Promise<string | null> {
+    return null;
+  }
+
   async listNitpickrReviewThreads() {
     return this.nitpickrThreads;
   }
@@ -681,7 +685,14 @@ describe("review flow integration", () => {
       kind: "preferred_pattern",
       summary: "Prefer explicit webhook error handling.",
       path: "src/api",
+      tags: [],
+      globs: [],
       confidence: 0.9,
+      usageCount: 0,
+      lastUsedAt: null,
+      embedding: null,
+      supersededBy: null,
+      source: "discussion",
       createdAt: "2026-03-01T10:00:00.000Z",
       updatedAt: "2026-03-01T10:00:00.000Z",
     });

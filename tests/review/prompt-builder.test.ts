@@ -84,6 +84,160 @@ describe("PromptBuilder", () => {
     expect(prompt.user).toContain("Primary review scope:");
   });
 
+  it("renders the prior threads section grouped by state", () => {
+    const builder = new PromptBuilder();
+    const prompt = builder.build({
+      changeRequest: { title: "Refactor auth", number: 7 },
+      chunk: {
+        index: 0,
+        total: 1,
+        files: [
+          {
+            path: "src/auth/session.ts",
+            patch: "@@ -1,2 +1,3 @@\n+verify token",
+            additions: 1,
+            deletions: 0,
+          },
+        ],
+      },
+      instructionText: "",
+      memory: [],
+      commentBudget: 5,
+      priorThreads: [
+        {
+          path: "src/auth/session.ts",
+          line: 12,
+          state: "open",
+          title: "Verify token signature before issuing session",
+          fingerprint: "src/auth/session.ts:12:security:verify_token",
+        },
+        {
+          path: "src/auth/session.ts",
+          line: 30,
+          state: "dismissed",
+          title: "Consider caching the JWKS",
+          fingerprint: "src/auth/session.ts:30:performance:cache_jwks",
+          userReply: "Intentional — we want strict freshness.",
+        },
+        {
+          path: "src/auth/session.ts",
+          line: 45,
+          state: "resolved",
+          title: "Use constant-time compare for tokens",
+          fingerprint: "src/auth/session.ts:45:security:constant_time",
+        },
+        {
+          path: "src/auth/session.ts",
+          line: 99,
+          state: "stale",
+          title: "Old finding on a line that is no longer in the diff",
+          fingerprint: "src/auth/session.ts:99:style:foo",
+        },
+      ],
+    });
+
+    expect(prompt.user).toContain("Prior nitpickr threads on this PR:");
+    expect(prompt.user).toContain(
+      "open:\n- src/auth/session.ts:12 — Verify token",
+    );
+    expect(prompt.user).toContain(
+      "dismissed:\n- src/auth/session.ts:30 — Consider caching the JWKS\n  user reply: Intentional — we want strict freshness.",
+    );
+    expect(prompt.user).toContain(
+      "resolved:\n- src/auth/session.ts:45 — Use constant-time compare for tokens",
+    );
+    expect(prompt.user).toContain(
+      "stale:\n- src/auth/session.ts:99 — Old finding on a line that is no longer in the diff",
+    );
+    expect(prompt.system).toContain(
+      "do not re-raise findings represented by an open, resolved, or stale prior thread",
+    );
+    expect(prompt.system).toContain(
+      "Stay consistent with prior recommendations",
+    );
+  });
+
+  it("renders 'None' when prior threads is empty or omitted", () => {
+    const builder = new PromptBuilder();
+    const prompt = builder.build({
+      changeRequest: { title: "x", number: 1 },
+      chunk: {
+        index: 0,
+        total: 1,
+        files: [
+          {
+            path: "a.ts",
+            patch: "@@ -1 +1 @@\n+x",
+            additions: 1,
+            deletions: 0,
+          },
+        ],
+      },
+      instructionText: "",
+      memory: [],
+      commentBudget: 1,
+    });
+
+    expect(prompt.user).toContain("Prior nitpickr threads on this PR:\nNone");
+  });
+
+  it("includes the full file at HEAD when fileContent is provided", () => {
+    const builder = new PromptBuilder();
+    const prompt = builder.build({
+      changeRequest: { title: "x", number: 2 },
+      chunk: {
+        index: 0,
+        total: 1,
+        files: [
+          {
+            path: "src/index.ts",
+            patch: "@@ -1 +1,2 @@\n+console.log('hi')",
+            additions: 1,
+            deletions: 0,
+            fileContent:
+              "export const main = () => {\n  console.log('hi');\n};",
+          },
+        ],
+      },
+      instructionText: "",
+      memory: [],
+      commentBudget: 1,
+    });
+
+    expect(prompt.user).toContain(
+      "Full file at HEAD (for context only — review against the patch):",
+    );
+    expect(prompt.user).toContain("export const main = () =>");
+    expect(prompt.system).toContain(
+      "every finding must still reference a line that appears in the patch",
+    );
+  });
+
+  it("omits the file content block when fileContent is null or absent", () => {
+    const builder = new PromptBuilder();
+    const prompt = builder.build({
+      changeRequest: { title: "x", number: 3 },
+      chunk: {
+        index: 0,
+        total: 1,
+        files: [
+          {
+            path: "a.ts",
+            patch: "@@ -1 +1 @@\n+x",
+            additions: 1,
+            deletions: 0,
+            fileContent: null,
+          },
+        ],
+      },
+      instructionText: "",
+      memory: [],
+      commentBudget: 1,
+    });
+
+    expect(prompt.user).not.toContain("Full file at HEAD");
+  });
+
   it("rejects empty review chunks", () => {
     const builder = new PromptBuilder();
 

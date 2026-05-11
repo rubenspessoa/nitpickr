@@ -259,7 +259,9 @@ describe("WorkerRunner", () => {
         async getRelevantMemories() {
           return [];
         },
-        async ingestDiscussion() {},
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
       },
       reviewPlanner: planner,
       reviewLifecycle: lifecycle,
@@ -545,7 +547,9 @@ describe("WorkerRunner", () => {
         async getRelevantMemories() {
           return [];
         },
-        async ingestDiscussion() {},
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
       },
       reviewPlanner: planner,
       reviewLifecycle: lifecycle,
@@ -758,7 +762,9 @@ describe("WorkerRunner", () => {
         async getRelevantMemories() {
           return [];
         },
-        async ingestDiscussion() {},
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
       },
       feedbackService: {
         async syncCommentReactions() {},
@@ -944,6 +950,7 @@ describe("WorkerRunner", () => {
         },
         async ingestDiscussion() {
           ingested = true;
+          return { acknowledgments: [], savedEntries: [] };
         },
       },
       reviewPlanner: planner,
@@ -978,6 +985,8 @@ describe("WorkerRunner", () => {
         component: "worker-runner",
         jobId: "job_2",
         discussionCount: 1,
+        savedEntries: 0,
+        acknowledged: false,
       },
     });
   });
@@ -1073,7 +1082,9 @@ describe("WorkerRunner", () => {
         async getRelevantMemories() {
           return [];
         },
-        async ingestDiscussion() {},
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
       },
       reviewPlanner: planner,
       reviewLifecycle: lifecycle,
@@ -1206,7 +1217,9 @@ describe("WorkerRunner", () => {
         async getRelevantMemories() {
           return [];
         },
-        async ingestDiscussion() {},
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
       },
       reviewPlanner: planner,
       reviewLifecycle: lifecycle,
@@ -1353,7 +1366,9 @@ describe("WorkerRunner", () => {
         async getRelevantMemories() {
           return [];
         },
-        async ingestDiscussion() {},
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
       },
       reviewPlanner: {
         plan() {
@@ -1512,7 +1527,9 @@ describe("WorkerRunner", () => {
         async getRelevantMemories() {
           return [];
         },
-        async ingestDiscussion() {},
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
       },
       reviewPlanner: planner,
       reviewLifecycle: lifecycle,
@@ -1681,7 +1698,9 @@ describe("WorkerRunner", () => {
         async getRelevantMemories() {
           return [];
         },
-        async ingestDiscussion() {},
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
       },
       reviewPlanner: planner,
       reviewLifecycle: lifecycle,

@@ -224,4 +224,45 @@ export const migrations = [
     create unique index if not exists review_feedback_events_scope_idx
       on review_feedback_events (repository_id, scope_key);
   `,
+  `
+    create extension if not exists vector;
+
+    alter table memories
+      add column if not exists embedding vector(1536);
+
+    alter table memories
+      add column if not exists tags text[] not null default '{}';
+
+    alter table memories
+      add column if not exists globs text[] not null default '{}';
+
+    alter table memories
+      add column if not exists usage_count integer not null default 0;
+
+    alter table memories
+      add column if not exists last_used_at timestamptz;
+
+    alter table memories
+      add column if not exists superseded_by text references memories (id);
+
+    alter table memories
+      add column if not exists source text not null default 'discussion';
+
+    create index if not exists memories_embedding_idx
+      on memories using hnsw (embedding vector_cosine_ops);
+
+    create index if not exists memories_tags_idx on memories using gin (tags);
+
+    create index if not exists memories_repo_active_idx
+      on memories (tenant_id, repository_id)
+      where superseded_by is null;
+  `,
+  `
+    create table if not exists discussion_acknowledgments (
+      repository_id text not null,
+      provider_comment_id text not null,
+      acknowledged_at timestamptz not null,
+      primary key (repository_id, provider_comment_id)
+    );
+  `,
 ];

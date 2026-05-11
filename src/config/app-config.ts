@@ -27,8 +27,6 @@ const bootstrapEnvironmentSchema = z.object({
   NITPICKR_REPOSITORY_ALLOWLIST: z.string().min(1).optional(),
   NITPICKR_PROMPT_OPTIMIZATION_MODE: promptOptimizationModeSchema.optional(),
   DISCORD_WEBHOOK_URL: z.string().url().optional(),
-  SENTRY_DSN: z.string().min(1).optional(),
-  SENTRY_TRACES_SAMPLE_RATE: z.string().optional(),
 });
 
 const runtimeSecretEnvironmentSchema = z.object({
@@ -86,10 +84,6 @@ export interface BootstrapConfig {
   };
   repositoryAllowlist: string[] | null;
   discordWebhookUrl: string | null;
-  sentry: {
-    dsn: string | null;
-    tracesSampleRate: number;
-  };
 }
 
 export interface AppConfig {
@@ -130,10 +124,6 @@ export interface AppConfig {
   };
   repositoryAllowlist: string[] | null;
   discordWebhookUrl: string | null;
-  sentry: {
-    dsn: string | null;
-    tracesSampleRate: number;
-  };
 }
 
 function parseInteger(
@@ -312,27 +302,7 @@ export function parseBootstrapConfig(
       parsed.NITPICKR_REPOSITORY_ALLOWLIST,
     ),
     discordWebhookUrl: parsed.DISCORD_WEBHOOK_URL ?? null,
-    sentry: {
-      dsn: parsed.SENTRY_DSN ?? null,
-      tracesSampleRate: parseSentryTracesSampleRate(
-        parsed.SENTRY_TRACES_SAMPLE_RATE,
-      ),
-    },
   };
-}
-
-function parseSentryTracesSampleRate(value: string | undefined): number {
-  if (value === undefined || value.trim().length === 0) {
-    return 0.1;
-  }
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return 0;
-  }
-  if (parsed > 1) {
-    return 1;
-  }
-  return parsed;
 }
 
 export function parseRuntimeSecretsFromEnvironment(
@@ -377,7 +347,6 @@ export function buildAppConfig(
     review: bootstrap.review,
     repositoryAllowlist: bootstrap.repositoryAllowlist,
     discordWebhookUrl: bootstrap.discordWebhookUrl,
-    sentry: bootstrap.sentry,
   };
 }
 

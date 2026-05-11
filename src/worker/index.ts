@@ -1,6 +1,7 @@
 import { env } from "node:process";
 
-import { initSentry } from "../observability/sentry.js";
+import * as Sentry from "@sentry/node";
+
 import { buildRuntime } from "../runtime/build-runtime.js";
 import { WorkerRunner } from "./worker-runner.js";
 
@@ -15,20 +16,27 @@ async function main(): Promise<void> {
   const logger = runtime.logger.child({
     component: "worker",
   });
-  initSentry({
-    dsn: runtime.config.sentry.dsn,
-    environment: runtime.config.nodeEnv,
-    tracesSampleRate: runtime.config.sentry.tracesSampleRate,
-    logger,
-  });
   const workerId = `worker-${process.pid}`;
   let previousSetupStatusSignature: string | null = null;
+  let shuttingDown = false;
+
+  const shutdown = async (signal: string): Promise<void> => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    logger.info("Shutting down worker.", { signal, workerId });
+    await Sentry.close(2000);
+    process.exit(0);
+  };
+  process.once("SIGTERM", () => void shutdown("SIGTERM"));
+  process.once("SIGINT", () => void shutdown("SIGINT"));
 
   logger.info("Starting worker loop.", {
     pollIntervalMs: runtime.config.worker.pollIntervalMs,
     perTenantCap: runtime.config.worker.concurrency,
   });
-  for (;;) {
+  while (!shuttingDown) {
     const freshWorkerIds =
       await runtime.workerHeartbeatService.listFreshWorkerIds(
         runtime.config.ready.workerStaleAfterMs,

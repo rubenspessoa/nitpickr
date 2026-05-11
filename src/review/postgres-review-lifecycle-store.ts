@@ -173,6 +173,28 @@ export class PostgresReviewLifecycleStore implements ReviewLifecycleStore {
     };
   }
 
+  async countCompletedReviewRuns(changeRequestId: string): Promise<number> {
+    const rows = await this.#client.unsafe<{ count: string | number }>(
+      `
+        select count(*)::bigint as count
+        from review_runs
+        where change_request_id = $1
+          and status in ('published', 'skipped')
+      `,
+      [changeRequestId],
+    );
+
+    const raw = rows[0]?.count;
+    if (typeof raw === "number") {
+      return raw;
+    }
+    if (typeof raw === "string") {
+      const parsed = Number.parseInt(raw, 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  }
+
   async markPublishedCommentsResolved(input: {
     providerThreadIds: string[];
     resolvedAt: string;

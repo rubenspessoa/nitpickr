@@ -29,6 +29,10 @@ import {
   ReviewerChatService,
   parseInlineCommentContext,
 } from "../review/reviewer-chat-service.js";
+import {
+  applySeverityFloor,
+  severityFloorForRound,
+} from "../review/severity-floor.js";
 
 const REVIEW_DURATION_BUDGET_MS = 300_000;
 
@@ -885,7 +889,9 @@ export interface WorkerRunnerDependencies {
     Partial<
       Pick<
         ReviewLifecycleService,
-        "getLatestCompletedReview" | "markPublishedCommentsResolved"
+        | "getLatestCompletedReview"
+        | "markPublishedCommentsResolved"
+        | "countCompletedReviews"
       >
     >;
   reviewEngine: Pick<ReviewEngine, "review"> &
@@ -1064,6 +1070,11 @@ export class WorkerRunner {
               context.changeRequest.id,
             )
           : null;
+      const priorReviewRoundCount = this.#reviewLifecycle.countCompletedReviews
+        ? await this.#reviewLifecycle.countCompletedReviews(
+            context.changeRequest.id,
+          )
+        : 0;
       const comparedFromSha =
         latestCompletedReview &&
         latestCompletedReview.headSha !== context.changeRequest.headSha
@@ -1330,6 +1341,7 @@ export class WorkerRunner {
                         },
                   ),
                   commentBudget: reviewPlan.commentBudget,
+                  priorReviewRoundCount,
                   ...(feedbackSignals.length === 0 ? {} : { feedbackSignals }),
                   ...(priorThreads.length === 0 ? {} : { priorThreads }),
                   ...(isAutomaticTrigger(payload.trigger)
@@ -1380,7 +1392,7 @@ export class WorkerRunner {
               }
             })();
       const rawResult = diagnostics.result;
-      const result = prependMemoryRollup(
+      const enrichedResult = prependMemoryRollup(
         prependSummaryReason(
           reviewPlan.allowSuggestedChanges
             ? rawResult
@@ -1389,6 +1401,19 @@ export class WorkerRunner {
         ),
         memories,
       );
+      const severityFloor = severityFloorForRound(priorReviewRoundCount);
+      const { kept: result, dropped: droppedBySeverityFloor } =
+        applySeverityFloor(enrichedResult, severityFloor);
+      if (droppedBySeverityFloor.length > 0) {
+        logger.info("severity_floor.applied", {
+          priorReviewRoundCount,
+          floor: severityFloor,
+          droppedFindingCount: droppedBySeverityFloor.length,
+          droppedSeverities: droppedBySeverityFloor.map(
+            (finding) => finding.severity,
+          ),
+        });
+      }
       const publishableResult = this.#reviewEngine.reviewWithDiagnostics
         ? result
         : selectPublishableResult(result, payload.trigger);

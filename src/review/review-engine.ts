@@ -120,7 +120,7 @@ const categoryAliasMap: Record<
   nitpick: "style",
 };
 
-type ReviewFinding = z.infer<typeof findingSchema>;
+export type ReviewFinding = z.infer<typeof findingSchema>;
 
 function normalizeLine(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isInteger(value) && value > 0) {
@@ -517,6 +517,12 @@ export interface ReviewEngineInput {
   feedbackSignals?: ReviewFeedbackSignal[];
   publishableFindingTypes?: ReviewFinding["findingType"][];
   priorThreads?: PriorThread[];
+  /**
+   * Count of prior completed (`published` or `skipped`) review runs for this
+   * change request. Surfaced to the prompt so the model can self-restrain on
+   * long-iteration PRs. Defaults to 0 when omitted.
+   */
+  priorReviewRoundCount?: number;
 }
 
 export interface ReviewEngineResult {
@@ -774,6 +780,9 @@ export class ReviewEngine {
             : { contextFiles: optimized.contextFiles }),
           ...(chunkPriorThreads && chunkPriorThreads.length > 0
             ? { priorThreads: chunkPriorThreads }
+            : {}),
+          ...(input.priorReviewRoundCount !== undefined
+            ? { priorReviewRoundCount: input.priorReviewRoundCount }
             : {}),
         });
 

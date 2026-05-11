@@ -206,6 +206,50 @@ describe("PostgresReviewLifecycleStore", () => {
     expect(client.calls[0]?.query).toContain("completed_at desc");
   });
 
+  it("counts only published/skipped review runs for a change request", async () => {
+    const client = new FakePostgresClient();
+    client.unsafe = async <T extends Record<string, unknown>>(
+      query: string,
+      params?: readonly unknown[],
+    ): Promise<T[]> => {
+      client.calls.push({ query, params });
+      // Postgres bigint comes back as a string over the wire.
+      return [{ count: "2" } as unknown as T];
+    };
+    const store = new PostgresReviewLifecycleStore(client);
+
+    const count = await store.countCompletedReviewRuns("github:99:42");
+
+    expect(count).toBe(2);
+    expect(client.calls[0]?.query).toContain("select count(*)");
+    expect(client.calls[0]?.query).toContain(
+      "status in ('published', 'skipped')",
+    );
+    expect(client.calls[0]?.params).toEqual(["github:99:42"]);
+  });
+
+  it("returns 0 when the count query returns nothing", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresReviewLifecycleStore(client);
+
+    const count = await store.countCompletedReviewRuns("github:99:42");
+    expect(count).toBe(0);
+  });
+
+  it("accepts numeric counts (driver-decoded bigint)", async () => {
+    const client = new FakePostgresClient();
+    client.unsafe = async <T extends Record<string, unknown>>(
+      query: string,
+      params?: readonly unknown[],
+    ): Promise<T[]> => {
+      client.calls.push({ query, params });
+      return [{ count: 5 } as unknown as T];
+    };
+    const store = new PostgresReviewLifecycleStore(client);
+
+    expect(await store.countCompletedReviewRuns("github:99:42")).toBe(5);
+  });
+
   it("marks published comments resolved by provider thread id", async () => {
     const client = new FakePostgresClient();
     client.unsafe = async <T extends Record<string, unknown>>(

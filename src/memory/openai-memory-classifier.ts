@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { normalizeOpenAiBaseUrl } from "../shared/openai-base-url.js";
 import type {
   MemoryClassifier,
   MemoryClassifierResult,
@@ -14,11 +15,6 @@ export interface OpenAiMemoryClassifierConfig {
 }
 
 export type FetchLike = typeof fetch;
-
-function normalizeBaseUrl(baseUrl: string | undefined): string {
-  const trimmed = (baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
-  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
-}
 
 const memoryKindSchema: z.ZodType<MemoryKind> = z.enum([
   "preferred_pattern",
@@ -76,7 +72,7 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
     authorLogin: string;
     path: string | null;
   }): Promise<MemoryClassifierResult> {
-    const endpoint = `${normalizeBaseUrl(this.#config.baseUrl)}/chat/completions`;
+    const endpoint = `${normalizeOpenAiBaseUrl(this.#config.baseUrl)}/chat/completions`;
     const userPayload = [
       `Author: ${input.authorLogin}`,
       input.path ? `Path: ${input.path}` : "Path: (general)",

@@ -296,8 +296,8 @@ describe("PromptPayloadOptimizer", () => {
       memory: [],
     });
 
-    const big = optimized.files[0];
-    const small = optimized.files[1];
+    const big = optimized.files.find((file) => file.path === "src/big.ts");
+    const small = optimized.files.find((file) => file.path === "src/small.ts");
     expect(big?.patch).toBe("@@ -1 +1,2 @@\n+keep this");
     expect(small?.patch).toBe("@@ -1 +1,2 @@\n+also keep");
     expect(big?.fileContent?.length).toBeLessThan(oversizedContent.length);
@@ -323,6 +323,8 @@ describe("PromptPayloadOptimizer", () => {
       memory: [],
     });
 
-    expect(optimized.files[0]?.fileContent).toBe("hello");
+    expect(
+      optimized.files.find((file) => file.path === "src/a.ts")?.fileContent,
+    ).toBe("hello");
   });
 });

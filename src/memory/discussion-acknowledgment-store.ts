@@ -30,17 +30,18 @@ export class PostgresDiscussionAcknowledgmentStore
     repositoryId: string;
     providerCommentId: string;
   }): Promise<boolean> {
-    const rows = await this.#client.unsafe<{ exists: boolean }>(
+    const rows = await this.#client.unsafe<{ acknowledged: boolean }>(
       `
-        select true as exists
-        from discussion_acknowledgments
-        where repository_id = $1
-          and provider_comment_id = $2
-        limit 1
+        select exists(
+          select 1
+          from discussion_acknowledgments
+          where repository_id = $1
+            and provider_comment_id = $2
+        ) as acknowledged
       `,
       [input.repositoryId, input.providerCommentId],
     );
-    return rows.length > 0;
+    return rows[0]?.acknowledged === true;
   }
 
   async markAcknowledged(input: {

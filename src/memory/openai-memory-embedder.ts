@@ -1,3 +1,4 @@
+import { normalizeOpenAiBaseUrl } from "../shared/openai-base-url.js";
 import type { MemoryEmbedder } from "./memory-service.js";
 
 export interface OpenAiMemoryEmbedderConfig {
@@ -7,11 +8,6 @@ export interface OpenAiMemoryEmbedderConfig {
 }
 
 export type FetchLike = typeof fetch;
-
-function normalizeBaseUrl(baseUrl: string | undefined): string {
-  const trimmed = (baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
-  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
-}
 
 export class OpenAiMemoryEmbedder implements MemoryEmbedder {
   readonly #config: OpenAiMemoryEmbedderConfig;
@@ -23,7 +19,7 @@ export class OpenAiMemoryEmbedder implements MemoryEmbedder {
   }
 
   async embed(text: string): Promise<number[]> {
-    const endpoint = `${normalizeBaseUrl(this.#config.baseUrl)}/embeddings`;
+    const endpoint = `${normalizeOpenAiBaseUrl(this.#config.baseUrl)}/embeddings`;
     const response = await this.#fetch(endpoint, {
       method: "POST",
       headers: {

@@ -1,3 +1,5 @@
+import { normalizeOpenAiBaseUrl } from "../shared/openai-base-url.js";
+
 export interface OpenAiReviewModelConfig {
   apiKey: string;
   model: string;
@@ -5,11 +7,6 @@ export interface OpenAiReviewModelConfig {
 }
 
 export type FetchLike = typeof fetch;
-
-function normalizeBaseUrl(baseUrl: string | undefined): string {
-  const trimmed = (baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
-  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
-}
 
 function shouldRetryWithoutTemperature(
   status: number,
@@ -40,7 +37,7 @@ export class OpenAiReviewModel {
     system: string;
     user: string;
   }): Promise<unknown> {
-    const endpoint = `${normalizeBaseUrl(this.#config.baseUrl)}/chat/completions`;
+    const endpoint = `${normalizeOpenAiBaseUrl(this.#config.baseUrl)}/chat/completions`;
     const sendRequest = (includeTemperature: boolean) =>
       this.#fetch(endpoint, {
         method: "POST",

@@ -12,6 +12,13 @@ import {
   type WebhookRateLimiter,
 } from "./webhook-rate-limiter.js";
 
+declare module "fastify" {
+  interface FastifyRequest {
+    correlationId: string;
+    startedAt: bigint;
+  }
+}
+
 const webhookPayloadSchema = z.custom<Record<string, unknown>>(
   (value): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value),
@@ -167,10 +174,8 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
       typeof headerDeliveryId === "string" && headerDeliveryId.length > 0
         ? headerDeliveryId
         : generateCorrelationId();
-    (request as unknown as { correlationId: string }).correlationId =
-      correlationId;
-    (request as unknown as { startedAt: bigint }).startedAt =
-      process.hrtime.bigint();
+    request.correlationId = correlationId;
+    request.startedAt = process.hrtime.bigint();
     setRequestScope({
       correlationId,
       route: request.routeOptions?.url ?? request.url,
@@ -179,19 +184,16 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
   });
 
   server.addHook("onResponse", async (request, reply) => {
-    const startedAt = (request as unknown as { startedAt: bigint }).startedAt;
-    const correlationId = (request as unknown as { correlationId: string })
-      .correlationId;
     const durationMs =
-      startedAt === 0n
+      request.startedAt === 0n
         ? 0
-        : Number((process.hrtime.bigint() - startedAt) / 1_000_000n);
+        : Number((process.hrtime.bigint() - request.startedAt) / 1_000_000n);
     const fields = {
       method: request.method,
       url: request.url,
       statusCode: reply.statusCode,
       durationMs,
-      correlationId,
+      correlationId: request.correlationId,
     };
     if (reply.statusCode >= 500) {
       logger.error("http.request_completed", fields);
@@ -326,8 +328,7 @@ export function createApiServer(input: ApiServerDependencies): FastifyInstance {
   server.setErrorHandler((error, request, reply) => {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown API error.";
-    const correlationId = (request as unknown as { correlationId: string })
-      .correlationId;
+    const correlationId = request.correlationId;
     logger.error("API request failed.", {
       method: request.method,
       url: request.url,

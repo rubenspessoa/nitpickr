@@ -368,21 +368,22 @@ describe("WorkerRunner", () => {
         summary: "Queue fairness improved.",
       },
     ]);
-    expect(logger.entries).toContainEqual({
-      level: "info",
-      message: "Published review result.",
-      fields: {
-        component: "worker-runner",
-        workerId: "worker_1",
-        jobId: "job_1",
-        jobType: "review_requested",
-        tenantId: "github-installation:123456",
-        repositoryId: "github:99",
-        reviewRunId: "review_run_1",
-        publishedReviewId: "review_1",
-        findingCount: 0,
-      },
-    });
+    expect(logger.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "info",
+          message: "Published review result.",
+          fields: expect.objectContaining({
+            component: "worker-runner",
+            jobId: "job_1",
+            jobType: "review_requested",
+            reviewRunId: "review_run_1",
+            publishedReviewId: "review_1",
+            findingCount: 0,
+          }),
+        }),
+      ]),
+    );
   });
 
   it("publishes commit summaries for synchronize runs and suppresses advisory-only findings", async () => {

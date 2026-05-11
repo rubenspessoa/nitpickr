@@ -10,6 +10,7 @@ import {
   type EvidenceGateRejectedFinding,
   type ReviewFeedbackSignal,
   gateAndRankFindings,
+  severityWeight,
 } from "./evidence-gate.js";
 import { fingerprintFinding } from "./finding-fingerprint.js";
 import { type PriorThread, PromptBuilder } from "./prompt-builder.js";
@@ -120,7 +121,7 @@ const categoryAliasMap: Record<
   nitpick: "style",
 };
 
-type ReviewFinding = z.infer<typeof findingSchema>;
+export type ReviewFinding = z.infer<typeof findingSchema>;
 
 function normalizeLine(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isInteger(value) && value > 0) {
@@ -517,6 +518,12 @@ export interface ReviewEngineInput {
   feedbackSignals?: ReviewFeedbackSignal[];
   publishableFindingTypes?: ReviewFinding["findingType"][];
   priorThreads?: PriorThread[];
+  /**
+   * Count of prior completed (`published` or `skipped`) review runs for this
+   * change request. Surfaced to the prompt so the model can self-restrain on
+   * long-iteration PRs. Defaults to 0 when omitted.
+   */
+  priorReviewRoundCount?: number;
 }
 
 export interface ReviewEngineResult {
@@ -569,18 +576,10 @@ function splitIntoChunks(
   return chunks;
 }
 
-function severityWeight(severity: ReviewFinding["severity"]): number {
-  switch (severity) {
-    case "critical":
-      return 4;
-    case "high":
-      return 3;
-    case "medium":
-      return 2;
-    case "low":
-      return 1;
-  }
-}
+// severityWeight is imported from evidence-gate (see the top of this file)
+// so the ordering of "low" < "medium" < "high" < "critical" has one source
+// of truth across the gate, the round-aware floor (severity-floor.ts), and
+// the engine's deduplicator/ranker below.
 
 function dedupeKey(finding: ReviewFinding): string {
   return fingerprintFinding(finding);
@@ -774,6 +773,9 @@ export class ReviewEngine {
             : { contextFiles: optimized.contextFiles }),
           ...(chunkPriorThreads && chunkPriorThreads.length > 0
             ? { priorThreads: chunkPriorThreads }
+            : {}),
+          ...(input.priorReviewRoundCount !== undefined
+            ? { priorReviewRoundCount: input.priorReviewRoundCount }
             : {}),
         });
 

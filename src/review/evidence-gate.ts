@@ -54,7 +54,9 @@ function patchIncludesLine(patch: string, line: number): boolean {
   });
 }
 
-function severityWeight(severity: GateFinding["severity"]): number {
+export type Severity = "low" | "medium" | "high" | "critical";
+
+export function severityWeight(severity: Severity): number {
   switch (severity) {
     case "critical":
       return 4;

@@ -267,6 +267,14 @@ class InMemoryReviewLifecycleStore implements ReviewLifecycleStore {
     );
   }
 
+  async countCompletedReviewRuns(changeRequestId: string): Promise<number> {
+    return [...this.reviewRuns.values()].filter(
+      (reviewRun) =>
+        reviewRun.changeRequestId === changeRequestId &&
+        (reviewRun.status === "published" || reviewRun.status === "skipped"),
+    ).length;
+  }
+
   async markPublishedCommentsResolved(input: {
     providerThreadIds: string[];
     resolvedAt: string;

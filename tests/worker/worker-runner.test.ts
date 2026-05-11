@@ -110,6 +110,14 @@ class FakeReviewLifecycleService {
     return null;
   }
 
+  completedReviewCount = 0;
+  countCompletedReviewsCalls: string[] = [];
+
+  async countCompletedReviews(changeRequestId: string): Promise<number> {
+    this.countCompletedReviewsCalls.push(changeRequestId);
+    return this.completedReviewCount;
+  }
+
   async markPublishedCommentsResolved(
     providerThreadIds: string[],
   ): Promise<number> {
@@ -1797,6 +1805,204 @@ describe("WorkerRunner", () => {
           }),
         }),
       ]),
+    );
+  });
+
+  it("applies the round-aware severity floor and logs the drop", async () => {
+    const queue = new FakeQueueScheduler();
+    const lifecycle = new FakeReviewLifecycleService();
+    lifecycle.completedReviewCount = 3; // round ≥ 2 → floor "medium"
+    const planner = new FakeReviewPlanner();
+    const logger = new FakeLogger();
+    const publishCalls: Array<Record<string, unknown>> = [];
+    let observedReviewInput: { priorReviewRoundCount?: number } | undefined;
+
+    queue.nextJobs = [
+      {
+        id: "job_floor",
+        type: "review_requested",
+        tenantId: "github-installation:123456",
+        repositoryId: "github:99",
+        changeRequestId: "github:99:42",
+        dedupeKey: "github:99:42:quick",
+        priority: 100,
+        status: "running",
+        attempts: 0,
+        maxAttempts: 3,
+        payload: {
+          installationId: "123456",
+          repository: { owner: "rubenspessoa", name: "nitpickr" },
+          pullNumber: 42,
+          mode: "quick",
+          trigger: {
+            type: "manual_command",
+            command: "review",
+            actorLogin: "ruben",
+          },
+        },
+        createdAt: new Date("2026-03-09T10:00:00.000Z"),
+        scheduledAt: new Date("2026-03-09T10:00:00.000Z"),
+        startedAt: new Date("2026-03-09T10:00:01.000Z"),
+        completedAt: null,
+        workerId: "worker_1",
+        lastError: null,
+      },
+    ];
+
+    const runner = new WorkerRunner({
+      logger,
+      queueScheduler: queue,
+      githubAdapter: {
+        async fetchChangeRequestContext() {
+          return {
+            tenantId: "github-installation:123456",
+            installationId: "123456",
+            repositoryId: "github:99",
+            repository: { owner: "rubenspessoa", name: "nitpickr" },
+            changeRequest: {
+              id: "github:99:42",
+              tenantId: "github-installation:123456",
+              installationId: "123456",
+              repositoryId: "github:99",
+              provider: "github" as const,
+              number: 42,
+              title: "Round 4 PR",
+              baseSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              status: "open" as const,
+              authorLogin: "ruben",
+            },
+            files: [
+              {
+                path: "src/x.ts",
+                additions: 1,
+                deletions: 0,
+                status: "modified" as const,
+                patch: "@@ -1 +1 @@\n+x",
+                previousPath: null,
+              },
+            ],
+            comments: [],
+          };
+        },
+      },
+      instructionBundleLoader: {
+        async loadForReview() {
+          return {
+            config: {
+              ...testRepositoryConfig,
+              review: {
+                ...testRepositoryConfig.review,
+                maxComments: 10,
+                maxAutoComments: 10,
+              },
+            },
+            documents: [],
+            combinedText: "",
+          };
+        },
+      },
+      memoryService: {
+        async getRelevantMemories() {
+          return [];
+        },
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
+      },
+      reviewPlanner: planner,
+      reviewLifecycle: lifecycle,
+      reviewEngine: {
+        async review(input) {
+          observedReviewInput = input as { priorReviewRoundCount?: number };
+          return {
+            summary: "summary",
+            mermaid: "flowchart TD\nA --> B",
+            findings: [
+              {
+                path: "src/x.ts",
+                line: 1,
+                findingType: "safe_suggestion",
+                severity: "low",
+                category: "style",
+                title: "nit",
+                body: "minor",
+                fixPrompt: "fix at src/x.ts:1",
+              },
+              {
+                path: "src/x.ts",
+                line: 2,
+                findingType: "bug",
+                severity: "high",
+                category: "correctness",
+                title: "real bug",
+                body: "important",
+                fixPrompt: "fix at src/x.ts:2",
+              },
+            ],
+          };
+        },
+      },
+      publisher: {
+        buildInlineComments() {
+          return [];
+        },
+        async publish(input) {
+          publishCalls.push({ type: "publish", ...input });
+          return { reviewId: "review_floor" };
+        },
+      },
+      statusPublisher: {
+        async markPending() {
+          return "check-run-floor";
+        },
+        async markPublished() {},
+        async markSkipped() {},
+        async markFailed() {
+          return undefined;
+        },
+      },
+    });
+
+    const processed = await runner.runOnce({
+      workerId: "worker_1",
+      perTenantCap: 1,
+    });
+
+    expect(processed).toBe(true);
+    expect(observedReviewInput?.priorReviewRoundCount).toBe(3);
+
+    // The published result must have had the "low"-severity finding stripped.
+    const publish = publishCalls.find((call) => call.type === "publish");
+    const findings = (
+      (publish?.result as { findings: Array<{ severity: string }> }) ?? {
+        findings: [],
+      }
+    ).findings;
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.severity).toBe("high");
+
+    const floorEntry = logger.entries.find(
+      (entry) => entry.message === "severity_floor.applied",
+    );
+    expect(floorEntry).toBeDefined();
+    expect(floorEntry?.level).toBe("info");
+    const floorFields = floorEntry?.fields as
+      | {
+          priorReviewRoundCount: number;
+          floor: string;
+          droppedFindingCount: number;
+          droppedSeverities: string[];
+        }
+      | undefined;
+    expect(floorFields?.priorReviewRoundCount).toBe(3);
+    expect(floorFields?.floor).toBe("medium");
+    expect(floorFields?.droppedFindingCount).toBe(1);
+    // Order-insensitive: assert membership and length separately so future
+    // multi-finding cases don't depend on iteration order.
+    expect(floorFields?.droppedSeverities).toHaveLength(1);
+    expect(floorFields?.droppedSeverities).toEqual(
+      expect.arrayContaining(["low"]),
     );
   });
 });

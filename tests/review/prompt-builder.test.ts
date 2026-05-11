@@ -238,6 +238,66 @@ describe("PromptBuilder", () => {
     expect(prompt.user).not.toContain("Full file at HEAD");
   });
 
+  it("renders the review round and floor instructions in the prompt", () => {
+    const builder = new PromptBuilder();
+    const prompt = builder.build({
+      changeRequest: { title: "x", number: 1 },
+      chunk: {
+        index: 0,
+        total: 1,
+        files: [
+          {
+            path: "a.ts",
+            patch: "@@ -1 +1 @@\n+x",
+            additions: 1,
+            deletions: 0,
+          },
+        ],
+      },
+      instructionText: "",
+      memory: [],
+      commentBudget: 1,
+      priorReviewRoundCount: 3,
+    });
+
+    expect(prompt.user).toContain(
+      "Review round: 3 (count of prior completed reviews on this PR)",
+    );
+    expect(prompt.system).toContain(
+      "When 'Review round' is 2 or higher, only raise findings of severity 'medium' or above.",
+    );
+    expect(prompt.system).toContain(
+      "When 'Review round' is 4 or higher, only raise findings of severity 'high' or 'critical'.",
+    );
+    expect(prompt.system).toContain(
+      "intended behavior to prevent nit cascades",
+    );
+  });
+
+  it("defaults review round to 0 when priorReviewRoundCount is omitted", () => {
+    const builder = new PromptBuilder();
+    const prompt = builder.build({
+      changeRequest: { title: "x", number: 2 },
+      chunk: {
+        index: 0,
+        total: 1,
+        files: [
+          {
+            path: "a.ts",
+            patch: "@@ -1 +1 @@\n+x",
+            additions: 1,
+            deletions: 0,
+          },
+        ],
+      },
+      instructionText: "",
+      memory: [],
+      commentBudget: 1,
+    });
+
+    expect(prompt.user).toContain("Review round: 0");
+  });
+
   it("rejects empty review chunks", () => {
     const builder = new PromptBuilder();
 

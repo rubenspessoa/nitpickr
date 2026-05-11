@@ -62,6 +62,7 @@ export interface ReviewLifecycleStore {
   findLatestCompletedReviewRun(
     changeRequestId: string,
   ): Promise<PersistedReviewRun | null>;
+  countCompletedReviewRuns(changeRequestId: string): Promise<number>;
   markPublishedCommentsResolved(input: {
     providerThreadIds: string[];
     resolvedAt: string;
@@ -171,6 +172,14 @@ export class ReviewLifecycleService {
     changeRequestId: string,
   ): Promise<PersistedReviewRun | null> {
     return this.#store.findLatestCompletedReviewRun(changeRequestId);
+  }
+
+  /**
+   * Count of prior `published` / `skipped` review runs for the change request.
+   * Used to feed the round-aware severity floor — see severity-floor.ts.
+   */
+  async countCompletedReviews(changeRequestId: string): Promise<number> {
+    return this.#store.countCompletedReviewRuns(changeRequestId);
   }
 
   async markPublishedCommentsResolved(

@@ -37,6 +37,13 @@ export interface PromptBuilderInput {
     path?: string;
   }>;
   priorThreads?: PriorThread[];
+  /**
+   * Count of prior completed (`published` or `skipped`) review runs for this
+   * PR. Surfaced to the LLM so it can self-restrain on long-iteration PRs and
+   * skip raising low-severity findings that the server-side severity floor
+   * would drop anyway. See severity-floor.ts.
+   */
+  priorReviewRoundCount?: number;
   commentBudget: number;
 }
 
@@ -117,11 +124,15 @@ export class PromptBuilder {
         "When 'Prior nitpickr threads on this PR' is present, do not re-raise findings represented by an open, resolved, or stale prior thread at the same path/line/category.",
         "Do not raise findings for dismissed threads unless the new diff materially changes the situation.",
         "Stay consistent with prior recommendations. If you now believe a prior recommendation was wrong, say so explicitly in the body and reference the prior thread's title.",
+        "When 'Review round' is 2 or higher, only raise findings of severity 'medium' or above.",
+        "When 'Review round' is 4 or higher, only raise findings of severity 'high' or 'critical'.",
+        "Skipping a low-severity finding because of the review-round rule is not a regression — it is the intended behavior to prevent nit cascades on long-iteration PRs.",
       ].join("\n"),
       user: [
         `Pull request #${input.changeRequest.number}: ${input.changeRequest.title}`,
         `Chunk ${input.chunk.index + 1} of ${input.chunk.total}`,
         `Comment budget for this review: ${input.commentBudget}`,
+        `Review round: ${input.priorReviewRoundCount ?? 0} (count of prior completed reviews on this PR)`,
         "",
         "Repository instructions:",
         input.instructionText.trim(),

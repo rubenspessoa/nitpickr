@@ -8,29 +8,7 @@
 
 import * as Sentry from "@sentry/node";
 
-const SENSITIVE_KEY_PATTERN =
-  /api[_-]?key|private[_-]?key|webhook[_-]?secret|authorization|secret/i;
-
-function redactObject(value: unknown, depth = 0): unknown {
-  if (depth > 6) {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => redactObject(entry, depth + 1));
-  }
-  if (value && typeof value === "object") {
-    const result: Record<string, unknown> = {};
-    for (const [key, raw] of Object.entries(value)) {
-      if (SENSITIVE_KEY_PATTERN.test(key)) {
-        result[key] = "[redacted]";
-        continue;
-      }
-      result[key] = redactObject(raw, depth + 1);
-    }
-    return result;
-  }
-  return value;
-}
+import { redactSensitive } from "./redact-sensitive.js";
 
 function parseTracesSampleRate(value: string | undefined): number {
   if (value === undefined || value.trim().length === 0) {
@@ -73,13 +51,15 @@ if (!dsn) {
     ],
     beforeSend(event) {
       if (event.extra) {
-        event.extra = redactObject(event.extra) as typeof event.extra;
+        event.extra = redactSensitive(event.extra) as typeof event.extra;
       }
       if (event.contexts) {
-        event.contexts = redactObject(event.contexts) as typeof event.contexts;
+        event.contexts = redactSensitive(
+          event.contexts,
+        ) as typeof event.contexts;
       }
       if (event.request?.headers) {
-        event.request.headers = redactObject(
+        event.request.headers = redactSensitive(
           event.request.headers,
         ) as typeof event.request.headers;
       }

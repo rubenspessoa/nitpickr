@@ -8,6 +8,7 @@ export interface PromptPayloadFile {
   additions: number;
   deletions: number;
   patch: string | null;
+  fileContent?: string | null;
 }
 
 export interface PromptPayloadMemoryEntry {
@@ -29,6 +30,8 @@ interface ScopePromptBudgets {
   maxPrimaryPatchCharsPerFile: number;
   maxContextFiles: number;
   maxContextPatchCharsTotal: number;
+  maxPrimaryFileContentCharsPerFile: number;
+  maxPrimaryFileContentCharsTotal: number;
 }
 
 interface SharedPromptBudgets {
@@ -43,12 +46,16 @@ const balancedScopeBudgets: Record<ReviewScope, ScopePromptBudgets> = {
     maxPrimaryPatchCharsPerFile: 6_000,
     maxContextFiles: 20,
     maxContextPatchCharsTotal: 0,
+    maxPrimaryFileContentCharsPerFile: 30_000,
+    maxPrimaryFileContentCharsTotal: 120_000,
   },
   full_pr: {
     maxPrimaryPatchCharsTotal: 40_000,
     maxPrimaryPatchCharsPerFile: 8_000,
     maxContextFiles: 30,
     maxContextPatchCharsTotal: 0,
+    maxPrimaryFileContentCharsPerFile: 30_000,
+    maxPrimaryFileContentCharsTotal: 180_000,
   },
 };
 
@@ -284,6 +291,40 @@ function compactPrimaryFiles(
   });
 }
 
+function compactPrimaryFileContents(
+  files: PromptPayloadFile[],
+  budgets: ScopePromptBudgets,
+): PromptPayloadFile[] {
+  let remainingBudget = budgets.maxPrimaryFileContentCharsTotal;
+
+  return files.map((file) => {
+    if (file.fileContent === undefined || file.fileContent === null) {
+      return file;
+    }
+
+    if (remainingBudget <= 0) {
+      return { ...file, fileContent: null };
+    }
+
+    const perFileCap = Math.min(
+      budgets.maxPrimaryFileContentCharsPerFile,
+      remainingBudget,
+    );
+    if (perFileCap <= 0) {
+      return { ...file, fileContent: null };
+    }
+
+    if (file.fileContent.length <= perFileCap) {
+      remainingBudget -= file.fileContent.length;
+      return file;
+    }
+
+    const truncated = truncateTextHead(file.fileContent, perFileCap);
+    remainingBudget -= truncated.length;
+    return { ...file, fileContent: truncated };
+  });
+}
+
 function compactContextFiles(
   contextFiles: PromptPayloadFile[] | undefined,
   budgets: ScopePromptBudgets,
@@ -383,8 +424,9 @@ export class PromptPayloadOptimizer {
     const optimizedContextFiles = input.contextFiles
       ? compactContextFiles(input.contextFiles, scopeBudgets)
       : undefined;
+    const compactedPatches = compactPrimaryFiles(input.files, scopeBudgets);
     return {
-      files: compactPrimaryFiles(input.files, scopeBudgets),
+      files: compactPrimaryFileContents(compactedPatches, scopeBudgets),
       ...(optimizedContextFiles === undefined
         ? {}
         : { contextFiles: optimizedContextFiles }),

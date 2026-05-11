@@ -1,3 +1,14 @@
+export type PriorThreadState = "open" | "resolved" | "dismissed" | "stale";
+
+export interface PriorThread {
+  path: string;
+  line: number;
+  state: PriorThreadState;
+  title: string;
+  fingerprint: string;
+  userReply?: string;
+}
+
 export interface PromptBuilderInput {
   changeRequest: {
     title: string;
@@ -11,6 +22,7 @@ export interface PromptBuilderInput {
       patch: string | null;
       additions: number;
       deletions: number;
+      fileContent?: string | null;
     }>;
   };
   contextFiles?: Array<{
@@ -24,12 +36,52 @@ export interface PromptBuilderInput {
     summary: string;
     path?: string;
   }>;
+  priorThreads?: PriorThread[];
   commentBudget: number;
 }
 
 export interface ReviewPrompt {
   system: string;
   user: string;
+}
+
+const PRIOR_THREAD_STATE_ORDER: PriorThreadState[] = [
+  "open",
+  "dismissed",
+  "resolved",
+  "stale",
+];
+
+function renderPriorThreads(threads: PriorThread[] | undefined): string {
+  if (!threads || threads.length === 0) {
+    return "None";
+  }
+
+  const grouped = new Map<PriorThreadState, PriorThread[]>();
+  for (const thread of threads) {
+    const bucket = grouped.get(thread.state) ?? [];
+    bucket.push(thread);
+    grouped.set(thread.state, bucket);
+  }
+
+  const sections: string[] = [];
+  for (const state of PRIOR_THREAD_STATE_ORDER) {
+    const bucket = grouped.get(state);
+    if (!bucket || bucket.length === 0) {
+      continue;
+    }
+
+    const lines = bucket.map((thread) => {
+      const head = `- ${thread.path}:${thread.line} — ${thread.title}`;
+      if (thread.userReply && thread.userReply.trim().length > 0) {
+        return `${head}\n  user reply: ${thread.userReply.trim()}`;
+      }
+      return head;
+    });
+    sections.push(`${state}:\n${lines.join("\n")}`);
+  }
+
+  return sections.join("\n");
 }
 
 export class PromptBuilder {
@@ -61,6 +113,10 @@ export class PromptBuilder {
         "For flowcharts, return nodes [{ id, label }] and edges [{ from, to, label? }].",
         "Keep the diagram GitHub-safe, compact, and limited to the most important flow.",
         "Only report actionable review comments that matter for correctness, security, performance, maintainability, or testing.",
+        "When 'Full file at HEAD' is present, treat it as context only — every finding must still reference a line that appears in the patch.",
+        "When 'Prior nitpickr threads on this PR' is present, do not re-raise findings represented by an open, resolved, or stale prior thread at the same path/line/category.",
+        "Do not raise findings for dismissed threads unless the new diff materially changes the situation.",
+        "Stay consistent with prior recommendations. If you now believe a prior recommendation was wrong, say so explicitly in the body and reference the prior thread's title.",
       ].join("\n"),
       user: [
         `Pull request #${input.changeRequest.number}: ${input.changeRequest.title}`,
@@ -79,6 +135,9 @@ export class PromptBuilder {
               )
               .join("\n"),
         "",
+        "Prior nitpickr threads on this PR:",
+        renderPriorThreads(input.priorThreads),
+        "",
         "Current PR context:",
         input.contextFiles === undefined || input.contextFiles.length === 0
           ? "Only the primary review scope is available."
@@ -91,15 +150,22 @@ export class PromptBuilder {
         "",
         "Primary review scope:",
         "Changed files:",
-        ...input.chunk.files.map((file) =>
-          [
+        ...input.chunk.files.map((file) => {
+          const sections = [
             `Path: ${file.path}`,
             `Additions: ${file.additions}`,
             `Deletions: ${file.deletions}`,
             "Patch:",
             file.patch ?? "Patch unavailable.",
-          ].join("\n"),
-        ),
+          ];
+          if (file.fileContent !== undefined && file.fileContent !== null) {
+            sections.push(
+              "Full file at HEAD (for context only — review against the patch):",
+              file.fileContent,
+            );
+          }
+          return sections.join("\n");
+        }),
       ].join("\n"),
     };
   }

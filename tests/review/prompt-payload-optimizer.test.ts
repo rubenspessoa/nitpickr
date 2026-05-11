@@ -269,4 +269,62 @@ describe("PromptPayloadOptimizer", () => {
       ),
     );
   });
+
+  it("preserves patches and drops file content first when over budget", () => {
+    const optimizer = new PromptPayloadOptimizer();
+    const oversizedContent = "a".repeat(200_000);
+    const optimized = optimizer.optimize({
+      scope: "commit_delta",
+      mode: "balanced",
+      files: [
+        {
+          path: "src/big.ts",
+          additions: 5,
+          deletions: 0,
+          patch: "@@ -1 +1,2 @@\n+keep this",
+          fileContent: oversizedContent,
+        },
+        {
+          path: "src/small.ts",
+          additions: 1,
+          deletions: 0,
+          patch: "@@ -1 +1,2 @@\n+also keep",
+          fileContent: "ok",
+        },
+      ],
+      instructionText: "",
+      memory: [],
+    });
+
+    const big = optimized.files.find((file) => file.path === "src/big.ts");
+    const small = optimized.files.find((file) => file.path === "src/small.ts");
+    expect(big?.patch).toBe("@@ -1 +1,2 @@\n+keep this");
+    expect(small?.patch).toBe("@@ -1 +1,2 @@\n+also keep");
+    expect(big?.fileContent?.length).toBeLessThan(oversizedContent.length);
+    expect(big?.fileContent?.length).toBeGreaterThan(0);
+    expect(small?.fileContent).toBe("ok");
+  });
+
+  it("passes through fileContent untouched in 'off' mode", () => {
+    const optimizer = new PromptPayloadOptimizer();
+    const optimized = optimizer.optimize({
+      scope: "commit_delta",
+      mode: "off",
+      files: [
+        {
+          path: "src/a.ts",
+          additions: 1,
+          deletions: 0,
+          patch: "@@ -1 +1 @@\n+x",
+          fileContent: "hello",
+        },
+      ],
+      instructionText: "",
+      memory: [],
+    });
+
+    expect(
+      optimized.files.find((file) => file.path === "src/a.ts")?.fileContent,
+    ).toBe("hello");
+  });
 });

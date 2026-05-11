@@ -2,6 +2,7 @@ import { type ReviewRun, parseReviewTrigger } from "../domain/types.js";
 import type { ReviewFeedbackService } from "../feedback/review-feedback-service.js";
 import type { InstructionBundle } from "../instructions/instruction-loader.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
+import type { DiscussionAcknowledgmentStore } from "../memory/discussion-acknowledgment-store.js";
 import type { MemoryEntry, MemoryService } from "../memory/memory-service.js";
 import type {
   GitHubAdapter,
@@ -10,6 +11,10 @@ import type {
 import type { ReviewPublisher } from "../publisher/review-publisher.js";
 import type { ReviewStatusPublisher } from "../publisher/review-status-publisher.js";
 import type { QueueJob, QueueScheduler } from "../queue/queue-scheduler.js";
+import type {
+  PriorThread,
+  PriorThreadState,
+} from "../review/prompt-builder.js";
 import type { PromptOptimizationMode } from "../review/prompt-payload-optimizer.js";
 import type {
   ReviewEngine,
@@ -134,6 +139,29 @@ function prependSummaryReason(
   };
 }
 
+const MEMORY_ROLLUP_LIMIT = 5;
+
+function prependMemoryRollup(
+  result: ReviewEngineResult,
+  memories: MemoryEntry[],
+): ReviewEngineResult {
+  if (memories.length === 0) {
+    return result;
+  }
+
+  const lines = memories
+    .slice(0, MEMORY_ROLLUP_LIMIT)
+    .map((memory) => `- ${memory.summary}`);
+  const rollup = ["**What nitpickr has learned about this repo:**", ...lines]
+    .join("\n")
+    .trim();
+
+  return {
+    ...result,
+    summary: `${rollup}\n\n${result.summary}`.trim(),
+  };
+}
+
 function determineReviewScope(
   trigger: ReturnType<typeof parseReviewTrigger>,
 ): ReviewRun["scope"] {
@@ -217,6 +245,25 @@ async function enrichPublishedCommentsWithProviderMetadata(
   });
 }
 
+function isThreadStale(input: {
+  thread: {
+    path: string;
+    fingerprint: string;
+    isResolved: boolean;
+  };
+  comparedPaths: Set<string>;
+  currentFingerprints: Set<string>;
+}): boolean {
+  const { thread, comparedPaths, currentFingerprints } = input;
+  if (thread.isResolved) {
+    return false;
+  }
+  if (!comparedPaths.has(thread.path)) {
+    return false;
+  }
+  return !currentFingerprints.has(thread.fingerprint);
+}
+
 function findStaleThreadIds(input: {
   comparedPaths: string[];
   currentFingerprints: Set<string>;
@@ -230,13 +277,227 @@ function findStaleThreadIds(input: {
   const comparedPathSet = new Set(input.comparedPaths);
 
   return input.threads
-    .filter(
-      (thread) =>
-        !thread.isResolved &&
-        comparedPathSet.has(thread.path) &&
-        !input.currentFingerprints.has(thread.fingerprint),
+    .filter((thread) =>
+      isThreadStale({
+        thread,
+        comparedPaths: comparedPathSet,
+        currentFingerprints: input.currentFingerprints,
+      }),
     )
     .map((thread) => thread.threadId);
+}
+
+const PRIOR_THREAD_TITLE_MAX_LENGTH = 120;
+const PRIOR_THREAD_REPLY_MAX_LENGTH = 240;
+
+function summarizeThreadTitle(body: string): string {
+  const flattened = body
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]*`/g, " ")
+    .replace(/\[(.*?)\]\(.*?\)/g, "$1")
+    .replace(/[*_~>#-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (flattened.length <= PRIOR_THREAD_TITLE_MAX_LENGTH) {
+    return flattened;
+  }
+  return `${flattened.slice(0, PRIOR_THREAD_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
+function summarizeThreadReply(body: string): string {
+  const flattened = body.replace(/\s+/g, " ").trim();
+  if (flattened.length <= PRIOR_THREAD_REPLY_MAX_LENGTH) {
+    return flattened;
+  }
+  return `${flattened.slice(0, PRIOR_THREAD_REPLY_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
+function formatAcknowledgmentReply(input: {
+  acknowledgments: string[];
+  savedEntries: Array<{ summary: string; supersededBy: string | null }>;
+}): string {
+  const lines: string[] = [];
+  const intro =
+    input.acknowledgments.find(
+      (text) => typeof text === "string" && text.trim().length > 0,
+    ) ?? "Thanks — noted.";
+  lines.push(intro);
+
+  if (input.savedEntries.length > 0) {
+    lines.push("");
+    lines.push("**What I'll remember:**");
+    for (const entry of input.savedEntries) {
+      lines.push(`- ${entry.summary}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+const MAX_FILE_CONTENT_BYTES = 200_000;
+const FILE_CONTENT_FETCH_CONCURRENCY = 6;
+
+async function fetchPrimaryFileContents(input: {
+  files: Array<{ path: string; patch: string | null }>;
+  headSha: string;
+  installationId: string;
+  repository: { owner: string; name: string };
+  getFileContent: (request: {
+    installationId: string;
+    repository: { owner: string; name: string };
+    path: string;
+    ref: string;
+  }) => Promise<string | null>;
+  logger: Logger;
+}): Promise<Map<string, string>> {
+  const contents = new Map<string, string>();
+  const queue = [...input.files];
+  const workers: Array<Promise<void>> = [];
+
+  const runNext = async (): Promise<void> => {
+    while (queue.length > 0) {
+      const file = queue.shift();
+      if (!file) {
+        return;
+      }
+      try {
+        const content = await input.getFileContent({
+          installationId: input.installationId,
+          repository: input.repository,
+          path: file.path,
+          ref: input.headSha,
+        });
+        if (content === null) {
+          continue;
+        }
+        if (Buffer.byteLength(content, "utf8") > MAX_FILE_CONTENT_BYTES) {
+          input.logger.debug(
+            "Skipping full file content because it exceeds the size cap.",
+            { path: file.path, sha: input.headSha },
+          );
+          continue;
+        }
+        contents.set(file.path, content);
+      } catch (error) {
+        input.logger.warn("Failed to fetch full file content for review.", {
+          path: file.path,
+          sha: input.headSha,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  const concurrency = Math.min(
+    FILE_CONTENT_FETCH_CONCURRENCY,
+    Math.max(1, input.files.length),
+  );
+  for (let workerIndex = 0; workerIndex < concurrency; workerIndex += 1) {
+    workers.push(runNext());
+  }
+  await Promise.all(workers);
+  return contents;
+}
+
+function extractPatchLineRanges(patch: string | null): Set<number> {
+  const lines = new Set<number>();
+  if (!patch) {
+    return lines;
+  }
+  const hunkRegex = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm;
+  let match: RegExpExecArray | null = hunkRegex.exec(patch);
+  while (match !== null) {
+    const start = Number.parseInt(match[1] ?? "0", 10);
+    const count = match[2] === undefined ? 1 : Number.parseInt(match[2], 10);
+    if (Number.isFinite(start) && Number.isFinite(count)) {
+      for (let offset = 0; offset < count; offset += 1) {
+        lines.add(start + offset);
+      }
+    }
+    match = hunkRegex.exec(patch);
+  }
+  return lines;
+}
+
+function buildPriorThreads(input: {
+  existingThreads: Array<{
+    threadId: string;
+    providerCommentId: string;
+    path: string;
+    line: number;
+    fingerprint: string;
+    isResolved: boolean;
+    body: string;
+    reactionSummary: { positiveCount: number; negativeCount: number };
+  }>;
+  reviewedFiles: Array<{ path: string; patch: string | null }>;
+  discussionComments: Array<{
+    authorLogin: string;
+    body: string;
+    path: string | null;
+    line: number | null;
+    createdAt: string;
+  }>;
+}): PriorThread[] {
+  const reviewedPathSet = new Set(input.reviewedFiles.map((f) => f.path));
+  const changedLinesByPath = new Map<string, Set<number>>();
+  for (const file of input.reviewedFiles) {
+    changedLinesByPath.set(file.path, extractPatchLineRanges(file.patch));
+  }
+
+  const userRepliesByKey = new Map<
+    string,
+    { body: string; createdAt: string }
+  >();
+  for (const comment of input.discussionComments) {
+    if (
+      comment.path === null ||
+      comment.line === null ||
+      comment.body.trim().length === 0
+    ) {
+      continue;
+    }
+    if (comment.authorLogin.toLowerCase().endsWith("[bot]")) {
+      continue;
+    }
+    const key = `${comment.path}:${comment.line}`;
+    const existing = userRepliesByKey.get(key);
+    if (!existing || existing.createdAt < comment.createdAt) {
+      userRepliesByKey.set(key, {
+        body: comment.body,
+        createdAt: comment.createdAt,
+      });
+    }
+  }
+
+  return input.existingThreads.map((thread) => {
+    let state: PriorThreadState;
+    if (thread.isResolved) {
+      state = "resolved";
+    } else if (
+      reviewedPathSet.has(thread.path) &&
+      !(changedLinesByPath.get(thread.path)?.has(thread.line) ?? false)
+    ) {
+      state = "stale";
+    } else if (thread.reactionSummary.negativeCount > 0) {
+      state = "dismissed";
+    } else {
+      state = "open";
+    }
+
+    const reply = userRepliesByKey.get(`${thread.path}:${thread.line}`);
+    const priorThread: PriorThread = {
+      path: thread.path,
+      line: thread.line,
+      state,
+      title: summarizeThreadTitle(thread.body),
+      fingerprint: thread.fingerprint,
+    };
+    if (reply) {
+      priorThread.userReply = summarizeThreadReply(reply.body);
+    }
+    return priorThread;
+  });
 }
 
 function categoryFromFingerprint(
@@ -333,11 +594,51 @@ function parseMemoryJobPayload(payload: QueueJob["payload"]): {
     body: string;
     path: string | null;
   }>;
+  acknowledgment: {
+    installationId: string;
+    repository: { owner: string; name: string };
+    pullNumber: number;
+    providerCommentId: string;
+    sourceKind: "issue_comment" | "review_comment";
+    commentNumericId: number;
+  } | null;
 } {
   const discussions = payload.discussions;
 
   if (!Array.isArray(discussions)) {
     throw new Error("memory job discussions must be an array.");
+  }
+
+  const ackRaw = payload.acknowledgment as Record<string, unknown> | undefined;
+  let acknowledgment: ReturnType<
+    typeof parseMemoryJobPayload
+  >["acknowledgment"] = null;
+  if (ackRaw && typeof ackRaw === "object") {
+    const repo = ackRaw.repository as Record<string, unknown> | undefined;
+    if (
+      typeof ackRaw.installationId === "string" &&
+      ackRaw.installationId.trim().length > 0 &&
+      repo &&
+      typeof repo.owner === "string" &&
+      typeof repo.name === "string" &&
+      typeof ackRaw.pullNumber === "number" &&
+      Number.isInteger(ackRaw.pullNumber) &&
+      typeof ackRaw.providerCommentId === "string" &&
+      ackRaw.providerCommentId.length > 0 &&
+      (ackRaw.sourceKind === "issue_comment" ||
+        ackRaw.sourceKind === "review_comment") &&
+      typeof ackRaw.commentNumericId === "number" &&
+      Number.isInteger(ackRaw.commentNumericId)
+    ) {
+      acknowledgment = {
+        installationId: ackRaw.installationId,
+        repository: { owner: repo.owner, name: repo.name },
+        pullNumber: ackRaw.pullNumber,
+        providerCommentId: ackRaw.providerCommentId,
+        sourceKind: ackRaw.sourceKind,
+        commentNumericId: ackRaw.commentNumericId,
+      };
+    }
   }
 
   return {
@@ -362,6 +663,7 @@ function parseMemoryJobPayload(payload: QueueJob["payload"]): {
             : (discussion.path ?? null),
       };
     }),
+    acknowledgment,
   };
 }
 
@@ -538,6 +840,8 @@ export interface WorkerRunnerDependencies {
         GitHubAdapter,
         | "comparePullRequestRange"
         | "createIssueComment"
+        | "createIssueCommentReaction"
+        | "getFileContent"
         | "listNitpickrReviewThreads"
         | "replyToReviewComment"
         | "resolveReviewThread"
@@ -547,7 +851,10 @@ export interface WorkerRunnerDependencies {
   memoryService: Pick<
     MemoryService,
     "getRelevantMemories" | "ingestDiscussion"
-  >;
+  > &
+    Partial<Pick<MemoryService, "selectMemoriesForReview">>;
+  discussionAcknowledgmentStore?: DiscussionAcknowledgmentStore;
+  now?: () => Date;
   feedbackService?: Pick<
     ReviewFeedbackService,
     "getSignals" | "recordOutcome" | "syncCommentReactions"
@@ -590,6 +897,8 @@ export class WorkerRunner {
     ReviewStatusPublisher,
     "markFailed" | "markPending" | "markPublished" | "markSkipped"
   >;
+  readonly #discussionAcknowledgmentStore: DiscussionAcknowledgmentStore | null;
+  readonly #now: () => Date;
 
   constructor(input: WorkerRunnerDependencies) {
     this.#logger = (input.logger ?? noopLogger).child({
@@ -608,6 +917,9 @@ export class WorkerRunner {
     this.#reviewEngine = input.reviewEngine;
     this.#publisher = input.publisher;
     this.#statusPublisher = input.statusPublisher ?? noopStatusPublisher;
+    this.#discussionAcknowledgmentStore =
+      input.discussionAcknowledgmentStore ?? null;
+    this.#now = input.now ?? (() => new Date());
   }
 
   async runOnce(input: {
@@ -833,12 +1145,27 @@ export class WorkerRunner {
         }
       }
 
-      const memories = await this.#memoryService.getRelevantMemories({
-        tenantId: job.tenantId,
-        repositoryId: job.repositoryId,
-        paths: reviewPlan.files.map((file) => file.path),
-        limit: Math.max(reviewPlan.commentBudget, 1),
-      });
+      const memoryCharBudget = Math.max(reviewPlan.commentBudget * 200, 1_000);
+      const reviewContext = [
+        context.changeRequest.title,
+        ...reviewPlan.files.map((file) => file.path),
+      ]
+        .join("\n")
+        .slice(0, 2_000);
+      const memories = this.#memoryService.selectMemoriesForReview
+        ? await this.#memoryService.selectMemoriesForReview({
+            tenantId: job.tenantId,
+            repositoryId: job.repositoryId,
+            reviewedPaths: reviewPlan.files.map((file) => file.path),
+            reviewContext,
+            charBudget: memoryCharBudget,
+          })
+        : await this.#memoryService.getRelevantMemories({
+            tenantId: job.tenantId,
+            repositoryId: job.repositoryId,
+            paths: reviewPlan.files.map((file) => file.path),
+            limit: Math.max(reviewPlan.commentBudget, 1),
+          });
       const existingNitpickrThreads = this.#githubAdapter
         .listNitpickrReviewThreads
         ? await this.#githubAdapter.listNitpickrReviewThreads({
@@ -870,6 +1197,31 @@ export class WorkerRunner {
           })
         : [];
 
+      const priorThreads = buildPriorThreads({
+        existingThreads: existingNitpickrThreads,
+        reviewedFiles: reviewPlan.files.map((file) => ({
+          path: file.path,
+          patch: file.patch,
+        })),
+        discussionComments: context.comments,
+      });
+
+      const fileContentsByPath = this.#githubAdapter.getFileContent
+        ? await fetchPrimaryFileContents({
+            files: reviewPlan.files.map((file) => ({
+              path: file.path,
+              patch: file.patch,
+            })),
+            headSha: context.changeRequest.headSha,
+            installationId: payload.installationId,
+            repository: payload.repository,
+            getFileContent: this.#githubAdapter.getFileContent.bind(
+              this.#githubAdapter,
+            ),
+            logger: this.#logger,
+          })
+        : new Map<string, string>();
+
       const diagnostics =
         reviewPlan.files.length === 0
           ? {
@@ -894,7 +1246,12 @@ export class WorkerRunner {
                     title: context.changeRequest.title,
                     number: context.changeRequest.number,
                   },
-                  files: reviewPlan.files,
+                  files: reviewPlan.files.map((file) => {
+                    const fileContent = fileContentsByPath.get(file.path);
+                    return fileContent === undefined
+                      ? file
+                      : { ...file, fileContent };
+                  }),
                   scope: reviewScope,
                   optimizationMode: this.#promptOptimizationMode,
                   instructionText: this.#renderInstructionText(
@@ -913,6 +1270,7 @@ export class WorkerRunner {
                   ),
                   commentBudget: reviewPlan.commentBudget,
                   ...(feedbackSignals.length === 0 ? {} : { feedbackSignals }),
+                  ...(priorThreads.length === 0 ? {} : { priorThreads }),
                   ...(isAutomaticTrigger(payload.trigger)
                     ? {
                         publishableFindingTypes: [
@@ -952,11 +1310,14 @@ export class WorkerRunner {
               }
             })();
       const rawResult = diagnostics.result;
-      const result = prependSummaryReason(
-        reviewPlan.allowSuggestedChanges
-          ? rawResult
-          : stripSuggestedChanges(rawResult),
-        reviewPlan.summaryOnlyReason,
+      const result = prependMemoryRollup(
+        prependSummaryReason(
+          reviewPlan.allowSuggestedChanges
+            ? rawResult
+            : stripSuggestedChanges(rawResult),
+          reviewPlan.summaryOnlyReason,
+        ),
+        memories,
       );
       const publishableResult = this.#reviewEngine.reviewWithDiagnostics
         ? result
@@ -1331,14 +1692,99 @@ export class WorkerRunner {
 
   async #processMemoryJob(job: QueueJob): Promise<void> {
     const payload = parseMemoryJobPayload(job.payload);
-    await this.#memoryService.ingestDiscussion({
+    const ack = payload.acknowledgment;
+    const ackStore = this.#discussionAcknowledgmentStore;
+
+    if (ack && ackStore) {
+      const already = await ackStore.wasAcknowledged({
+        repositoryId: job.repositoryId,
+        providerCommentId: ack.providerCommentId,
+      });
+      if (already) {
+        this.#logger.info(
+          "Skipping memory ingestion — discussion already acknowledged.",
+          {
+            jobId: job.id,
+            providerCommentId: ack.providerCommentId,
+          },
+        );
+        return;
+      }
+    }
+
+    if (ack && this.#githubAdapter.createIssueCommentReaction) {
+      try {
+        await this.#githubAdapter.createIssueCommentReaction({
+          installationId: ack.installationId,
+          repository: ack.repository,
+          commentId: ack.commentNumericId,
+          content: "eyes",
+        });
+      } catch (error) {
+        this.#logger.warn(
+          "Failed to post 👀 reaction on user discussion comment.",
+          {
+            jobId: job.id,
+            providerCommentId: ack.providerCommentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
+    }
+
+    const ingestion = await this.#memoryService.ingestDiscussion({
       tenantId: job.tenantId,
       repositoryId: job.repositoryId,
       discussions: payload.discussions,
     });
+
+    if (ack) {
+      const replyBody = formatAcknowledgmentReply(ingestion);
+      try {
+        if (
+          ack.sourceKind === "issue_comment" &&
+          this.#githubAdapter.createIssueComment
+        ) {
+          await this.#githubAdapter.createIssueComment({
+            installationId: ack.installationId,
+            repository: ack.repository,
+            pullNumber: ack.pullNumber,
+            body: replyBody,
+          });
+        } else if (
+          ack.sourceKind === "review_comment" &&
+          this.#githubAdapter.replyToReviewComment
+        ) {
+          await this.#githubAdapter.replyToReviewComment({
+            installationId: ack.installationId,
+            repository: ack.repository,
+            pullNumber: ack.pullNumber,
+            commentId: ack.commentNumericId,
+            body: replyBody,
+          });
+        }
+      } catch (error) {
+        this.#logger.warn("Failed to post acknowledgment reply.", {
+          jobId: job.id,
+          providerCommentId: ack.providerCommentId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      if (ackStore) {
+        await ackStore.markAcknowledged({
+          repositoryId: job.repositoryId,
+          providerCommentId: ack.providerCommentId,
+          acknowledgedAt: this.#now().toISOString(),
+        });
+      }
+    }
+
     this.#logger.info("Processed memory ingestion job.", {
       jobId: job.id,
       discussionCount: payload.discussions.length,
+      savedEntries: ingestion.savedEntries.length,
+      acknowledged: ack !== null,
     });
   }
 

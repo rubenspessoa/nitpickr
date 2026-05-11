@@ -89,6 +89,10 @@ class FakeGitHubApiClient implements GitHubApiClient {
     ];
   }
 
+  async getFileContent(): Promise<string | null> {
+    return null;
+  }
+
   async listNitpickrReviewThreads() {
     return [
       {

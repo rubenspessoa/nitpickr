@@ -165,6 +165,13 @@ export interface GitHubApiClient {
       previous_filename?: string;
     }>
   >;
+  getFileContent(input: {
+    installationId: string;
+    owner: string;
+    repo: string;
+    path: string;
+    ref: string;
+  }): Promise<string | null>;
   listNitpickrReviewThreads(input: {
     installationId: string;
     owner: string;
@@ -859,6 +866,24 @@ export class GitHubAdapter {
     }));
   }
 
+  async getFileContent(input: {
+    installationId: string;
+    repository: {
+      owner: string;
+      name: string;
+    };
+    path: string;
+    ref: string;
+  }): Promise<string | null> {
+    return this.#apiClient.getFileContent({
+      installationId: input.installationId,
+      owner: input.repository.owner,
+      repo: input.repository.name,
+      path: input.path,
+      ref: input.ref,
+    });
+  }
+
   async listNitpickrReviewThreads(input: {
     installationId: string;
     repository: {
@@ -915,6 +940,24 @@ export class GitHubAdapter {
       repo: input.repository.name,
       issueNumber: input.pullNumber,
       body: input.body,
+    });
+  }
+
+  async createIssueCommentReaction(input: {
+    installationId: string;
+    repository: {
+      owner: string;
+      name: string;
+    };
+    commentId: number;
+    content: "eyes";
+  }): Promise<void> {
+    await this.#apiClient.createIssueCommentReaction({
+      installationId: input.installationId,
+      owner: input.repository.owner,
+      repo: input.repository.name,
+      commentId: input.commentId,
+      content: input.content,
     });
   }
 

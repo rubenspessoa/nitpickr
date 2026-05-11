@@ -56,7 +56,10 @@ describe("applySeverityFloor", () => {
   it("returns the input unchanged when the floor is null", () => {
     const input = makeResult(mixed);
     const { kept, dropped } = applySeverityFloor(input, null);
-    expect(kept).toBe(input);
+    // Value equality is the contract; the implementation is free to return
+    // the same reference or a fresh copy.
+    expect(kept).toEqual(input);
+    expect(kept.findings).toHaveLength(mixed.length);
     expect(dropped).toEqual([]);
   });
 

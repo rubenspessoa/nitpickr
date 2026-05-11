@@ -50,8 +50,10 @@ class FakeReviewLifecycleStore implements ReviewLifecycleStore {
   }
 
   completedReviewCount = 0;
+  countCompletedReviewRunsCalls: string[] = [];
 
-  async countCompletedReviewRuns(): Promise<number> {
+  async countCompletedReviewRuns(changeRequestId: string): Promise<number> {
+    this.countCompletedReviewRunsCalls.push(changeRequestId);
     return this.completedReviewCount;
   }
 

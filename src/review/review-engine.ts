@@ -10,6 +10,7 @@ import {
   type EvidenceGateRejectedFinding,
   type ReviewFeedbackSignal,
   gateAndRankFindings,
+  severityWeight,
 } from "./evidence-gate.js";
 import { fingerprintFinding } from "./finding-fingerprint.js";
 import { type PriorThread, PromptBuilder } from "./prompt-builder.js";
@@ -575,18 +576,9 @@ function splitIntoChunks(
   return chunks;
 }
 
-function severityWeight(severity: ReviewFinding["severity"]): number {
-  switch (severity) {
-    case "critical":
-      return 4;
-    case "high":
-      return 3;
-    case "medium":
-      return 2;
-    case "low":
-      return 1;
-  }
-}
+// severityWeight is re-exported from evidence-gate so the ordering of
+// "low" < "medium" < "high" < "critical" has one source of truth across
+// the gate, the round-aware floor, and the engine's deduplicator.
 
 function dedupeKey(finding: ReviewFinding): string {
   return fingerprintFinding(finding);

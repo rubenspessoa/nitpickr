@@ -111,8 +111,10 @@ class FakeReviewLifecycleService {
   }
 
   completedReviewCount = 0;
+  countCompletedReviewsCalls: string[] = [];
 
-  async countCompletedReviews(): Promise<number> {
+  async countCompletedReviews(changeRequestId: string): Promise<number> {
+    this.countCompletedReviewsCalls.push(changeRequestId);
     return this.completedReviewCount;
   }
 
@@ -1980,19 +1982,27 @@ describe("WorkerRunner", () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]?.severity).toBe("high");
 
-    expect(logger.entries).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          level: "info",
-          message: "severity_floor.applied",
-          fields: expect.objectContaining({
-            priorReviewRoundCount: 3,
-            floor: "medium",
-            droppedFindingCount: 1,
-            droppedSeverities: ["low"],
-          }),
-        }),
-      ]),
+    const floorEntry = logger.entries.find(
+      (entry) => entry.message === "severity_floor.applied",
+    );
+    expect(floorEntry).toBeDefined();
+    expect(floorEntry?.level).toBe("info");
+    const floorFields = floorEntry?.fields as
+      | {
+          priorReviewRoundCount: number;
+          floor: string;
+          droppedFindingCount: number;
+          droppedSeverities: string[];
+        }
+      | undefined;
+    expect(floorFields?.priorReviewRoundCount).toBe(3);
+    expect(floorFields?.floor).toBe("medium");
+    expect(floorFields?.droppedFindingCount).toBe(1);
+    // Order-insensitive: assert membership and length separately so future
+    // multi-finding cases don't depend on iteration order.
+    expect(floorFields?.droppedSeverities).toHaveLength(1);
+    expect(floorFields?.droppedSeverities).toEqual(
+      expect.arrayContaining(["low"]),
     );
   });
 });

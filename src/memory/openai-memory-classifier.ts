@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import { type Logger, noopLogger } from "../logging/logger.js";
+import { createTimeoutFetch } from "../shared/http-client.js";
+import { extractJsonObject } from "../shared/model-output.js";
 import { normalizeOpenAiBaseUrl } from "../shared/openai-base-url.js";
 import type {
   MemoryClassifier,
@@ -14,6 +16,10 @@ export interface OpenAiMemoryClassifierConfig {
   model: string;
   baseUrl?: string;
   logger?: Logger;
+  /** Sent as `reasoning_effort` when set (thinking models). */
+  reasoningEffort?: string | null;
+  /** Abort the request after this many milliseconds. */
+  timeoutMs?: number;
 }
 
 export type FetchLike = typeof fetch;
@@ -62,12 +68,11 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
   readonly #fetch: FetchLike;
   readonly #logger: Logger;
 
-  constructor(
-    config: OpenAiMemoryClassifierConfig,
-    fetchFn: FetchLike = fetch,
-  ) {
+  constructor(config: OpenAiMemoryClassifierConfig, fetchFn?: FetchLike) {
     this.#config = config;
-    this.#fetch = fetchFn;
+    this.#fetch =
+      fetchFn ??
+      (config.timeoutMs ? createTimeoutFetch(config.timeoutMs) : fetch);
     this.#logger = (config.logger ?? noopLogger).child({
       component: "openai-memory-classifier",
       model: config.model,
@@ -97,8 +102,14 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
           authorization: `Bearer ${this.#config.apiKey}`,
           "content-type": "application/json",
         },
+        ...(this.#config.timeoutMs
+          ? { signal: AbortSignal.timeout(this.#config.timeoutMs) }
+          : {}),
         body: JSON.stringify({
           model: this.#config.model,
+          ...(this.#config.reasoningEffort
+            ? { reasoning_effort: this.#config.reasoningEffort }
+            : {}),
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
@@ -151,15 +162,15 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
       throw new Error("OpenAI memory classifier returned no content.");
     }
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
+    const extracted = extractJsonObject(content);
+    if (!extracted.ok) {
       this.#logger.error("memory_classifier.extract invalid_json", {
         durationMs,
+        reason: extracted.reason,
       });
       throw new Error("OpenAI memory classifier returned invalid JSON.");
     }
+    const parsed: unknown = extracted.value;
 
     this.#logger.info("memory_classifier.extract succeeded", {
       durationMs,

@@ -44,7 +44,9 @@ export class DoctorCommand {
 
     if (!isNonEmptyString(environment.GITHUB_PRIVATE_KEY)) {
       errors.push("GITHUB_PRIVATE_KEY is required.");
-    } else if (!environment.GITHUB_PRIVATE_KEY.includes("BEGIN PRIVATE KEY")) {
+    } else if (
+      !/BEGIN (RSA )?PRIVATE KEY/.test(environment.GITHUB_PRIVATE_KEY)
+    ) {
       errors.push("GITHUB_PRIVATE_KEY must contain a PEM private key block.");
     }
 

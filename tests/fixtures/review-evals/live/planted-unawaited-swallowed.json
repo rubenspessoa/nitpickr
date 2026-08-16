@@ -1,0 +1,36 @@
+{
+  "name": "planted-unawaited-swallowed",
+  "source": "synthetic",
+  "input": {
+    "changeRequest": {
+      "title": "Add audit service",
+      "number": 103
+    },
+    "files": [
+      {
+        "path": "src/audit/audit-service.ts",
+        "additions": 31,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,31 @@\n+import { insertAuditEvent } from \"../db/audit.js\";\n+import type { Logger } from \"../logging/logger.js\";\n+\n+export interface AuditEvent {\n+  actorId: string;\n+  action: string;\n+  targetId: string;\n+  at: Date;\n+}\n+\n+export class AuditService {\n+  readonly #logger: Logger;\n+\n+  constructor(logger: Logger) {\n+    this.#logger = logger;\n+  }\n+\n+  /**\n+   * Record an audit event. Callers rely on the promise resolving only after\n+   * the event is durably stored, because they emit user-facing confirmation\n+   * right after.\n+   */\n+  async record(event: AuditEvent): Promise<void> {\n+    try {\n+      insertAuditEvent(event);\n+      this.#logger.info(\"audit.recorded\", { action: event.action });\n+    } catch (error) {\n+      // Auditing must never block the main flow.\n+    }\n+  }\n+}",
+        "fileContent": "import { insertAuditEvent } from \"../db/audit.js\";\nimport type { Logger } from \"../logging/logger.js\";\n\nexport interface AuditEvent {\n  actorId: string;\n  action: string;\n  targetId: string;\n  at: Date;\n}\n\nexport class AuditService {\n  readonly #logger: Logger;\n\n  constructor(logger: Logger) {\n    this.#logger = logger;\n  }\n\n  /**\n   * Record an audit event. Callers rely on the promise resolving only after\n   * the event is durably stored, because they emit user-facing confirmation\n   * right after.\n   */\n  async record(event: AuditEvent): Promise<void> {\n    try {\n      insertAuditEvent(event);\n      this.#logger.info(\"audit.recorded\", { action: event.action });\n    } catch (error) {\n      // Auditing must never block the main flow.\n    }\n  }\n}\n"
+      }
+    ],
+    "instructionText": "",
+    "memory": [],
+    "commentBudget": 10
+  },
+  "expectedFindings": [
+    {
+      "label": "insertAuditEvent not awaited so errors escape try and result is not durable",
+      "path": "src/audit/audit-service.ts",
+      "lineStart": 25,
+      "lineEnd": 25
+    },
+    {
+      "label": "catch swallows error silently",
+      "path": "src/audit/audit-service.ts",
+      "lineStart": 27,
+      "lineEnd": 29
+    }
+  ]
+}

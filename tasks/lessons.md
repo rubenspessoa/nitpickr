@@ -55,3 +55,7 @@
 - For nitpickr-driven PR workflows, do not manually request another review from `@nitpickr` after each follow-up commit:
   - a new push already triggers nitpickr, so extra `@nitpickr review` comments add noise without speeding feedback
   - if you need explicit human attention for blocking design decisions, CI failures, or policy questions, mention the relevant human reviewer or team and include a short rationale
+- Local/OpenAI-compatible model servers answer non-streaming requests only after generation finishes; Node's default `fetch` (undici) drops the request at ~300 s of waiting for headers with a bare "fetch failed". Any client timeout must be enforced through the HTTP agent (`headersTimeout`/`bodyTimeout`), not only via `AbortSignal`.
+- Ollama folds thinking tokens into `prompt_tokens` when `reasoning_effort` is on; compare model configurations by wall-clock, not reported usage.
+- Live-model evals must not over-constrain expectations (e.g. requiring `category: security` for an authorization bug the model files under `correctness`); match on path + line window and keep category optional.
+- `tasks/todo.md` is cumulative — append a new section per task; never overwrite the file.

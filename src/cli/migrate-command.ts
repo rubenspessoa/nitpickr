@@ -1,4 +1,4 @@
-import { migrations } from "../db/migrations.js";
+import { type MigrationOptions, buildMigrations } from "../db/migrations.js";
 
 export interface SqlMigrationClient {
   unsafe(query: string): Promise<unknown[]>;
@@ -12,13 +12,15 @@ const migrationAdvisoryLockKey = 1_864_513_742;
 
 export class MigrateCommand {
   readonly #client: SqlMigrationClient;
+  readonly #migrations: string[];
 
-  constructor(client: SqlMigrationClient) {
+  constructor(client: SqlMigrationClient, options: MigrationOptions = {}) {
     this.#client = client;
+    this.#migrations = buildMigrations(options);
   }
 
   async run(): Promise<void> {
-    for (const migration of migrations) {
+    for (const migration of this.#migrations) {
       await this.#client.unsafe(migration);
     }
   }
@@ -26,13 +28,14 @@ export class MigrateCommand {
 
 export async function runMigrationsWithAdvisoryLock(
   client: SqlMigrationLockClient,
+  options: MigrationOptions = {},
 ): Promise<void> {
   await client.begin(async (transaction) => {
     await transaction.unsafe(
       `select pg_advisory_xact_lock(${migrationAdvisoryLockKey})`,
     );
 
-    const command = new MigrateCommand(transaction);
+    const command = new MigrateCommand(transaction, options);
     await command.run();
   });
 }

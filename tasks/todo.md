@@ -463,3 +463,50 @@
   - `pnpm lint`
   - `pnpm typecheck`
   - `pnpm test tests/publisher/review-publisher.test.ts`
+
+---
+
+# Local models via Ollama — implementation todo
+
+Plan: ~/.claude/plans/plan-plan-mode-how-fuzzy-brooks.md
+
+## Part 2 — code
+- [x] app-config: new OPENAI_*/NITPICKR_* env vars (reasoning effort, memory model, embedding model/dims, timeout, concurrency, chunk total chars)
+- [x] openai-review-model: reasoning_effort, timeout, fence/think stripping, retry-once
+- [x] memory classifier/embedder: timeout, dimension validation
+- [x] build-runtime: wire config; embedder optional
+- [x] worker-runner: model-output errors retryable
+- [x] review-engine: total-chars chunk budget + bounded concurrency
+- [x] migrations: configurable embedding dimension + alter migration
+- [x] docker-compose: pgvector image, extra_hosts, restart policy
+- [~] doctor: skipped live model check; relaxed PEM check to accept RSA keys
+- [x] .env.example + docs
+- [x] tests green: pnpm test, pnpm build
+
+## Part 3–5 — ops / verify / eval
+- [x] Ollama env + nomic-embed-text
+- [ ] Tailscale Funnel
+- [ ] GitHub App on throwaway repo
+- [ ] compose up, verification PR, timings
+- [x] eval live mode + fixtures + run matrix
+
+## Results (2026-08-16)
+
+- Code: 381 tests, lint, typecheck, build green; Docker image builds; `docker compose up` brings db (pgvector), migrate (`memories.embedding` = `vector(768)`), api, worker up; worker container reaches host Ollama via `host.docker.internal:11434`.
+- Live eval (5 planted-bug fixtures, `pnpm eval:reviews --live`, sequential, Ollama on the mini):
+
+| model | effort | recall | precision | unexpected | total s | per-case s |
+|---|---|---|---|---|---|---|
+| qwen3.6:35b-a3b-nvfp4 | none | 100% | 42% | 7 | 56 | 8–15 |
+| qwen3.6:35b-a3b-nvfp4 | high | 100% | 50% | 5 | 448 | 45–130 |
+| qwen3.8:27b-mlx | none | 80% | 50% | 4 | 162 | 24–40 |
+| qwen3.8:27b-mlx | high | 100% | 33% | 10 | 1458 | 201–413 |
+
+  Decision: default `qwen3.6:35b-a3b-nvfp4` + `OPENAI_REASONING_EFFORT=none` (best recall per second; extra "unexpected" findings are mostly reasonable nits, not hallucinations). Revisit with real captured PRs.
+- Found & fixed during eval: Node fetch's 300 s undici `headersTimeout` killed slow non-streaming generations ("fetch failed" at 301 s) → model calls now go through an undici Agent sized by `OPENAI_REQUEST_TIMEOUT_MS`.
+- Pending (needs human): enable Tailscale Funnel, create the GitHub App, fill GitHub values in `.env`, restart compose, open the verification PR on `rubenspessoa/nitpickr-ollama-test`.
+- Verification PR (rubenspessoa/nitpickr-ollama-test#1, 2026-08-16): webhook via Tailscale Funnel → queue → worker → Ollama → GitHub, all green.
+  - Round 1 (`opened`, qwen3.6/none): job 29 s (model 20 s, 3076+727 tok, 1 chunk); 3 correct inline findings; summary + mermaid; check run `nitpickr / review` success; embeddings 768-d OK.
+  - Round 2 (`synchronize`, commit-delta): 19 s; 2 findings — one false positive (called the correct pagination fix a regression) and one "logic corrected" note posted as a finding; outdated round-1 threads were not auto-resolved (investigate stale-thread resolution path).
+  - Round 3 (`@nitpickrai review`, qwen3.8/none, cold): 145 s; first reply had trailing text after the JSON → automatic re-prompt succeeded (attempts=2); 3 findings.
+  - `.env` restored to qwen3.6 default; GitHub App `nitpickrai` is installed on all repos (allowlist limits reviews to the test repo) with Contents:write — consider narrowing.

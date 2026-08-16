@@ -152,30 +152,48 @@ export function buildRuntime(
       apiClient: githubRestClient,
       appConfig: operationalConfig.github,
     });
+    const openAi = operationalConfig.openAi;
     const reviewEngine = new ReviewEngine(
       new OpenAiReviewModel({
         apiKey: operationalConfig.openAiApiKey,
-        model: operationalConfig.openAi.model,
-        baseUrl: operationalConfig.openAi.baseUrl,
+        model: openAi.model,
+        baseUrl: openAi.baseUrl,
+        reasoningEffort: openAi.reasoningEffort,
+        timeoutMs: openAi.requestTimeoutMs,
         logger,
       }),
+      {
+        maxConcurrentModelRequests: openAi.maxConcurrentRequests,
+        maxTotalCharactersPerChunk: openAi.reviewChunkMaxTotalChars,
+      },
     );
     const memoryClassifier = new OpenAiMemoryClassifier({
       apiKey: operationalConfig.openAiApiKey,
-      model: "gpt-4o-mini",
-      baseUrl: operationalConfig.openAi.baseUrl,
+      model: openAi.memoryModel,
+      baseUrl: openAi.baseUrl,
+      reasoningEffort: openAi.reasoningEffort,
+      timeoutMs: openAi.requestTimeoutMs,
       logger,
     });
-    const memoryEmbedder = new OpenAiMemoryEmbedder({
-      apiKey: operationalConfig.openAiApiKey,
-      model: "text-embedding-3-small",
-      baseUrl: operationalConfig.openAi.baseUrl,
-      logger,
-    });
-    memoryService.configureBackends({
-      classifier: memoryClassifier,
-      embedder: memoryEmbedder,
-    });
+    if (openAi.embeddingModel === null) {
+      logger.info(
+        "Memory embeddings disabled (OPENAI_EMBEDDING_MODEL=off); memory recall uses keyword and recency ranking only.",
+        {},
+      );
+      memoryService.configureBackends({ classifier: memoryClassifier });
+    } else {
+      memoryService.configureBackends({
+        classifier: memoryClassifier,
+        embedder: new OpenAiMemoryEmbedder({
+          apiKey: operationalConfig.openAiApiKey,
+          model: openAi.embeddingModel,
+          baseUrl: openAi.baseUrl,
+          expectedDimensions: openAi.embeddingDimensions,
+          timeoutMs: openAi.requestTimeoutMs,
+          logger,
+        }),
+      });
+    }
     const publisher = new ReviewPublisher({
       listPullRequestReviews: async ({
         installationId,

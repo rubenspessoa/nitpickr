@@ -1,4 +1,7 @@
+import type { ReasoningEffort } from "../config/app-config.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
+import { createTimeoutFetch, isTimeoutError } from "../shared/http-client.js";
+import { ModelOutputError, extractJsonObject } from "../shared/model-output.js";
 import { normalizeOpenAiBaseUrl } from "../shared/openai-base-url.js";
 
 export interface OpenAiReviewModelConfig {
@@ -6,9 +9,26 @@ export interface OpenAiReviewModelConfig {
   model: string;
   baseUrl?: string;
   logger?: Logger;
+  /** Sent as `reasoning_effort` when set (OpenAI reasoning models, Ollama thinking models). */
+  reasoningEffort?: ReasoningEffort | null;
+  /** Abort the request after this many milliseconds. Unset = no client timeout. */
+  timeoutMs?: number;
+  /** Observability hook: called once per successful completion. */
+  onCompletion?: (info: OpenAiCompletionInfo) => void;
+}
+
+export interface OpenAiCompletionInfo {
+  durationMs: number;
+  promptTokens: number | undefined;
+  completionTokens: number | undefined;
+  totalTokens: number | undefined;
+  attempts: number;
 }
 
 export type FetchLike = typeof fetch;
+
+const JSON_REPAIR_NUDGE =
+  "Your previous reply was not a single valid JSON object. Reply again with only the JSON object described above — no prose, no code fences.";
 
 function shouldRetryWithoutTemperature(
   status: number,
@@ -43,14 +63,23 @@ function usageFields(usage: OpenAiUsage | undefined): Record<string, unknown> {
   };
 }
 
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
 export class OpenAiReviewModel {
   readonly #config: OpenAiReviewModelConfig;
   readonly #fetch: FetchLike;
   readonly #logger: Logger;
 
-  constructor(config: OpenAiReviewModelConfig, fetchFn: FetchLike = fetch) {
+  constructor(config: OpenAiReviewModelConfig, fetchFn?: FetchLike) {
     this.#config = config;
-    this.#fetch = fetchFn;
+    // Default transport honours the configured timeout end-to-end (see
+    // createTimeoutFetch for why plain fetch caps out at ~300 s).
+    this.#fetch =
+      fetchFn ??
+      (config.timeoutMs ? createTimeoutFetch(config.timeoutMs) : fetch);
     this.#logger = (config.logger ?? noopLogger).child({
       component: "openai-review-model",
       model: config.model,
@@ -61,6 +90,73 @@ export class OpenAiReviewModel {
     system: string;
     user: string;
   }): Promise<unknown> {
+    const startedAt = process.hrtime.bigint();
+    const elapsedMs = () =>
+      Number((process.hrtime.bigint() - startedAt) / 1_000_000n);
+    const messages: ChatMessage[] = [
+      { role: "system", content: input.system },
+      { role: "user", content: input.user },
+    ];
+
+    const first = await this.#complete(messages, elapsedMs);
+    const firstJson = extractJsonObject(first.content);
+    if (firstJson.ok) {
+      this.#reportSuccess(first.usage, elapsedMs(), 1);
+      return firstJson.value;
+    }
+
+    // Local / smaller models occasionally wrap JSON in prose or fences even in
+    // json_object mode. Nudge once with the bad reply in context before giving up.
+    this.#logger.warn("openai.chat_completion invalid_json retrying", {
+      durationMs: elapsedMs(),
+      reason: firstJson.reason,
+    });
+    const second = await this.#complete(
+      [
+        ...messages,
+        { role: "assistant", content: first.content },
+        { role: "user", content: JSON_REPAIR_NUDGE },
+      ],
+      elapsedMs,
+    );
+    const secondJson = extractJsonObject(second.content);
+    if (secondJson.ok) {
+      this.#reportSuccess(second.usage, elapsedMs(), 2);
+      return secondJson.value;
+    }
+
+    this.#logger.error("openai.chat_completion invalid_json", {
+      durationMs: elapsedMs(),
+      reason: secondJson.reason,
+    });
+    throw new ModelOutputError(
+      "OpenAI response must contain valid JSON content.",
+    );
+  }
+
+  #reportSuccess(
+    usage: OpenAiUsage | undefined,
+    durationMs: number,
+    attempts: number,
+  ): void {
+    this.#logger.info("openai.chat_completion succeeded", {
+      durationMs,
+      attempts,
+      ...usageFields(usage),
+    });
+    this.#config.onCompletion?.({
+      durationMs,
+      attempts,
+      promptTokens: usage?.prompt_tokens,
+      completionTokens: usage?.completion_tokens,
+      totalTokens: usage?.total_tokens,
+    });
+  }
+
+  async #complete(
+    messages: ChatMessage[],
+    elapsedMs: () => number,
+  ): Promise<{ content: string; usage: OpenAiUsage | undefined }> {
     const endpoint = `${normalizeOpenAiBaseUrl(this.#config.baseUrl)}/chat/completions`;
     const sendRequest = (includeTemperature: boolean) =>
       this.#fetch(endpoint, {
@@ -69,26 +165,22 @@ export class OpenAiReviewModel {
           authorization: `Bearer ${this.#config.apiKey}`,
           "content-type": "application/json",
         },
+        ...(this.#config.timeoutMs
+          ? { signal: AbortSignal.timeout(this.#config.timeoutMs) }
+          : {}),
         body: JSON.stringify({
           model: this.#config.model,
           ...(includeTemperature ? { temperature: 0.1 } : {}),
+          ...(this.#config.reasoningEffort
+            ? { reasoning_effort: this.#config.reasoningEffort }
+            : {}),
           response_format: {
             type: "json_object",
           },
-          messages: [
-            {
-              role: "system",
-              content: input.system,
-            },
-            {
-              role: "user",
-              content: input.user,
-            },
-          ],
+          messages,
         }),
       });
 
-    const startedAt = process.hrtime.bigint();
     this.#logger.debug("openai.chat_completion started", {});
     let response: Response;
     try {
@@ -98,9 +190,7 @@ export class OpenAiReviewModel {
         if (!shouldRetryWithoutTemperature(response.status, details)) {
           this.#logger.error("openai.chat_completion failed", {
             status: response.status,
-            durationMs: Number(
-              (process.hrtime.bigint() - startedAt) / 1_000_000n,
-            ),
+            durationMs: elapsedMs(),
             errorBody: details.slice(0, 500),
           });
           throw new Error(
@@ -121,9 +211,7 @@ export class OpenAiReviewModel {
             "openai.chat_completion failed (retry-without-temperature)",
             {
               status: response.status,
-              durationMs: Number(
-                (process.hrtime.bigint() - startedAt) / 1_000_000n,
-              ),
+              durationMs: elapsedMs(),
               errorBody: retryDetails.slice(0, 500),
             },
           );
@@ -133,17 +221,20 @@ export class OpenAiReviewModel {
         }
       }
     } catch (error) {
-      // Network/transport errors that never produced a Response.
+      // Network/transport errors (incl. timeouts) that never produced a Response.
       if (
         !(error instanceof Error) ||
         !/OpenAI request failed/.test(error.message)
       ) {
         this.#logger.error("openai.chat_completion transport_error", {
-          durationMs: Number(
-            (process.hrtime.bigint() - startedAt) / 1_000_000n,
-          ),
+          durationMs: elapsedMs(),
           errorMessage: error instanceof Error ? error.message : String(error),
         });
+        if (isTimeoutError(error)) {
+          throw new ModelOutputError(
+            `OpenAI request timed out after ${this.#config.timeoutMs}ms.`,
+          );
+        }
       }
       throw error;
     }
@@ -157,28 +248,16 @@ export class OpenAiReviewModel {
       usage?: OpenAiUsage;
     };
 
-    const durationMs = Number(
-      (process.hrtime.bigint() - startedAt) / 1_000_000n,
-    );
-
     const content = payload.choices?.[0]?.message?.content;
     if (!content) {
       this.#logger.error("openai.chat_completion empty_response", {
-        durationMs,
+        durationMs: elapsedMs(),
       });
-      throw new Error("OpenAI response did not contain a message payload.");
+      throw new ModelOutputError(
+        "OpenAI response did not contain a message payload.",
+      );
     }
 
-    this.#logger.info("openai.chat_completion succeeded", {
-      durationMs,
-      ...usageFields(payload.usage),
-    });
-
-    try {
-      return JSON.parse(content);
-    } catch {
-      this.#logger.error("openai.chat_completion invalid_json", { durationMs });
-      throw new Error("OpenAI response must contain valid JSON content.");
-    }
+    return { content, usage: payload.usage };
   }
 }

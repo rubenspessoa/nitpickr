@@ -1,8 +1,14 @@
 import { cwd, env, exit } from "node:process";
 
-import { parseBootstrapConfig as parseCliBootstrapConfig } from "../config/app-config.js";
+import {
+  type ReasoningEffort,
+  parseBootstrapConfig as parseCliBootstrapConfig,
+} from "../config/app-config.js";
 import { createPostgresClient } from "../runtime/postgres.js";
+import { flagBoolean, flagInteger, flagString, parseArgs } from "./args.js";
 import { DoctorCommand } from "./doctor-command.js";
+import { EvalCaptureCommand } from "./eval-capture-command.js";
+import { EvalLiveReviewsCommand } from "./eval-live-reviews-command.js";
 import { EvalReviewsCommand } from "./eval-reviews-command.js";
 import { runMigrationsWithAdvisoryLock } from "./migrate-command.js";
 import { SetupCommand } from "./setup-command.js";
@@ -36,9 +42,88 @@ async function main(): Promise<void> {
   }
 
   if (command === "eval:reviews") {
+    const args = parseArgs(process.argv.slice(3));
+    if (flagBoolean(args, "live")) {
+      // Live mode: run fixtures against a real OpenAI-compatible model.
+      // Defaults come from OPENAI_* so `.env` for Ollama works as-is.
+      const bootstrap = parseCliBootstrapConfig({
+        ...env,
+        DATABASE_URL: env.DATABASE_URL ?? "postgres://unused@localhost/unused",
+      });
+      const reasoningFlag = flagString(args, "reasoning-effort");
+      if (
+        reasoningFlag !== undefined &&
+        !["unset", "none", "minimal", "low", "medium", "high"].includes(
+          reasoningFlag,
+        )
+      ) {
+        throw new Error(
+          "--reasoning-effort must be one of unset|none|minimal|low|medium|high.",
+        );
+      }
+      const model = flagString(args, "model") ?? bootstrap.openAi.model;
+      const evaluation = new EvalLiveReviewsCommand();
+      const timeoutMs =
+        flagInteger(args, "timeout-ms") ?? bootstrap.openAi.requestTimeoutMs;
+      await evaluation.run({
+        cwd: cwd(),
+        apiKey: flagString(args, "api-key") ?? env.OPENAI_API_KEY ?? "ollama",
+        baseUrl: flagString(args, "base-url") ?? bootstrap.openAi.baseUrl,
+        model,
+        reasoningEffort:
+          reasoningFlag === undefined
+            ? bootstrap.openAi.reasoningEffort
+            : reasoningFlag === "unset"
+              ? null
+              : (reasoningFlag as ReasoningEffort),
+        timeoutMs,
+        engineOptions: {
+          maxConcurrentModelRequests: bootstrap.openAi.maxConcurrentRequests,
+          maxTotalCharactersPerChunk: bootstrap.openAi.reviewChunkMaxTotalChars,
+        },
+        startedAt: new Date().toISOString(),
+        ...(flagString(args, "fixtures")
+          ? { fixtureDirectory: flagString(args, "fixtures") as string }
+          : {}),
+        ...(flagString(args, "out")
+          ? { outFile: flagString(args, "out") as string }
+          : {}),
+        ...(flagString(args, "filter")
+          ? { filter: flagString(args, "filter") as string }
+          : {}),
+      });
+      return;
+    }
+
     const evaluation = new EvalReviewsCommand();
     await evaluation.run({
       cwd: cwd(),
+    });
+    return;
+  }
+
+  if (command === "eval:capture") {
+    const args = parseArgs(process.argv.slice(3));
+    const reference = args.positionals[0];
+    if (!reference) {
+      throw new Error(
+        "Usage: nitpickr eval:capture owner/repo#123 [--out tests/fixtures/review-evals/live] (needs GITHUB_TOKEN)",
+      );
+    }
+    const token = flagString(args, "token") ?? env.GITHUB_TOKEN;
+    if (!token) {
+      throw new Error(
+        "GITHUB_TOKEN is required (e.g. GITHUB_TOKEN=$(gh auth token)).",
+      );
+    }
+    await new EvalCaptureCommand().run({
+      reference,
+      token,
+      outDirectory:
+        flagString(args, "out") ?? `${cwd()}/tests/fixtures/review-evals/live`,
+      ...(env.GITHUB_API_BASE_URL
+        ? { apiBaseUrl: env.GITHUB_API_BASE_URL }
+        : {}),
     });
     return;
   }
@@ -49,7 +134,9 @@ async function main(): Promise<void> {
     const config = parseCliBootstrapConfig(env);
     const sql = createPostgresClient(config.databaseUrl);
     try {
-      await runMigrationsWithAdvisoryLock(sql);
+      await runMigrationsWithAdvisoryLock(sql, {
+        embeddingDimensions: config.openAi.embeddingDimensions,
+      });
     } finally {
       await sql.end();
     }

@@ -47,6 +47,21 @@
   - `openai_model_output`
   - `publish_failure`
 
+### Local model (Ollama) reviews fail or never finish
+
+- `openai.chat_completion failed` with status 404: the model tag in
+  `OPENAI_MODEL` / `OPENAI_MEMORY_MODEL` / `OPENAI_EMBEDDING_MODEL` is not
+  pulled — compare with `curl $OPENAI_BASE_URL/models`.
+- `openai.chat_completion invalid_json` twice in a row: the model is not
+  honouring `json_object` mode; the job is retried automatically. Try a larger
+  model or `OPENAI_REASONING_EFFORT=none`.
+- `openai.chat_completion transport_error ... TimeoutError`: raise
+  `OPENAI_REQUEST_TIMEOUT_MS`, lower `NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS`,
+  and keep `NITPICKR_JOB_STALE_AFTER_MS` above the timeout.
+- `memory_embedder.embed dimension_mismatch`: `NITPICKR_EMBEDDING_DIMENSIONS`
+  does not match the embedding model; fix it and re-run `migrate`.
+- Full guide: [local-models-ollama.md](local-models-ollama.md).
+
 ### GitHub review appears twice
 
 - Confirm the review body contains the hidden `nitpickr:review-run` marker.

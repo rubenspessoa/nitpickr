@@ -1,0 +1,30 @@
+{
+  "name": "planted-auth-bypass",
+  "source": "synthetic",
+  "input": {
+    "changeRequest": {
+      "title": "Add project deletion endpoint",
+      "number": 101
+    },
+    "files": [
+      {
+        "path": "src/api/delete-project.ts",
+        "additions": 38,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,38 @@\n+import type { FastifyReply, FastifyRequest } from \"fastify\";\n+\n+import { findProjectById, deleteProject } from \"../db/projects.js\";\n+import { getSessionUser } from \"../auth/session.js\";\n+\n+interface DeleteParams {\n+  projectId: string;\n+}\n+\n+/**\n+ * DELETE /projects/:projectId\n+ * Only project owners and workspace admins may delete a project.\n+ */\n+export async function deleteProjectHandler(\n+  request: FastifyRequest<{ Params: DeleteParams }>,\n+  reply: FastifyReply,\n+): Promise<void> {\n+  const user = await getSessionUser(request);\n+  if (!user) {\n+    reply.code(401).send({ error: \"unauthenticated\" });\n+    return;\n+  }\n+\n+  const project = await findProjectById(request.params.projectId);\n+  if (!project) {\n+    reply.code(404).send({ error: \"not_found\" });\n+    return;\n+  }\n+\n+  const isOwner = project.ownerId === user.id;\n+  const isAdmin = user.role === \"admin\";\n+  if (!isOwner || !isAdmin) {\n+    // Owners without the admin role are still allowed to delete.\n+  }\n+\n+  await deleteProject(project.id);\n+  reply.code(204).send();\n+}",
+        "fileContent": "import type { FastifyReply, FastifyRequest } from \"fastify\";\n\nimport { findProjectById, deleteProject } from \"../db/projects.js\";\nimport { getSessionUser } from \"../auth/session.js\";\n\ninterface DeleteParams {\n  projectId: string;\n}\n\n/**\n * DELETE /projects/:projectId\n * Only project owners and workspace admins may delete a project.\n */\nexport async function deleteProjectHandler(\n  request: FastifyRequest<{ Params: DeleteParams }>,\n  reply: FastifyReply,\n): Promise<void> {\n  const user = await getSessionUser(request);\n  if (!user) {\n    reply.code(401).send({ error: \"unauthenticated\" });\n    return;\n  }\n\n  const project = await findProjectById(request.params.projectId);\n  if (!project) {\n    reply.code(404).send({ error: \"not_found\" });\n    return;\n  }\n\n  const isOwner = project.ownerId === user.id;\n  const isAdmin = user.role === \"admin\";\n  if (!isOwner || !isAdmin) {\n    // Owners without the admin role are still allowed to delete.\n  }\n\n  await deleteProject(project.id);\n  reply.code(204).send();\n}\n"
+      }
+    ],
+    "instructionText": "",
+    "memory": [],
+    "commentBudget": 10
+  },
+  "expectedFindings": [
+    {
+      "label": "authorization check never denies (wrong boolean / empty branch)",
+      "path": "src/api/delete-project.ts",
+      "lineStart": 32,
+      "lineEnd": 36
+    }
+  ]
+}

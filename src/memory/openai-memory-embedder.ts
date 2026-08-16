@@ -1,4 +1,5 @@
 import { type Logger, noopLogger } from "../logging/logger.js";
+import { createTimeoutFetch } from "../shared/http-client.js";
 import { normalizeOpenAiBaseUrl } from "../shared/openai-base-url.js";
 import type { MemoryEmbedder } from "./memory-service.js";
 
@@ -7,6 +8,10 @@ export interface OpenAiMemoryEmbedderConfig {
   model: string;
   baseUrl?: string;
   logger?: Logger;
+  /** Expected vector width; must match the `memories.embedding` column. */
+  expectedDimensions?: number;
+  /** Abort the request after this many milliseconds. */
+  timeoutMs?: number;
 }
 
 export type FetchLike = typeof fetch;
@@ -16,9 +21,11 @@ export class OpenAiMemoryEmbedder implements MemoryEmbedder {
   readonly #fetch: FetchLike;
   readonly #logger: Logger;
 
-  constructor(config: OpenAiMemoryEmbedderConfig, fetchFn: FetchLike = fetch) {
+  constructor(config: OpenAiMemoryEmbedderConfig, fetchFn?: FetchLike) {
     this.#config = config;
-    this.#fetch = fetchFn;
+    this.#fetch =
+      fetchFn ??
+      (config.timeoutMs ? createTimeoutFetch(config.timeoutMs) : fetch);
     this.#logger = (config.logger ?? noopLogger).child({
       component: "openai-memory-embedder",
       model: config.model,
@@ -39,6 +46,9 @@ export class OpenAiMemoryEmbedder implements MemoryEmbedder {
           authorization: `Bearer ${this.#config.apiKey}`,
           "content-type": "application/json",
         },
+        ...(this.#config.timeoutMs
+          ? { signal: AbortSignal.timeout(this.#config.timeoutMs) }
+          : {}),
         body: JSON.stringify({
           model: this.#config.model,
           input: text,
@@ -78,6 +88,19 @@ export class OpenAiMemoryEmbedder implements MemoryEmbedder {
     if (!Array.isArray(embedding) || embedding.length === 0) {
       this.#logger.error("memory_embedder.embed empty_vector", { durationMs });
       throw new Error("OpenAI embeddings response did not contain a vector.");
+    }
+    if (
+      this.#config.expectedDimensions !== undefined &&
+      embedding.length !== this.#config.expectedDimensions
+    ) {
+      this.#logger.error("memory_embedder.embed dimension_mismatch", {
+        durationMs,
+        dimensions: embedding.length,
+        expectedDimensions: this.#config.expectedDimensions,
+      });
+      throw new Error(
+        `Embedding model returned ${embedding.length} dimensions but NITPICKR_EMBEDDING_DIMENSIONS is ${this.#config.expectedDimensions}.`,
+      );
     }
     this.#logger.info("memory_embedder.embed succeeded", {
       durationMs,

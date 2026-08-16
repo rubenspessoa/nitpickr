@@ -1,3 +1,5 @@
+import { ZodError } from "zod";
+
 import { type ReviewRun, parseReviewTrigger } from "../domain/types.js";
 import type { ReviewFeedbackService } from "../feedback/review-feedback-service.js";
 import type { InstructionBundle } from "../instructions/instruction-loader.js";
@@ -33,6 +35,7 @@ import {
   applySeverityFloor,
   severityFloorForRound,
 } from "../review/severity-floor.js";
+import { ModelOutputError } from "../shared/model-output.js";
 
 const REVIEW_DURATION_BUDGET_MS = 300_000;
 
@@ -107,11 +110,13 @@ function classifyReviewError(
     );
   }
   if (stage === "review") {
-    return new ReviewJobError(
-      "openai_model_output",
-      isRetryableHttpError(message),
-      message,
-    );
+    // Malformed/empty model output, client timeouts, and schema mismatches
+    // are transient for LLM backends (especially local models) — retry them.
+    const retryable =
+      isRetryableHttpError(message) ||
+      error instanceof ModelOutputError ||
+      error instanceof ZodError;
+    return new ReviewJobError("openai_model_output", retryable, message);
   }
 
   return new ReviewJobError(
@@ -1001,11 +1006,14 @@ export class WorkerRunner {
         error instanceof ReviewJobError
           ? error.failureClass
           : "internal_processing";
+      const retryable =
+        error instanceof ReviewJobError ? error.retryable : false;
       jobLogger.error("Worker job failed.", {
         durationMs: Number(
           (process.hrtime.bigint() - jobStartedAt) / 1_000_000n,
         ),
         failureClass,
+        retryable,
         error: toErrorMessage(error),
       });
       captureError(error, {
@@ -1021,7 +1029,7 @@ export class WorkerRunner {
         },
       });
       await this.#queueScheduler.failJob(job.id, toErrorMessage(error), {
-        retryable: error instanceof ReviewJobError ? error.retryable : false,
+        retryable,
       });
       return true;
     }

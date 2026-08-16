@@ -1,0 +1,30 @@
+{
+  "name": "planted-resource-leak",
+  "source": "synthetic",
+  "input": {
+    "changeRequest": {
+      "title": "Add chunked uploader",
+      "number": 104
+    },
+    "files": [
+      {
+        "path": "src/storage/upload-file.ts",
+        "additions": 26,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,26 @@\n+import { open } from \"node:fs/promises\";\n+\n+import { putObject } from \"../storage/client.js\";\n+\n+const CHUNK_SIZE = 1024 * 1024;\n+\n+/**\n+ * Stream a local file into object storage in fixed-size chunks.\n+ */\n+export async function uploadFile(path: string, key: string): Promise<number> {\n+  const handle = await open(path, \"r\");\n+  const buffer = Buffer.alloc(CHUNK_SIZE);\n+  let position = 0;\n+  let uploaded = 0;\n+  while (true) {\n+    const { bytesRead } = await handle.read(buffer, 0, CHUNK_SIZE, position);\n+    if (bytesRead === 0) {\n+      break;\n+    }\n+    await putObject(key, buffer.subarray(0, bytesRead), { offset: position });\n+    position += bytesRead;\n+    uploaded += bytesRead;\n+  }\n+  await handle.close();\n+  return uploaded;\n+}",
+        "fileContent": "import { open } from \"node:fs/promises\";\n\nimport { putObject } from \"../storage/client.js\";\n\nconst CHUNK_SIZE = 1024 * 1024;\n\n/**\n * Stream a local file into object storage in fixed-size chunks.\n */\nexport async function uploadFile(path: string, key: string): Promise<number> {\n  const handle = await open(path, \"r\");\n  const buffer = Buffer.alloc(CHUNK_SIZE);\n  let position = 0;\n  let uploaded = 0;\n  while (true) {\n    const { bytesRead } = await handle.read(buffer, 0, CHUNK_SIZE, position);\n    if (bytesRead === 0) {\n      break;\n    }\n    await putObject(key, buffer.subarray(0, bytesRead), { offset: position });\n    position += bytesRead;\n    uploaded += bytesRead;\n  }\n  await handle.close();\n  return uploaded;\n}\n"
+      }
+    ],
+    "instructionText": "",
+    "memory": [],
+    "commentBudget": 10
+  },
+  "expectedFindings": [
+    {
+      "label": "file handle leaks when read/putObject throws (no try/finally)",
+      "path": "src/storage/upload-file.ts",
+      "lineStart": 11,
+      "lineEnd": 24
+    }
+  ]
+}

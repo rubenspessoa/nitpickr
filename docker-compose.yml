@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:16
+    # pgvector is required by the memories.embedding column (migration 8).
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: nitpickr
       POSTGRES_USER: nitpickr
@@ -33,6 +35,7 @@ services:
     env_file:
       - .env
     command: ["node", "dist/src/api/index.js"]
+    restart: unless-stopped
     ports:
       - "3000:3000"
     depends_on:
@@ -48,6 +51,11 @@ services:
     env_file:
       - .env
     command: ["node", "dist/src/worker/index.js"]
+    restart: unless-stopped
+    # Lets the worker reach a model server on the Docker host (e.g. Ollama at
+    # http://host.docker.internal:11434/v1). No-op on Docker Desktop, needed on Linux.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy

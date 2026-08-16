@@ -84,9 +84,10 @@ More background is available in [docs/architecture-plan.md](docs/architecture-pl
 - `pnpm` `10`
 - Docker and Docker Compose for the easiest local run
 - a GitHub account or organization where you can create a GitHub App
-- an OpenAI API key
+- an OpenAI API key, or a local OpenAI-compatible model server such as
+  [Ollama](https://ollama.com) (see [Local models via Ollama](docs/local-models-ollama.md))
 - a public HTTPS URL for GitHub webhooks
-  - local: use a tunnel such as `cloudflared` or `ngrok`
+  - local: use a tunnel such as Tailscale Funnel, `cloudflared`, or `ngrok`
   - hosted: use the public Railway domain
 
 ### Quickstart
@@ -161,8 +162,9 @@ understand first:
 | `NITPICKR_BASE_URL` | Yes | Your public HTTPS base URL | Local: your tunnel origin. Railway: your API service public domain. |
 | `NITPICKR_WEBHOOK_URL` | Yes for local setup and `doctor` | `NITPICKR_BASE_URL` + `/webhooks/github` | GitHub webhook target. |
 | `NITPICKR_SECRET_KEY` | Recommended | Generate with `openssl rand -hex 32` | Enables encrypted persisted runtime secrets. |
-| `OPENAI_API_KEY` | Yes | [OpenAI API keys](https://platform.openai.com/api-keys) | Required for review generation. |
+| `OPENAI_API_KEY` | Yes | [OpenAI API keys](https://platform.openai.com/api-keys) | Required for review generation. Any non-empty value for local servers that ignore it. |
 | `OPENAI_MODEL` | Yes | Your chosen OpenAI model | Start with `gpt-5-mini`. |
+| `OPENAI_BASE_URL` | No | OpenAI or any OpenAI-compatible endpoint | Point at Ollama/vLLM/etc. to use local models. |
 | `GITHUB_APP_ID` | Yes | GitHub App settings page | Numeric app ID. |
 | `GITHUB_PRIVATE_KEY` | Yes | GitHub App private key download | Paste the PEM directly or with `\n` escapes. |
 | `GITHUB_WEBHOOK_SECRET` | Yes | A secret you choose in GitHub App settings | Must match the value configured in the GitHub App. |
@@ -176,6 +178,11 @@ Useful optional settings:
   repos the instance may review
 - `NITPICKR_PROMPT_OPTIMIZATION_MODE=balanced` to keep prompt sizes under
   control on larger PRs
+- `OPENAI_MEMORY_MODEL`, `OPENAI_EMBEDDING_MODEL` (or `off`),
+  `NITPICKR_EMBEDDING_DIMENSIONS` to control the memory classifier/embedder
+- `OPENAI_REASONING_EFFORT`, `OPENAI_REQUEST_TIMEOUT_MS`,
+  `NITPICKR_MODEL_MAX_CONCURRENT_REQUESTS`, `NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS`
+  to tune for slower or smaller-context (local) models
 
 ### Model guidance
 
@@ -204,6 +211,12 @@ budget:
 
 - [OpenAI models](https://platform.openai.com/docs/models)
 - [OpenAI API pricing](https://openai.com/api/pricing/)
+
+Local models: nitpickr talks plain OpenAI-compatible HTTP, so it can run fully
+offline against Ollama, vLLM, LM Studio and similar. See
+[docs/local-models-ollama.md](docs/local-models-ollama.md) for the recommended
+settings and the `pnpm eval:reviews --live` harness for comparing models on
+your own hardware.
 
 ## Development
 
@@ -239,7 +252,9 @@ pnpm cli doctor
 pnpm cli migrate
 pnpm dev:api
 pnpm dev:worker
-pnpm eval:reviews
+pnpm eval:reviews                      # replay canned model output (offline)
+pnpm eval:reviews --live --model <m>   # run fixtures against a real model
+pnpm cli eval:capture owner/repo#123   # snapshot a PR into a live fixture
 ```
 
 ## Usage

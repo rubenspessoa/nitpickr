@@ -6,6 +6,25 @@ const promptOptimizationModeSchema = z.enum(["off", "balanced"]);
 export type PromptOptimizationMode = z.infer<
   typeof promptOptimizationModeSchema
 >;
+const reasoningEffortSchema = z.enum([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+]);
+export type ReasoningEffort = z.infer<typeof reasoningEffortSchema>;
+
+/** Sentinel for OPENAI_EMBEDDING_MODEL that disables memory embeddings. */
+export const EMBEDDING_MODEL_DISABLED = "off";
+export const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
+export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+export const DEFAULT_OPENAI_MEMORY_MODEL = "gpt-4o-mini";
+export const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
+export const DEFAULT_EMBEDDING_DIMENSIONS = 1536;
+export const DEFAULT_OPENAI_REQUEST_TIMEOUT_MS = 300_000;
+export const DEFAULT_MODEL_MAX_CONCURRENT_REQUESTS = 4;
+export const DEFAULT_REVIEW_CHUNK_MAX_TOTAL_CHARS = 200_000;
 
 const bootstrapEnvironmentSchema = z.object({
   NODE_ENV: nodeEnvironmentSchema.optional(),
@@ -13,6 +32,13 @@ const bootstrapEnvironmentSchema = z.object({
   DATABASE_URL: z.string().url(),
   OPENAI_MODEL: z.string().min(1).optional(),
   OPENAI_BASE_URL: z.string().url().optional(),
+  OPENAI_REASONING_EFFORT: reasoningEffortSchema.optional(),
+  OPENAI_MEMORY_MODEL: z.string().min(1).optional(),
+  OPENAI_EMBEDDING_MODEL: z.string().min(1).optional(),
+  OPENAI_REQUEST_TIMEOUT_MS: z.string().optional(),
+  NITPICKR_EMBEDDING_DIMENSIONS: z.string().optional(),
+  NITPICKR_MODEL_MAX_CONCURRENT_REQUESTS: z.string().optional(),
+  NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS: z.string().optional(),
   GITHUB_API_BASE_URL: z.string().url().optional(),
   GITHUB_BOT_LOGINS: z.string().min(1).optional(),
   NITPICKR_BASE_URL: z.string().url().optional(),
@@ -51,16 +77,36 @@ export interface RuntimeSecrets {
   githubBotLogins?: BotLogins;
 }
 
+/**
+ * Settings for the OpenAI-compatible model endpoint. Also used to target
+ * local servers such as Ollama (`OPENAI_BASE_URL=http://localhost:11434/v1`).
+ */
+export interface OpenAiSettings {
+  model: string;
+  baseUrl: string;
+  /** Sent as `reasoning_effort` when set; omitted from requests otherwise. */
+  reasoningEffort: ReasoningEffort | null;
+  /** Chat model used by the memory classifier. */
+  memoryModel: string;
+  /** Embedding model for memory recall; `null` disables embeddings. */
+  embeddingModel: string | null;
+  /** Vector width stored in the `memories.embedding` column. */
+  embeddingDimensions: number;
+  /** Per-request timeout for every model call. */
+  requestTimeoutMs: number;
+  /** Max in-flight model requests within one review (chunk fan-out). */
+  maxConcurrentRequests: number;
+  /** Total prompt characters (patch + file content) packed per review chunk. */
+  reviewChunkMaxTotalChars: number;
+}
+
 export interface BootstrapConfig {
   nodeEnv: "development" | "test" | "production";
   port: number;
   databaseUrl: string;
   baseUrl: string;
   secretKey: string | null;
-  openAi: {
-    model: string;
-    baseUrl: string;
-  };
+  openAi: OpenAiSettings;
   github: {
     apiBaseUrl: string;
     botLogins: BotLogins;
@@ -93,10 +139,7 @@ export interface AppConfig {
   databaseUrl: string;
   runtimeSecretSource: "environment" | "persisted_store";
   openAiApiKey: string;
-  openAi: {
-    model: string;
-    baseUrl: string;
-  };
+  openAi: OpenAiSettings;
   github: {
     appId: number;
     apiBaseUrl: string;
@@ -184,6 +227,41 @@ function parseRepositoryAllowlist(value: string | undefined): string[] | null {
   return entries.length > 0 ? [...new Set(entries)] : null;
 }
 
+function parseOpenAiSettings(parsed: BootstrapEnvironment): OpenAiSettings {
+  const embeddingModel =
+    parsed.OPENAI_EMBEDDING_MODEL ?? DEFAULT_OPENAI_EMBEDDING_MODEL;
+  return {
+    model: parsed.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
+    baseUrl: parsed.OPENAI_BASE_URL ?? DEFAULT_OPENAI_BASE_URL,
+    reasoningEffort: parsed.OPENAI_REASONING_EFFORT ?? null,
+    memoryModel: parsed.OPENAI_MEMORY_MODEL ?? DEFAULT_OPENAI_MEMORY_MODEL,
+    embeddingModel:
+      embeddingModel.toLowerCase() === EMBEDDING_MODEL_DISABLED
+        ? null
+        : embeddingModel,
+    embeddingDimensions: parseInteger(
+      parsed.NITPICKR_EMBEDDING_DIMENSIONS,
+      "NITPICKR_EMBEDDING_DIMENSIONS",
+      DEFAULT_EMBEDDING_DIMENSIONS,
+    ),
+    requestTimeoutMs: parseInteger(
+      parsed.OPENAI_REQUEST_TIMEOUT_MS,
+      "OPENAI_REQUEST_TIMEOUT_MS",
+      DEFAULT_OPENAI_REQUEST_TIMEOUT_MS,
+    ),
+    maxConcurrentRequests: parseInteger(
+      parsed.NITPICKR_MODEL_MAX_CONCURRENT_REQUESTS,
+      "NITPICKR_MODEL_MAX_CONCURRENT_REQUESTS",
+      DEFAULT_MODEL_MAX_CONCURRENT_REQUESTS,
+    ),
+    reviewChunkMaxTotalChars: parseInteger(
+      parsed.NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS,
+      "NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS",
+      DEFAULT_REVIEW_CHUNK_MAX_TOTAL_CHARS,
+    ),
+  };
+}
+
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
 }
@@ -251,10 +329,7 @@ export function parseBootstrapConfig(
     databaseUrl: parsed.DATABASE_URL,
     baseUrl: deriveBaseUrl(parsed, port),
     secretKey: parsed.NITPICKR_SECRET_KEY ?? null,
-    openAi: {
-      model: parsed.OPENAI_MODEL ?? "gpt-5-mini",
-      baseUrl: parsed.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-    },
+    openAi: parseOpenAiSettings(parsed),
     github: {
       apiBaseUrl: parsed.GITHUB_API_BASE_URL ?? "https://api.github.com",
       botLogins: parseBotLogins(parsed.GITHUB_BOT_LOGINS),
@@ -329,8 +404,8 @@ export function buildAppConfig(
     runtimeSecretSource,
     openAiApiKey: secrets.openAiApiKey,
     openAi: {
+      ...bootstrap.openAi,
       model: secrets.openAiModel ?? bootstrap.openAi.model,
-      baseUrl: bootstrap.openAi.baseUrl,
     },
     github: {
       appId: secrets.githubAppId,

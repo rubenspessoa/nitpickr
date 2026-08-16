@@ -542,31 +542,49 @@ export interface ReviewEngineDiagnosticsResult {
 }
 
 export interface ReviewEngineOptions {
+  /** Patch characters packed per chunk (file content excluded). */
   maxPatchCharactersPerChunk?: number;
+  /**
+   * Total prompt characters (patch + full file content) packed per chunk.
+   * Bounds prompt size for models with small context windows / slow prefill.
+   */
+  maxTotalCharactersPerChunk?: number;
+  /** Max model requests in flight for one review; 1 = strictly sequential. */
+  maxConcurrentModelRequests?: number;
 }
+
+export const DEFAULT_MAX_PATCH_CHARACTERS_PER_CHUNK = 16_000;
+export const DEFAULT_MAX_TOTAL_CHARACTERS_PER_CHUNK = 200_000;
+export const DEFAULT_MAX_CONCURRENT_MODEL_REQUESTS = 4;
 
 function splitIntoChunks(
   files: ReviewEngineInput["files"],
   maxPatchCharactersPerChunk: number,
+  maxTotalCharactersPerChunk: number,
 ): Array<ReviewEngineInput["files"]> {
   const chunks: Array<ReviewEngineInput["files"]> = [];
   let currentChunk: ReviewEngineInput["files"] = [];
-  let currentSize = 0;
+  let currentPatchSize = 0;
+  let currentTotalSize = 0;
 
   for (const file of files) {
-    const fileSize = file.patch?.length ?? 0;
+    const patchSize = file.patch?.length ?? 0;
+    const totalSize = patchSize + (file.fileContent?.length ?? 0);
     const wouldOverflow =
       currentChunk.length > 0 &&
-      currentSize + fileSize > maxPatchCharactersPerChunk;
+      (currentPatchSize + patchSize > maxPatchCharactersPerChunk ||
+        currentTotalSize + totalSize > maxTotalCharactersPerChunk);
 
     if (wouldOverflow) {
       chunks.push(currentChunk);
       currentChunk = [];
-      currentSize = 0;
+      currentPatchSize = 0;
+      currentTotalSize = 0;
     }
 
     currentChunk.push(file);
-    currentSize += fileSize;
+    currentPatchSize += patchSize;
+    currentTotalSize += totalSize;
   }
 
   if (currentChunk.length > 0) {
@@ -574,6 +592,30 @@ function splitIntoChunks(
   }
 
   return chunks;
+}
+
+/**
+ * Run `task` for every item with at most `limit` in flight, preserving order.
+ * Kept inline (no dependency) because it is the only bounded pool we need.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await task(items[index] as T, index);
+      }
+    }),
+  );
+  return results;
 }
 
 // severityWeight is imported from evidence-gate (see the top of this file)
@@ -686,13 +728,22 @@ export class ReviewEngine {
   readonly #promptBuilder: PromptBuilder;
   readonly #promptPayloadOptimizer: PromptPayloadOptimizer;
   readonly #maxPatchCharactersPerChunk: number;
+  readonly #maxTotalCharactersPerChunk: number;
+  readonly #maxConcurrentModelRequests: number;
 
   constructor(model: ReviewModel, options: ReviewEngineOptions = {}) {
     this.#model = model;
     this.#promptBuilder = new PromptBuilder();
     this.#promptPayloadOptimizer = new PromptPayloadOptimizer();
     this.#maxPatchCharactersPerChunk =
-      options.maxPatchCharactersPerChunk ?? 16000;
+      options.maxPatchCharactersPerChunk ??
+      DEFAULT_MAX_PATCH_CHARACTERS_PER_CHUNK;
+    this.#maxTotalCharactersPerChunk =
+      options.maxTotalCharactersPerChunk ??
+      DEFAULT_MAX_TOTAL_CHARACTERS_PER_CHUNK;
+    this.#maxConcurrentModelRequests =
+      options.maxConcurrentModelRequests ??
+      DEFAULT_MAX_CONCURRENT_MODEL_REQUESTS;
   }
 
   async #reviewInternal(input: ReviewEngineInput): Promise<{
@@ -711,6 +762,7 @@ export class ReviewEngine {
     const unoptimizedChunks = splitIntoChunks(
       input.files,
       this.#maxPatchCharactersPerChunk,
+      this.#maxTotalCharactersPerChunk,
     );
     const beforeCompaction = this.#promptPayloadOptimizer.estimatePromptUsage({
       chunks: unoptimizedChunks,
@@ -735,6 +787,7 @@ export class ReviewEngine {
     const chunks = splitIntoChunks(
       optimized.files,
       this.#maxPatchCharactersPerChunk,
+      this.#maxTotalCharactersPerChunk,
     );
     const chunkMemories = chunks.map((files) =>
       this.#promptPayloadOptimizer.selectChunkMemory({
@@ -752,8 +805,10 @@ export class ReviewEngine {
       chunkMemory: chunkMemories,
     });
 
-    const responses = await Promise.all(
-      chunks.map(async (files, index) => {
+    const responses = await mapWithConcurrency(
+      chunks,
+      this.#maxConcurrentModelRequests,
+      async (files, index) => {
         const chunkPaths = new Set(files.map((file) => file.path));
         const chunkPriorThreads = input.priorThreads
           ? input.priorThreads.filter((thread) => chunkPaths.has(thread.path))
@@ -781,7 +836,7 @@ export class ReviewEngine {
 
         const response = await this.#model.generateStructuredReview(prompt);
         return modelResponseSchema.parse(response);
-      }),
+      },
     );
 
     const mergedFindings = dedupeAndRankFindings(

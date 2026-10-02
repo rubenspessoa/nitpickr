@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isoTimestampSchema } from "../shared/db-timestamp.js";
+
 import type { MemoryEntry, MemoryKind, MemoryStore } from "./memory-service.js";
 
 export interface PostgresMemoryClient {
@@ -30,12 +32,12 @@ const memoryRowSchema = z
     globs: z.array(z.string()).nullable().optional(),
     confidence: z.number(),
     usage_count: z.number().nullable().optional(),
-    last_used_at: z.string().nullable().optional(),
+    last_used_at: isoTimestampSchema.nullable().optional(),
     embedding: z.unknown().optional(),
     superseded_by: z.string().nullable().optional(),
     source: z.string().nullable().optional(),
-    created_at: z.string().min(1),
-    updated_at: z.string().min(1),
+    created_at: isoTimestampSchema,
+    updated_at: isoTimestampSchema,
   })
   .transform((row): MemoryEntry => {
     const rawEmbedding = parseEmbedding(row.embedding);

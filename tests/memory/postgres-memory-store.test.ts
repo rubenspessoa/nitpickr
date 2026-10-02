@@ -75,4 +75,34 @@ describe("PostgresMemoryStore", () => {
 
     expect(entries[0]?.summary).toContain("stable ordering");
   });
+
+  it("accepts Date timestamps as returned by the postgres driver", async () => {
+    const client = new FakePostgresClient();
+    client.queueResponse([
+      {
+        id: "memory_1",
+        tenant_id: "tenant_1",
+        repository_id: "repo_1",
+        kind: "preferred_pattern",
+        summary: "Prefer stable ordering.",
+        path: null,
+        confidence: 0.8,
+        last_used_at: new Date("2026-03-10T09:00:00.000Z"),
+        created_at: new Date("2026-03-09T10:00:00.000Z"),
+        updated_at: new Date("2026-03-09T11:00:00.000Z"),
+      },
+    ]);
+    const store = new PostgresMemoryStore(client);
+
+    const entries = await store.listByRepository({
+      tenantId: "tenant_1",
+      repositoryId: "repo_1",
+    });
+
+    expect(entries[0]).toMatchObject({
+      lastUsedAt: "2026-03-10T09:00:00.000Z",
+      createdAt: "2026-03-09T10:00:00.000Z",
+      updatedAt: "2026-03-09T11:00:00.000Z",
+    });
+  });
 });

@@ -39,6 +39,22 @@ describe("docker-compose runtime commands", () => {
     );
   });
 
+  it("preloads Sentry instrumentation in the api and worker commands", async () => {
+    const contents = await readFile(
+      join(process.cwd(), "docker-compose.yml"),
+      "utf8",
+    );
+    const document = parse(contents) as {
+      services?: Record<string, { command?: string[] }>;
+    };
+
+    for (const service of ["api", "worker"]) {
+      expect(document.services?.[service]?.command?.join(" ")).toContain(
+        "--import ./dist/src/observability/instrument.js",
+      );
+    }
+  });
+
   it("uses a pgvector-enabled Postgres image and exposes the Docker host to the worker", async () => {
     const contents = await readFile(
       join(process.cwd(), "docker-compose.yml"),

@@ -67,7 +67,7 @@ async function main(): Promise<void> {
         logger.warn("Worker is idle until nitpickr setup completes.", {
           workerId,
           setupState: setupStatus.state,
-          openAiConfigured: setupStatus.openAiConfigured,
+          modelConfigured: setupStatus.modelConfigured,
           githubAppConfigured: setupStatus.githubAppConfigured,
         });
       } else {

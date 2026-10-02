@@ -1265,7 +1265,7 @@ describe("WorkerRunner", () => {
     expect(queue.failed).toEqual([{ jobId: "job_3", error: "boom" }]);
     expect(lifecycle.failed).toEqual([
       {
-        errorMessage: "openai_model_output: boom",
+        errorMessage: "model_output: boom",
         reviewRunId: "review_run_1",
       },
     ]);
@@ -1281,7 +1281,7 @@ describe("WorkerRunner", () => {
             jobType: "review_requested",
             tenantId: "github-installation:123456",
             repositoryId: "github:99",
-            failureClass: "openai_model_output",
+            failureClass: "model_output",
             retryable: false,
             error: "boom",
           }),
@@ -1420,7 +1420,7 @@ describe("WorkerRunner", () => {
     expect(queue.failed).toEqual([{ jobId: "job_3", error: "boom" }]);
     expect(lifecycle.failed).toEqual([
       {
-        errorMessage: "openai_model_output: boom",
+        errorMessage: "model_output: boom",
         reviewRunId: "review_run_1",
       },
     ]);
@@ -1436,7 +1436,7 @@ describe("WorkerRunner", () => {
             jobType: "review_requested",
             tenantId: "github-installation:123456",
             repositoryId: "github:99",
-            failureClass: "openai_model_output",
+            failureClass: "model_output",
             retryable: true,
             error: "boom",
           }),
@@ -1924,7 +1924,7 @@ describe("WorkerRunner", () => {
     expect(queue.failed).toEqual([{ jobId: "job_6", error: "boom" }]);
     expect(lifecycle.failed).toEqual([
       {
-        errorMessage: "openai_model_output: boom",
+        errorMessage: "model_output: boom",
         reviewRunId: "review_run_1",
       },
     ]);
@@ -1938,7 +1938,7 @@ describe("WorkerRunner", () => {
         checkRunId: "check-run-6",
         repositoryId: "github:99",
         sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        failureClass: "openai_model_output",
+        failureClass: "model_output",
         retryable: false,
         statusPhase: "failed",
         error:
@@ -1957,7 +1957,7 @@ describe("WorkerRunner", () => {
             jobType: "review_requested",
             tenantId: "github-installation:123456",
             repositoryId: "github:99",
-            failureClass: "openai_model_output",
+            failureClass: "model_output",
             error: "boom",
           }),
         }),

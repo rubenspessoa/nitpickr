@@ -11,7 +11,7 @@ describe("parseAppConfig", () => {
   it("parses valid environment variables", () => {
     const config = parseAppConfig({
       DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
-      OPENAI_API_KEY: "sk-test-key",
+      NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
       GITHUB_APP_ID: "123456",
       GITHUB_PRIVATE_KEY:
         "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
@@ -22,9 +22,13 @@ describe("parseAppConfig", () => {
     expect(config.port).toBe(3000);
     expect(config.worker.concurrency).toBe(4);
     expect(config.github.appId).toBe(123456);
-    expect(config.openAi.model).toBe("gpt-5-mini");
+    expect(config.models.reviewModel).toBe("qwen3.6:35b-a3b-coding-nvfp4");
+    expect(config.models.memoryModel).toBe("qwen3.6:35b-a3b-coding-nvfp4");
+    expect(config.models.apiKey).toBeNull();
+    expect(config.models.embeddingModel).toBe("nomic-ai/nomic-embed-text-v1.5");
+    expect(config.models.embeddingDimensions).toBe(768);
     expect(config.github.apiBaseUrl).toBe("https://api.github.com");
-    expect(config.openAi.baseUrl).toBe("https://api.openai.com/v1");
+    expect(config.models.baseUrl).toBe("http://localhost:11434/v1");
     expect(config.github.botLogins).toEqual(["nitpickr", "getnitpickr"]);
     expect(config.review.promptOptimizationMode).toBe("balanced");
   });
@@ -32,8 +36,9 @@ describe("parseAppConfig", () => {
   it("parses custom provider base URLs", () => {
     const config = parseAppConfig({
       DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
-      OPENAI_API_KEY: "sk-test-key",
-      OPENAI_BASE_URL: "http://openai-stub:4020/v1",
+      NITPICKR_MODEL_BASE_URL: "http://model-stub:4020/v1",
+      NITPICKR_MODEL_API_KEY: "local-token",
+      NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
       GITHUB_APP_ID: "123456",
       GITHUB_API_BASE_URL: "http://github-stub:4010",
       GITHUB_BOT_LOGINS: "getnitpickr,nitpickr",
@@ -43,7 +48,8 @@ describe("parseAppConfig", () => {
       NITPICKR_WEBHOOK_URL: "https://nitpickr.example.com/webhooks/github",
     });
 
-    expect(config.openAi.baseUrl).toBe("http://openai-stub:4020/v1");
+    expect(config.models.baseUrl).toBe("http://model-stub:4020/v1");
+    expect(config.models.apiKey).toBe("local-token");
     expect(config.github.apiBaseUrl).toBe("http://github-stub:4010");
     expect(config.github.botLogins).toEqual(["getnitpickr", "nitpickr"]);
   });
@@ -53,14 +59,43 @@ describe("parseAppConfig", () => {
       parseAppConfig({
         DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
       }),
-    ).toThrow(/OPENAI_API_KEY/i);
+    ).toThrow(/GITHUB_APP_ID/i);
+  });
+
+  it("rejects an unmigrated .env that still uses OPENAI_* names", () => {
+    expect(() =>
+      parseBootstrapConfig({
+        DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
+        OPENAI_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
+        OPENAI_BASE_URL: "http://localhost:11434/v1",
+      }),
+    ).toThrow(/OPENAI_MODEL → use NITPICKR_REVIEW_MODEL/);
+  });
+
+  it("ignores an unrelated OPENAI_API_KEY once NITPICKR_REVIEW_MODEL is set", () => {
+    const config = parseBootstrapConfig({
+      DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
+      OPENAI_API_KEY: "sk-for-another-tool",
+      NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
+    });
+
+    expect(config.models.apiKey).toBeNull();
+  });
+
+  it("leaves the review model unset until configured", () => {
+    const config = parseBootstrapConfig({
+      DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
+    });
+
+    expect(config.models.reviewModel).toBeNull();
+    expect(config.models.memoryModel).toBeNull();
   });
 
   it("rejects invalid numeric configuration", () => {
     expect(() =>
       parseAppConfig({
         DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
-        OPENAI_API_KEY: "sk-test-key",
+        NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
         GITHUB_APP_ID: "123456",
         GITHUB_PRIVATE_KEY:
           "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
@@ -142,7 +177,7 @@ describe("parseRuntimeSecretsFromEnvironment", () => {
   it("returns null when runtime secrets are incomplete", () => {
     expect(
       parseRuntimeSecretsFromEnvironment({
-        OPENAI_API_KEY: "sk-test-key",
+        NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
         GITHUB_APP_ID: "123456",
       }),
     ).toBeNull();
@@ -151,7 +186,7 @@ describe("parseRuntimeSecretsFromEnvironment", () => {
   it("parses and normalizes runtime bot logins", () => {
     expect(
       parseRuntimeSecretsFromEnvironment({
-        OPENAI_API_KEY: "sk-test-key",
+        NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
         GITHUB_APP_ID: "123456",
         GITHUB_BOT_LOGINS: "GetNitpickr, nitpickr",
         GITHUB_PRIVATE_KEY:
@@ -166,7 +201,7 @@ describe("parseRuntimeSecretsFromEnvironment", () => {
   it("rejects bot login values that normalize to an empty list", () => {
     expect(() =>
       parseRuntimeSecretsFromEnvironment({
-        OPENAI_API_KEY: "sk-test-key",
+        NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
         GITHUB_APP_ID: "123456",
         GITHUB_BOT_LOGINS: " , ",
         GITHUB_PRIVATE_KEY:
@@ -187,8 +222,6 @@ describe("buildAppConfig", () => {
         NITPICKR_WORKER_HEARTBEAT_INTERVAL_MS: "3000",
       }),
       {
-        openAiApiKey: "sk-test-key",
-        openAiModel: "gpt-4.1",
         githubAppId: 123456,
         githubPrivateKey:
           "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",

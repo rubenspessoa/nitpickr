@@ -53,7 +53,7 @@ function emptyPromptUsageSnapshot() {
 type ReviewFailureClass =
   | "config_setup"
   | "github_api"
-  | "openai_model_output"
+  | "model_output"
   | "publish_failure"
   | "internal_processing";
 
@@ -116,7 +116,7 @@ function classifyReviewError(
       isRetryableHttpError(message) ||
       error instanceof ModelOutputError ||
       error instanceof ZodError;
-    return new ReviewJobError("openai_model_output", retryable, message);
+    return new ReviewJobError("model_output", retryable, message);
   }
 
   return new ReviewJobError(

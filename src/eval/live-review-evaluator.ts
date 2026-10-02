@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { z } from "zod";
 
-import type { OpenAiCompletionInfo } from "../review/openai-review-model.js";
+import type { ModelCompletionInfo } from "../review/chat-review-model.js";
 import {
   ReviewEngine,
   type ReviewEngineInput,
@@ -121,14 +121,14 @@ export interface LiveEvaluationReport {
   };
 }
 
-/** Collects usage from `OpenAiReviewModel.onCompletion` between `take()` calls. */
+/** Collects usage from `ChatReviewModel.onCompletion` between `take()` calls. */
 export class UsageTracker {
   #calls = 0;
   #promptTokens = 0;
   #completionTokens = 0;
   #sawUsage = false;
 
-  readonly onCompletion = (info: OpenAiCompletionInfo): void => {
+  readonly onCompletion = (info: ModelCompletionInfo): void => {
     this.#calls += 1;
     if (
       info.promptTokens !== undefined ||

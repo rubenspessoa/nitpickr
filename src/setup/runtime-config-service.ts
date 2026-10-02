@@ -2,7 +2,7 @@ import type { RuntimeSecrets } from "../config/app-config.js";
 
 export interface SetupStatus {
   state: "setup_required" | "ready";
-  openAiConfigured: boolean;
+  modelConfigured: boolean;
   githubAppConfigured: boolean;
   ready: boolean;
 }
@@ -15,13 +15,16 @@ export interface RuntimeConfigStore {
 export class RuntimeConfigService {
   readonly #store: RuntimeConfigStore | null;
   readonly #environmentSecrets: RuntimeSecrets | null;
+  readonly #modelConfigured: boolean;
 
   constructor(
     store: RuntimeConfigStore | null,
     environmentSecrets: RuntimeSecrets | null = null,
+    options: { modelConfigured?: boolean } = {},
   ) {
     this.#store = store;
     this.#environmentSecrets = environmentSecrets;
+    this.#modelConfigured = options.modelConfigured ?? true;
   }
 
   async loadRuntimeSecrets(): Promise<RuntimeSecrets | null> {
@@ -48,17 +51,17 @@ export class RuntimeConfigService {
 
   async getSetupStatus(): Promise<SetupStatus> {
     const secrets = await this.loadRuntimeSecrets();
-    const openAiConfigured = Boolean(secrets?.openAiApiKey);
+    const modelConfigured = this.#modelConfigured;
     const githubAppConfigured = Boolean(
       secrets?.githubAppId &&
         secrets.githubPrivateKey &&
         secrets.githubWebhookSecret,
     );
-    const ready = openAiConfigured && githubAppConfigured;
+    const ready = modelConfigured && githubAppConfigured;
 
     return {
       state: ready ? "ready" : "setup_required",
-      openAiConfigured,
+      modelConfigured,
       githubAppConfigured,
       ready,
     };

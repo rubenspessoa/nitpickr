@@ -51,8 +51,11 @@ export interface MemoryClassifier {
   }): Promise<MemoryClassifierResult>;
 }
 
+/** Retrieval models embed stored text and search queries differently. */
+export type EmbeddingPurpose = "document" | "query";
+
 export interface MemoryEmbedder {
-  embed(text: string): Promise<number[]>;
+  embed(text: string, purpose?: EmbeddingPurpose): Promise<number[]>;
 }
 
 export interface MemoryStore {
@@ -292,7 +295,7 @@ export class MemoryService {
     let embedding: number[] | null = null;
     if (this.#embedder) {
       try {
-        embedding = await this.#embedder.embed(summary);
+        embedding = await this.#embedder.embed(summary, "document");
       } catch {
         embedding = null;
       }
@@ -626,7 +629,10 @@ export class MemoryService {
     let queryEmbedding: number[] | null = null;
     if (this.#embedder && input.reviewContext.trim().length > 0) {
       try {
-        queryEmbedding = await this.#embedder.embed(input.reviewContext);
+        queryEmbedding = await this.#embedder.embed(
+          input.reviewContext,
+          "query",
+        );
       } catch {
         queryEmbedding = null;
       }

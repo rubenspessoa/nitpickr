@@ -21,7 +21,7 @@ async function main(): Promise<void> {
     await setup.run({
       cwd: cwd(),
       values: {
-        openAiApiKey: env.OPENAI_API_KEY ?? "",
+        reviewModel: env.NITPICKR_REVIEW_MODEL ?? "",
         databaseUrl: env.DATABASE_URL ?? "",
         githubAppId: env.GITHUB_APP_ID ?? "",
         githubPrivateKey: env.GITHUB_PRIVATE_KEY ?? "",
@@ -44,8 +44,8 @@ async function main(): Promise<void> {
   if (command === "eval:reviews") {
     const args = parseArgs(process.argv.slice(3));
     if (flagBoolean(args, "live")) {
-      // Live mode: run fixtures against a real OpenAI-compatible model.
-      // Defaults come from OPENAI_* so `.env` for Ollama works as-is.
+      // Live mode: run fixtures against the local model server.
+      // Defaults come from NITPICKR_MODEL_* / NITPICKR_REVIEW_MODEL in `.env`.
       const bootstrap = parseCliBootstrapConfig({
         ...env,
         DATABASE_URL: env.DATABASE_URL ?? "postgres://unused@localhost/unused",
@@ -61,25 +61,28 @@ async function main(): Promise<void> {
           "--reasoning-effort must be one of unset|none|minimal|low|medium|high.",
         );
       }
-      const model = flagString(args, "model") ?? bootstrap.openAi.model;
+      const model = flagString(args, "model") ?? bootstrap.models.reviewModel;
+      if (!model) {
+        throw new Error("Set NITPICKR_REVIEW_MODEL or pass --model.");
+      }
       const evaluation = new EvalLiveReviewsCommand();
       const timeoutMs =
-        flagInteger(args, "timeout-ms") ?? bootstrap.openAi.requestTimeoutMs;
+        flagInteger(args, "timeout-ms") ?? bootstrap.models.requestTimeoutMs;
       await evaluation.run({
         cwd: cwd(),
-        apiKey: flagString(args, "api-key") ?? env.OPENAI_API_KEY ?? "ollama",
-        baseUrl: flagString(args, "base-url") ?? bootstrap.openAi.baseUrl,
+        apiKey: flagString(args, "api-key") ?? bootstrap.models.apiKey,
+        baseUrl: flagString(args, "base-url") ?? bootstrap.models.baseUrl,
         model,
         reasoningEffort:
           reasoningFlag === undefined
-            ? bootstrap.openAi.reasoningEffort
+            ? bootstrap.models.reasoningEffort
             : reasoningFlag === "unset"
               ? null
               : (reasoningFlag as ReasoningEffort),
         timeoutMs,
         engineOptions: {
-          maxConcurrentModelRequests: bootstrap.openAi.maxConcurrentRequests,
-          maxTotalCharactersPerChunk: bootstrap.openAi.reviewChunkMaxTotalChars,
+          maxConcurrentModelRequests: bootstrap.models.maxConcurrentRequests,
+          maxTotalCharactersPerChunk: bootstrap.models.reviewChunkMaxTotalChars,
         },
         startedAt: new Date().toISOString(),
         ...(flagString(args, "fixtures")
@@ -135,7 +138,7 @@ async function main(): Promise<void> {
     const sql = createPostgresClient(config.databaseUrl);
     try {
       await runMigrationsWithAdvisoryLock(sql, {
-        embeddingDimensions: config.openAi.embeddingDimensions,
+        embeddingDimensions: config.models.embeddingDimensions,
       });
     } finally {
       await sql.end();

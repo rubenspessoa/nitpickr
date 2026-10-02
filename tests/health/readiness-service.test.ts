@@ -9,7 +9,7 @@ describe("ReadinessService", () => {
         async getSetupStatus() {
           return {
             state: "setup_required" as const,
-            openAiConfigured: false,
+            modelConfigured: false,
             githubAppConfigured: false,
             ready: false,
           };
@@ -41,7 +41,7 @@ describe("ReadinessService", () => {
         async getSetupStatus() {
           return {
             state: "ready" as const,
-            openAiConfigured: true,
+            modelConfigured: true,
             githubAppConfigured: true,
             ready: true,
           };

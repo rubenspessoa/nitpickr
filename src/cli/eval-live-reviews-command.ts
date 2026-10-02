@@ -10,7 +10,7 @@ import {
   UsageTracker,
 } from "../eval/live-review-evaluator.js";
 import { createLogger } from "../logging/logger.js";
-import { OpenAiReviewModel } from "../review/openai-review-model.js";
+import { ChatReviewModel } from "../review/chat-review-model.js";
 import type { ReviewEngineOptions } from "../review/review-engine.js";
 
 export interface EvalLiveReviewsInput {
@@ -18,16 +18,16 @@ export interface EvalLiveReviewsInput {
   fixtureDirectory?: string;
   outFile?: string;
   filter?: string;
-  apiKey: string;
+  apiKey: string | null;
   baseUrl: string;
   model: string;
   reasoningEffort?: ReasoningEffort | null;
   timeoutMs?: number;
   engineOptions?: ReviewEngineOptions;
-  /** Injected for tests; defaults to a real OpenAiReviewModel. */
+  /** Injected for tests; defaults to a real ChatReviewModel. */
   modelFactory?: (
     usage: UsageTracker,
-  ) => Pick<OpenAiReviewModel, "generateStructuredReview">;
+  ) => Pick<ChatReviewModel, "generateStructuredReview">;
   write?: (line: string) => void;
   /** Stamped into the report; passed in so callers control clock access. */
   startedAt?: string;
@@ -83,7 +83,7 @@ export class EvalLiveReviewsCommand {
     const usage = new UsageTracker();
     const model =
       input.modelFactory?.(usage) ??
-      new OpenAiReviewModel({
+      new ChatReviewModel({
         apiKey: input.apiKey,
         model: input.model,
         baseUrl: input.baseUrl,

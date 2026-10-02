@@ -204,7 +204,7 @@ describe("createApiServer", () => {
         async getSetupStatus() {
           return {
             state: "setup_required" as const,
-            openAiConfigured: false,
+            modelConfigured: false,
             githubAppConfigured: false,
             ready: false,
           };
@@ -235,7 +235,7 @@ describe("createApiServer", () => {
     expect(setupStatus.statusCode).toBe(200);
     expect(setupStatus.json()).toEqual({
       state: "setup_required",
-      openAiConfigured: false,
+      modelConfigured: false,
       githubAppConfigured: false,
       ready: false,
     });
@@ -247,7 +247,7 @@ describe("createApiServer", () => {
         async getSetupStatus() {
           return {
             state: "setup_required" as const,
-            openAiConfigured: false,
+            modelConfigured: false,
             githubAppConfigured: false,
             ready: false,
           };
@@ -293,7 +293,7 @@ describe("createApiServer", () => {
     expect(setupStatus.statusCode).toBe(200);
     expect(setupStatus.json()).toEqual({
       state: "ready",
-      openAiConfigured: true,
+      modelConfigured: true,
       githubAppConfigured: true,
       ready: true,
     });

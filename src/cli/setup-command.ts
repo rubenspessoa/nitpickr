@@ -5,8 +5,7 @@ const defaultDatabaseUrl = "postgres://nitpickr:nitpickr@db:5432/nitpickr";
 const defaultGitHubApiBaseUrl = "https://api.github.com";
 const defaultGitHubBotLogins = "nitpickr,getnitpickr";
 const defaultWebhookUrl = "https://your-public-host/webhooks/github";
-const defaultOpenAiBaseUrl = "https://api.openai.com/v1";
-const defaultOpenAiModel = "gpt-5-mini";
+const defaultModelBaseUrl = "http://host.docker.internal:11434/v1";
 const defaultPort = "3000";
 const defaultLogLevel = "info";
 const defaultWorkerConcurrency = "4";
@@ -24,7 +23,7 @@ export class SetupCommand {
   async run(input: {
     cwd: string;
     values: {
-      openAiApiKey: string;
+      reviewModel: string;
       databaseUrl: string;
       githubAppId: string;
       githubPrivateKey: string;
@@ -36,9 +35,8 @@ export class SetupCommand {
 
     const envContents = [
       `DATABASE_URL=${input.values.databaseUrl || defaultDatabaseUrl}`,
-      `OPENAI_API_KEY=${input.values.openAiApiKey}`,
-      `OPENAI_BASE_URL=${defaultOpenAiBaseUrl}`,
-      `OPENAI_MODEL=${defaultOpenAiModel}`,
+      `NITPICKR_MODEL_BASE_URL=${defaultModelBaseUrl}`,
+      `NITPICKR_REVIEW_MODEL=${input.values.reviewModel}`,
       `GITHUB_APP_ID=${input.values.githubAppId}`,
       `GITHUB_API_BASE_URL=${defaultGitHubApiBaseUrl}`,
       `GITHUB_BOT_LOGINS=${defaultGitHubBotLogins}`,

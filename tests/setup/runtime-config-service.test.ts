@@ -24,7 +24,7 @@ describe("RuntimeConfigService", () => {
 
     await expect(service.getSetupStatus()).resolves.toEqual({
       state: "setup_required",
-      openAiConfigured: false,
+      modelConfigured: true,
       githubAppConfigured: false,
       ready: false,
     });
@@ -35,7 +35,6 @@ describe("RuntimeConfigService", () => {
     const service = new RuntimeConfigService(store);
 
     await service.saveRuntimeSecrets({
-      openAiApiKey: "sk-test-key",
       githubAppId: 123456,
       githubPrivateKey:
         "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
@@ -44,7 +43,6 @@ describe("RuntimeConfigService", () => {
     });
 
     await expect(service.loadRuntimeSecrets()).resolves.toEqual({
-      openAiApiKey: "sk-test-key",
       githubAppId: 123456,
       githubPrivateKey:
         "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
@@ -54,7 +52,7 @@ describe("RuntimeConfigService", () => {
 
     await expect(service.getSetupStatus()).resolves.toEqual({
       state: "ready",
-      openAiConfigured: true,
+      modelConfigured: true,
       githubAppConfigured: true,
       ready: true,
     });
@@ -62,7 +60,6 @@ describe("RuntimeConfigService", () => {
 
   it("treats environment runtime secrets as setup-complete", async () => {
     const service = new RuntimeConfigService(null, {
-      openAiApiKey: "sk-test-key",
       githubAppId: 123456,
       githubPrivateKey:
         "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
@@ -72,7 +69,7 @@ describe("RuntimeConfigService", () => {
 
     await expect(service.getSetupStatus()).resolves.toEqual({
       state: "ready",
-      openAiConfigured: true,
+      modelConfigured: true,
       githubAppConfigured: true,
       ready: true,
     });

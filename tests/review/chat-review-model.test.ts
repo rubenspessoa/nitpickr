@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { OpenAiReviewModel } from "../../src/review/openai-review-model.js";
+import { ChatReviewModel } from "../../src/review/chat-review-model.js";
 
-describe("OpenAiReviewModel", () => {
+describe("ChatReviewModel", () => {
   it("calls the chat completions API and parses structured JSON", async () => {
     let requestedUrl = "";
     let requestedBody = "";
-    const model = new OpenAiReviewModel(
+    const model = new ChatReviewModel(
       {
         apiKey: "sk-test",
         model: "gpt-4.1",
@@ -50,7 +50,7 @@ describe("OpenAiReviewModel", () => {
 
   it("normalizes custom base URLs without duplicating the version prefix", async () => {
     let requestedUrl = "";
-    const model = new OpenAiReviewModel(
+    const model = new ChatReviewModel(
       {
         apiKey: "sk-test",
         model: "gpt-4.1",
@@ -85,9 +85,10 @@ describe("OpenAiReviewModel", () => {
     expect(requestedUrl).toBe("http://openai-stub:4020/v1/chat/completions");
   });
 
-  it("rejects non-successful OpenAI responses", async () => {
-    const model = new OpenAiReviewModel(
+  it("rejects non-successful model responses", async () => {
+    const model = new ChatReviewModel(
       {
+        baseUrl: "http://localhost:11434/v1",
         apiKey: "sk-test",
         model: "gpt-4.1",
       },
@@ -107,12 +108,13 @@ describe("OpenAiReviewModel", () => {
         system: "system prompt",
         user: "user prompt",
       }),
-    ).rejects.toThrow(/OpenAI request failed/i);
+    ).rejects.toThrow(/Model request failed/i);
   });
 
   it("rejects invalid JSON content from the model", async () => {
-    const model = new OpenAiReviewModel(
+    const model = new ChatReviewModel(
       {
+        baseUrl: "http://localhost:11434/v1",
         apiKey: "sk-test",
         model: "gpt-4.1",
       },
@@ -139,64 +141,6 @@ describe("OpenAiReviewModel", () => {
     ).rejects.toThrow(/valid JSON/i);
   });
 
-  it("retries without temperature for models that reject non-default temperature", async () => {
-    const requestBodies: string[] = [];
-    const model = new OpenAiReviewModel(
-      {
-        apiKey: "sk-test",
-        model: "gpt-5",
-      },
-      async (_input, init) => {
-        requestBodies.push(String(init?.body ?? ""));
-        if (requestBodies.length === 1) {
-          return new Response(
-            JSON.stringify({
-              error: {
-                message:
-                  "Unsupported value: 'temperature' does not support 0.1 with this model. Only the default (1) value is supported.",
-                type: "invalid_request_error",
-                param: "temperature",
-                code: "unsupported_value",
-              },
-            }),
-            { status: 400 },
-          );
-        }
-
-        return new Response(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    summary: "Retry succeeded.",
-                    mermaid: "flowchart TD\nA[Retry] --> B[Success]",
-                    findings: [],
-                  }),
-                },
-              },
-            ],
-          }),
-          { status: 200 },
-        );
-      },
-    );
-
-    const result = await model.generateStructuredReview({
-      system: "system prompt",
-      user: "user prompt",
-    });
-
-    expect(requestBodies).toHaveLength(2);
-    expect(requestBodies[0]).toContain('"temperature":0.1');
-    expect(requestBodies[1]).not.toContain('"temperature":');
-    expect(result).toEqual({
-      summary: "Retry succeeded.",
-      mermaid: "flowchart TD\nA[Retry] --> B[Success]",
-      findings: [],
-    });
-  });
-
   it("sends reasoning_effort only when configured", async () => {
     const bodies: string[] = [];
     const respond = async (_input: unknown, init?: RequestInit) => {
@@ -208,16 +152,17 @@ describe("OpenAiReviewModel", () => {
         { status: 200 },
       );
     };
-    await new OpenAiReviewModel(
+    await new ChatReviewModel(
       {
+        baseUrl: "http://localhost:11434/v1",
         apiKey: "ollama",
         model: "qwen3.6:35b-a3b-nvfp4",
         reasoningEffort: "none",
       },
       respond,
     ).generateStructuredReview({ system: "s", user: "u" });
-    await new OpenAiReviewModel(
-      { apiKey: "ollama", model: "qwen3.6:35b-a3b-nvfp4" },
+    await new ChatReviewModel(
+      { baseUrl: "http://localhost:11434/v1", model: "qwen3.6:35b-a3b-nvfp4" },
       respond,
     ).generateStructuredReview({ system: "s", user: "u" });
 
@@ -228,8 +173,8 @@ describe("OpenAiReviewModel", () => {
   });
 
   it("aborts requests that exceed timeoutMs and reports a retryable ModelOutputError", async () => {
-    const model = new OpenAiReviewModel(
-      { apiKey: "ollama", model: "local", timeoutMs: 20 },
+    const model = new ChatReviewModel(
+      { baseUrl: "http://localhost:11434/v1", model: "local", timeoutMs: 20 },
       (_input, init) =>
         new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () =>
@@ -244,8 +189,8 @@ describe("OpenAiReviewModel", () => {
   });
 
   it("accepts JSON wrapped in think blocks and code fences", async () => {
-    const model = new OpenAiReviewModel(
-      { apiKey: "ollama", model: "local" },
+    const model = new ChatReviewModel(
+      { baseUrl: "http://localhost:11434/v1", model: "local" },
       async () =>
         new Response(
           JSON.stringify({
@@ -270,8 +215,9 @@ describe("OpenAiReviewModel", () => {
   it("nudges the model once when the reply is not JSON, then succeeds", async () => {
     const bodies: string[] = [];
     let usageSeen: number | undefined;
-    const model = new OpenAiReviewModel(
+    const model = new ChatReviewModel(
       {
+        baseUrl: "http://localhost:11434/v1",
         apiKey: "ollama",
         model: "local",
         onCompletion: (info) => {
@@ -310,5 +256,37 @@ describe("OpenAiReviewModel", () => {
     ]);
     expect(retryMessages[3]?.content).toMatch(/only the JSON object/i);
     expect(usageSeen).toBe(2);
+  });
+
+  it("sends no authorization header without an API key and asks for strict JSON Schema output when given one", async () => {
+    let headers: Record<string, string> = {};
+    let body: Record<string, unknown> = {};
+    const model = new ChatReviewModel(
+      { baseUrl: "http://localhost:11434", model: "local" },
+      async (_input, init) => {
+        headers = init?.headers as Record<string, string>;
+        body = JSON.parse(String(init?.body ?? "{}"));
+        return new Response(
+          JSON.stringify({
+            choices: [
+              { message: { content: '{"summary":"ok","findings":[]}' } },
+            ],
+          }),
+          { status: 200 },
+        );
+      },
+    );
+
+    await model.generateStructuredReview({
+      system: "s",
+      user: "u",
+      jsonSchema: { name: "review", schema: { type: "object" } },
+    });
+
+    expect(headers).not.toHaveProperty("authorization");
+    expect(body.response_format).toEqual({
+      type: "json_schema",
+      json_schema: { name: "review", strict: true, schema: { type: "object" } },
+    });
   });
 });

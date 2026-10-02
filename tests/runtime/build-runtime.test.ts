@@ -4,7 +4,7 @@ const {
   createPostgresClientMock,
   githubAdapterConstructorMock,
   githubRestClientConstructorMock,
-  openAiReviewModelConstructorMock,
+  chatReviewModelConstructorMock,
 } = vi.hoisted(() => ({
   createPostgresClientMock: vi.fn(() => ({
     unsafe: vi.fn(async () => []),
@@ -12,7 +12,7 @@ const {
   })),
   githubAdapterConstructorMock: vi.fn(),
   githubRestClientConstructorMock: vi.fn(),
-  openAiReviewModelConstructorMock: vi.fn(),
+  chatReviewModelConstructorMock: vi.fn(),
 }));
 
 vi.mock("../../src/runtime/postgres.js", () => ({
@@ -48,9 +48,9 @@ vi.mock("../../src/providers/github/github-adapter.js", () => ({
   }),
 }));
 
-vi.mock("../../src/review/openai-review-model.js", () => ({
-  OpenAiReviewModel: vi.fn(function (config: unknown) {
-    openAiReviewModelConstructorMock(config);
+vi.mock("../../src/review/chat-review-model.js", () => ({
+  ChatReviewModel: vi.fn(function (config: unknown) {
+    chatReviewModelConstructorMock(config);
     return {
       generateStructuredReview: vi.fn(),
     };
@@ -69,8 +69,8 @@ describe("buildRuntime", () => {
       DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
       NITPICKR_BASE_URL: "https://nitpickr.up.railway.app",
       NITPICKR_SECRET_KEY: "super-secret-key",
-      OPENAI_API_KEY: "sk-test-key",
-      OPENAI_BASE_URL: "http://openai-stub:4020/v1",
+      NITPICKR_MODEL_BASE_URL: "http://model-stub:4020/v1",
+      NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
       GITHUB_APP_ID: "123456",
       GITHUB_API_BASE_URL: "http://github-stub:4010",
       GITHUB_BOT_LOGINS: "getnitpickr,nitpickr",
@@ -97,11 +97,11 @@ describe("buildRuntime", () => {
         botLogins: ["getnitpickr", "nitpickr"],
       }),
     });
-    expect(openAiReviewModelConstructorMock).toHaveBeenCalledWith(
+    expect(chatReviewModelConstructorMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        apiKey: "sk-test-key",
-        model: "gpt-5-mini",
-        baseUrl: "http://openai-stub:4020/v1",
+        apiKey: null,
+        model: "qwen3.6:35b-a3b-coding-nvfp4",
+        baseUrl: "http://model-stub:4020/v1",
       }),
     );
   });
@@ -118,7 +118,7 @@ describe("buildRuntime", () => {
       runtime.runtimeConfigService.getSetupStatus(),
     ).resolves.toEqual({
       state: "setup_required",
-      openAiConfigured: false,
+      modelConfigured: false,
       githubAppConfigured: false,
       ready: false,
     });

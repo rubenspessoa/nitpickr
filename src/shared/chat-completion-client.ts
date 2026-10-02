@@ -1,0 +1,153 @@
+import type { ReasoningEffort } from "../config/app-config.js";
+import { type Logger, noopLogger } from "../logging/logger.js";
+import {
+  createTimeoutFetch,
+  type FetchLike,
+  isTimeoutError,
+} from "./http-client.js";
+import { normalizeModelBaseUrl } from "./model-base-url.js";
+import { ModelOutputError } from "./model-output.js";
+
+/**
+ * Minimal client for the `/v1/chat/completions` protocol spoken by local
+ * model servers (Ollama, llama-server, LM Studio, vLLM). Shared by the review
+ * model and the memory classifier so transport, auth, timeouts and logging
+ * behave the same everywhere.
+ */
+export interface ChatCompletionClientConfig {
+  baseUrl: string;
+  model: string;
+  /** Sent as a bearer token when set; local servers usually need none. */
+  apiKey?: string | null;
+  /** Sent as `reasoning_effort` when set (thinking models). */
+  reasoningEffort?: ReasoningEffort | null;
+  /** Abort the request after this many milliseconds. Unset = no client timeout. */
+  timeoutMs?: number;
+  logger?: Logger;
+}
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface ChatUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
+/** JSON Schema the reply must follow; `null` falls back to plain JSON mode. */
+export interface ResponseJsonSchema {
+  name: string;
+  schema: Record<string, unknown>;
+}
+
+export class ChatCompletionClient {
+  readonly #config: ChatCompletionClientConfig;
+  readonly #fetch: FetchLike;
+  readonly #logger: Logger;
+  readonly #endpoint: string;
+
+  constructor(config: ChatCompletionClientConfig, fetchFn?: FetchLike) {
+    this.#config = config;
+    // Default transport honours the configured timeout end-to-end (see
+    // createTimeoutFetch for why plain fetch caps out at ~300 s).
+    this.#fetch =
+      fetchFn ??
+      (config.timeoutMs ? createTimeoutFetch(config.timeoutMs) : fetch);
+    this.#logger = config.logger ?? noopLogger;
+    this.#endpoint = `${normalizeModelBaseUrl(config.baseUrl)}/chat/completions`;
+  }
+
+  get model(): string {
+    return this.#config.model;
+  }
+
+  async complete(input: {
+    messages: ChatMessage[];
+    temperature?: number;
+    jsonSchema?: ResponseJsonSchema | null;
+  }): Promise<{ content: string; usage: ChatUsage | undefined }> {
+    const startedAt = process.hrtime.bigint();
+    const elapsedMs = () =>
+      Number((process.hrtime.bigint() - startedAt) / 1_000_000n);
+
+    this.#logger.debug("model.chat_completion started", {});
+    let response: Response;
+    try {
+      response = await this.#fetch(this.#endpoint, {
+        method: "POST",
+        headers: {
+          ...(this.#config.apiKey
+            ? { authorization: `Bearer ${this.#config.apiKey}` }
+            : {}),
+          "content-type": "application/json",
+        },
+        ...(this.#config.timeoutMs
+          ? { signal: AbortSignal.timeout(this.#config.timeoutMs) }
+          : {}),
+        body: JSON.stringify({
+          model: this.#config.model,
+          ...(input.temperature !== undefined
+            ? { temperature: input.temperature }
+            : {}),
+          ...(this.#config.reasoningEffort
+            ? { reasoning_effort: this.#config.reasoningEffort }
+            : {}),
+          response_format: input.jsonSchema
+            ? {
+                type: "json_schema",
+                json_schema: {
+                  name: input.jsonSchema.name,
+                  strict: true,
+                  schema: input.jsonSchema.schema,
+                },
+              }
+            : { type: "json_object" },
+          messages: input.messages,
+        }),
+      });
+    } catch (error) {
+      // Network/transport errors (incl. timeouts) that never produced a Response.
+      this.#logger.error("model.chat_completion transport_error", {
+        durationMs: elapsedMs(),
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      if (isTimeoutError(error)) {
+        throw new ModelOutputError(
+          `Model request timed out after ${this.#config.timeoutMs}ms.`,
+        );
+      }
+      throw error;
+    }
+
+    if (!response.ok) {
+      const details = await response.text();
+      this.#logger.error("model.chat_completion failed", {
+        status: response.status,
+        durationMs: elapsedMs(),
+        errorBody: details.slice(0, 500),
+      });
+      throw new Error(
+        `Model request failed with status ${response.status}: ${details}`,
+      );
+    }
+
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string | null } }>;
+      usage?: ChatUsage;
+    };
+    const content = payload.choices?.[0]?.message?.content;
+    if (!content) {
+      this.#logger.error("model.chat_completion empty_response", {
+        durationMs: elapsedMs(),
+      });
+      throw new ModelOutputError(
+        "Model response did not contain a message payload.",
+      );
+    }
+
+    return { content, usage: payload.usage };
+  }
+}

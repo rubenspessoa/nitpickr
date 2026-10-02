@@ -15,10 +15,10 @@ import { ReadinessService } from "../health/readiness-service.js";
 import { WorkerHeartbeatService } from "../health/worker-heartbeat-service.js";
 import { GitHubInstructionBundleLoader } from "../instructions/github-instruction-bundle-loader.js";
 import { createLogger } from "../logging/logger.js";
+import { ChatMemoryClassifier } from "../memory/chat-memory-classifier.js";
 import { PostgresDiscussionAcknowledgmentStore } from "../memory/discussion-acknowledgment-store.js";
+import { LocalMemoryEmbedder } from "../memory/local-memory-embedder.js";
 import { MemoryService } from "../memory/memory-service.js";
-import { OpenAiMemoryClassifier } from "../memory/openai-memory-classifier.js";
-import { OpenAiMemoryEmbedder } from "../memory/openai-memory-embedder.js";
 import { PostgresMemoryStore } from "../memory/postgres-memory-store.js";
 import { GitHubAdapter } from "../providers/github/github-adapter.js";
 import { GitHubAppAuth } from "../providers/github/github-app-auth.js";
@@ -27,7 +27,7 @@ import { ReviewPublisher } from "../publisher/review-publisher.js";
 import { ReviewStatusPublisher } from "../publisher/review-status-publisher.js";
 import { PostgresJobStore } from "../queue/postgres-job-store.js";
 import { QueueScheduler } from "../queue/queue-scheduler.js";
-import { OpenAiReviewModel } from "../review/openai-review-model.js";
+import { ChatReviewModel } from "../review/chat-review-model.js";
 import { PostgresReviewLifecycleStore } from "../review/postgres-review-lifecycle-store.js";
 import { ReviewEngine } from "../review/review-engine.js";
 import { ReviewLifecycleService } from "../review/review-lifecycle-service.js";
@@ -103,6 +103,11 @@ export function buildRuntime(
       ? new PostgresRuntimeConfigStore(sql, new SecretCrypto(config.secretKey))
       : null,
     environmentSecrets,
+    {
+      modelConfigured:
+        config.models.reviewModel !== null &&
+        config.models.memoryModel !== null,
+    },
   );
   const workerHeartbeatService = new WorkerHeartbeatService(
     new PostgresWorkerHeartbeatStore(sql),
@@ -127,7 +132,9 @@ export function buildRuntime(
     const secrets =
       environmentSecrets ?? (await runtimeConfigService.loadRuntimeSecrets());
 
-    if (!secrets) {
+    const models = config.models;
+    const { reviewModel, memoryModel } = models;
+    if (!secrets || reviewModel === null || memoryModel === null) {
       return null;
     }
 
@@ -152,44 +159,37 @@ export function buildRuntime(
       apiClient: githubRestClient,
       appConfig: operationalConfig.github,
     });
-    const openAi = operationalConfig.openAi;
+    const modelServer = {
+      baseUrl: models.baseUrl,
+      apiKey: models.apiKey,
+      reasoningEffort: models.reasoningEffort,
+      timeoutMs: models.requestTimeoutMs,
+      logger,
+    };
     const reviewEngine = new ReviewEngine(
-      new OpenAiReviewModel({
-        apiKey: operationalConfig.openAiApiKey,
-        model: openAi.model,
-        baseUrl: openAi.baseUrl,
-        reasoningEffort: openAi.reasoningEffort,
-        timeoutMs: openAi.requestTimeoutMs,
-        logger,
-      }),
+      new ChatReviewModel({ ...modelServer, model: reviewModel }),
       {
-        maxConcurrentModelRequests: openAi.maxConcurrentRequests,
-        maxTotalCharactersPerChunk: openAi.reviewChunkMaxTotalChars,
+        maxConcurrentModelRequests: models.maxConcurrentRequests,
+        maxTotalCharactersPerChunk: models.reviewChunkMaxTotalChars,
       },
     );
-    const memoryClassifier = new OpenAiMemoryClassifier({
-      apiKey: operationalConfig.openAiApiKey,
-      model: openAi.memoryModel,
-      baseUrl: openAi.baseUrl,
-      reasoningEffort: openAi.reasoningEffort,
-      timeoutMs: openAi.requestTimeoutMs,
-      logger,
+    const memoryClassifier = new ChatMemoryClassifier({
+      ...modelServer,
+      model: memoryModel,
     });
-    if (openAi.embeddingModel === null) {
+    if (models.embeddingModel === null) {
       logger.info(
-        "Memory embeddings disabled (OPENAI_EMBEDDING_MODEL=off); memory recall uses keyword and recency ranking only.",
+        "Memory embeddings disabled (NITPICKR_EMBEDDING_MODEL=off); memory recall uses keyword and recency ranking only.",
         {},
       );
       memoryService.configureBackends({ classifier: memoryClassifier });
     } else {
       memoryService.configureBackends({
         classifier: memoryClassifier,
-        embedder: new OpenAiMemoryEmbedder({
-          apiKey: operationalConfig.openAiApiKey,
-          model: openAi.embeddingModel,
-          baseUrl: openAi.baseUrl,
-          expectedDimensions: openAi.embeddingDimensions,
-          timeoutMs: openAi.requestTimeoutMs,
+        embedder: new LocalMemoryEmbedder({
+          model: models.embeddingModel,
+          expectedDimensions: models.embeddingDimensions,
+          cacheDir: models.embeddingCacheDir,
           logger,
         }),
       });

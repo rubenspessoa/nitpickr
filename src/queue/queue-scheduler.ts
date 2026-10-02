@@ -54,7 +54,8 @@ export interface JobStore {
   getJob(jobId: string): Promise<QueueJob | null>;
   findActiveByDedupeKey(dedupeKey: string): Promise<QueueJob | null>;
   createJob(input: QueueJobInput): Promise<QueueJob>;
-  listQueuedJobs(limit: number): Promise<QueueJob[]>;
+  /** Queued jobs whose scheduled time is at or before `dueBy`, in claim order. */
+  listQueuedJobs(limit: number, dueBy: Date): Promise<QueueJob[]>;
   listRunningJobs(): Promise<QueueJob[]>;
   markJobsRunning(
     jobIds: string[],
@@ -77,7 +78,13 @@ export interface JobStore {
 export interface QueueSchedulerDependencies {
   now?: () => Date;
   createId?: () => string;
+  /** Delay before the first retry; doubles per attempt up to maxRetryDelayMs. */
+  retryBaseDelayMs?: number;
+  maxRetryDelayMs?: number;
 }
+
+export const DEFAULT_RETRY_BASE_DELAY_MS = 30_000;
+export const DEFAULT_MAX_RETRY_DELAY_MS = 15 * 60_000;
 
 function assertNonEmpty(value: string, fieldName: string): void {
   if (value.trim().length === 0) {
@@ -89,11 +96,17 @@ export class QueueScheduler {
   readonly #store: JobStore;
   readonly #now: () => Date;
   readonly #createId: () => string;
+  readonly #retryBaseDelayMs: number;
+  readonly #maxRetryDelayMs: number;
 
   constructor(store: JobStore, dependencies: QueueSchedulerDependencies = {}) {
     this.#store = store;
     this.#now = dependencies.now ?? (() => new Date());
     this.#createId = dependencies.createId ?? randomUUID;
+    this.#retryBaseDelayMs =
+      dependencies.retryBaseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
+    this.#maxRetryDelayMs =
+      dependencies.maxRetryDelayMs ?? DEFAULT_MAX_RETRY_DELAY_MS;
   }
 
   async enqueue(input: EnqueueJobInput): Promise<QueueJob> {
@@ -138,7 +151,10 @@ export class QueueScheduler {
       throw new Error("perTenantCap must be positive.");
     }
 
-    const queued = await this.#store.listQueuedJobs(input.limit * 5);
+    const queued = await this.#store.listQueuedJobs(
+      input.limit * 5,
+      this.#now(),
+    );
     const running = await this.#store.listRunningJobs();
     const activeByTenant = new Map<string, number>();
 
@@ -234,10 +250,16 @@ export class QueueScheduler {
       });
     }
 
+    // Exponential backoff: a struggling (often local, single-request) model
+    // server gets breathing room instead of an immediate retry.
+    const retryDelayMs = Math.min(
+      this.#retryBaseDelayMs * 2 ** (nextAttempts - 1),
+      this.#maxRetryDelayMs,
+    );
     return this.#store.updateJob(jobId, {
       status: "queued",
       attempts: nextAttempts,
-      scheduledAt: this.#now(),
+      scheduledAt: new Date(this.#now().getTime() + retryDelayMs),
       startedAt: null,
       workerId: null,
       lastError: errorMessage,

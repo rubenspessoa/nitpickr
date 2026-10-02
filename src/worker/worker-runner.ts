@@ -1509,6 +1509,18 @@ export class WorkerRunner {
           })),
         },
       );
+      const unanchoredFindingCount =
+        publishableResult.findings.length - draftPublishedComments.length;
+      if (unanchoredFindingCount > 0) {
+        logger.warn(
+          "Dropped findings that could not be anchored to the diff.",
+          {
+            jobId: job.id,
+            reviewRunId: startedReviewRunId,
+            droppedCount: unanchoredFindingCount,
+          },
+        );
+      }
       if (reviewScope === "commit_delta") {
         const staleThreadIds = findStaleThreadIds({
           comparedPaths: reviewPlan.files.map((file) => file.path),
@@ -1571,9 +1583,7 @@ export class WorkerRunner {
                   : "pr_summary",
               reviewedCommitSha: context.changeRequest.headSha,
               commitSummaryCounts: {
-                newFindings: publishableResult.findings.length,
                 resolvedThreads: resolvedThreadCount,
-                stillRelevantFindings: publishableResult.findings.length,
               },
               result: publishableResult as ReviewEngineResult,
               files: reviewPlan.files.map((file) => ({

@@ -752,9 +752,7 @@ describe("WorkerRunner", () => {
         publishMode: "commit_summary",
         reviewedCommitSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         commitSummaryCounts: {
-          newFindings: 1,
           resolvedThreads: 1,
-          stillRelevantFindings: 1,
         },
         result: expect.objectContaining({
           findings: [

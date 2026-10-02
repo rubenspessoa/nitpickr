@@ -822,9 +822,7 @@ describe("ReviewPublisher", () => {
       publishMode: "commit_summary",
       reviewedCommitSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       commitSummaryCounts: {
-        newFindings: 1,
         resolvedThreads: 0,
-        stillRelevantFindings: 1,
       },
       result: {
         summary: "This push tightens queue ordering checks.",
@@ -867,6 +865,60 @@ describe("ReviewPublisher", () => {
     expect(client.calls[0]?.comments).toHaveLength(1);
   });
 
+  it("counts only findings that become inline comments in the commit summary", async () => {
+    const client = new FakePublishReviewClient();
+    client.existingReviews = [
+      {
+        reviewId: "review_summary",
+        body: [
+          "<!-- nitpickr:summary -->",
+          "<!-- nitpickr:review-run:review_run_1 -->",
+          "# nitpickr review ✨",
+        ].join("\n"),
+      },
+    ];
+    const publisher = new ReviewPublisher(client);
+
+    await publisher.publish({
+      reviewRunId: "review_run_4",
+      installationId: "123456",
+      repository: { owner: "rubenspessoa", name: "nitpickr" },
+      pullNumber: 42,
+      publishMode: "commit_summary",
+      reviewedCommitSha: "dddddddddddddddddddddddddddddddddddddddd",
+      commitSummaryCounts: { resolvedThreads: 0 },
+      result: {
+        summary: "This push clarifies a config comment.",
+        mermaid: "flowchart TD\nA[Queue] --> B[Publish]",
+        findings: [
+          {
+            path: ".env.example",
+            line: 400,
+            findingType: "safe_suggestion",
+            severity: "low",
+            category: "style",
+            title: "Line outside the diff",
+            body: "Cannot be anchored to the patch.",
+            fixPrompt: "Clarify .env.example line 400.",
+          },
+        ],
+      },
+      files: [
+        {
+          path: ".env.example",
+          patch: ["@@ -14,1 +14,2 @@", " context", "+clarified"].join("\n"),
+        },
+      ],
+    });
+
+    expect(client.calls[0]?.comments).toHaveLength(0);
+    expect(client.calls[0]?.body).not.toContain("New findings: 1");
+    expect(client.calls[0]?.body).toContain(
+      "No concerning issues found in this push.",
+    );
+    expect(client.calls[0]?.body).toContain("Still relevant findings: 0");
+  });
+
   it("publishes a visible clean commit summary even when there are no findings", async () => {
     const client = new FakePublishReviewClient();
     client.existingReviews = [
@@ -892,9 +944,7 @@ describe("ReviewPublisher", () => {
       publishMode: "commit_summary",
       reviewedCommitSha: "cccccccccccccccccccccccccccccccccccccccc",
       commitSummaryCounts: {
-        newFindings: 0,
         resolvedThreads: 2,
-        stillRelevantFindings: 0,
       },
       result: {
         summary: "This push mainly refines webhook validation.",

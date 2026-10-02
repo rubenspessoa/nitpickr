@@ -20,7 +20,7 @@ vi.mock("../../src/runtime/postgres.js", () => ({
 }));
 
 vi.mock("../../src/providers/github/github-rest-client.js", () => ({
-  GitHubRestClient: vi.fn().mockImplementation((...args: unknown[]) => {
+  GitHubRestClient: vi.fn(function (...args: unknown[]) {
     githubRestClientConstructorMock(...args);
     return {
       getPullRequest: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock("../../src/providers/github/github-rest-client.js", () => ({
 }));
 
 vi.mock("../../src/providers/github/github-adapter.js", () => ({
-  GitHubAdapter: vi.fn().mockImplementation((config: unknown) => {
+  GitHubAdapter: vi.fn(function (config: unknown) {
     githubAdapterConstructorMock(config);
     return {
       verifyWebhookSignature: vi.fn(),
@@ -49,7 +49,7 @@ vi.mock("../../src/providers/github/github-adapter.js", () => ({
 }));
 
 vi.mock("../../src/review/openai-review-model.js", () => ({
-  OpenAiReviewModel: vi.fn().mockImplementation((config: unknown) => {
+  OpenAiReviewModel: vi.fn(function (config: unknown) {
     openAiReviewModelConstructorMock(config);
     return {
       generateStructuredReview: vi.fn(),

@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 import type { BotLogins } from "../../config/app-config.js";
-import { type ReviewTrigger, parseChangeRequest } from "../../domain/types.js";
+import { parseChangeRequest, type ReviewTrigger } from "../../domain/types.js";
 import type { ReviewerChatCommand } from "../../review/reviewer-chat-service.js";
 
 const repositorySchema = z.object({

@@ -1,4 +1,4 @@
-import { type MigrationOptions, buildMigrations } from "../db/migrations.js";
+import { buildMigrations, type MigrationOptions } from "../db/migrations.js";
 
 export interface SqlMigrationClient {
   unsafe(query: string): Promise<unknown[]>;

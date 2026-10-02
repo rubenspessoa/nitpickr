@@ -101,7 +101,7 @@ class InMemoryJobStore implements JobStore {
     const jobs: QueueJob[] = [];
     for (const jobId of jobIds) {
       const current = this.jobs.get(jobId);
-      if (!current || current.status !== "queued") {
+      if (current?.status !== "queued") {
         continue;
       }
 

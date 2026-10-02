@@ -1,11 +1,11 @@
 import {
+  isWebhookEventStatus,
+  isWebhookProvider,
   WebhookEventAlreadyExistsError,
   type WebhookEventRecord,
   type WebhookEventStatus,
   type WebhookEventStore,
   type WebhookProvider,
-  isWebhookEventStatus,
-  isWebhookProvider,
 } from "./webhook-event-service.js";
 
 export class WebhookEventStoreError extends Error {

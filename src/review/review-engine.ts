@@ -8,8 +8,8 @@ import {
 } from "./diagram-renderer.js";
 import {
   type EvidenceGateRejectedFinding,
-  type ReviewFeedbackSignal,
   gateAndRankFindings,
+  type ReviewFeedbackSignal,
   severityWeight,
 } from "./evidence-gate.js";
 import { fingerprintFinding } from "./finding-fingerprint.js";

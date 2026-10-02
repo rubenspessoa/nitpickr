@@ -78,7 +78,8 @@ body {
   min-width: 320px;
   font-family: "IBM Plex Sans", sans-serif;
   color: var(--text);
-  background: radial-gradient(
+  background:
+    radial-gradient(
       circle at top left,
       rgba(222, 108, 48, 0.12),
       transparent 26%
@@ -87,7 +88,8 @@ body {
       circle at top right,
       rgba(195, 215, 161, 0.18),
       transparent 24%
-    ), linear-gradient(180deg, #fbf7f1 0%, #f6f1e8 42%, #f2ece2 100%);
+    ),
+    linear-gradient(180deg, #fbf7f1 0%, #f6f1e8 42%, #f2ece2 100%);
 }
 
 img {
@@ -138,7 +140,11 @@ pre,
   top: 7rem;
   width: 26rem;
   height: 26rem;
-  background: radial-gradient(circle, rgba(222, 108, 48, 0.08), transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(222, 108, 48, 0.08),
+    transparent 70%
+  );
 }
 
 .site-shell::after {
@@ -146,7 +152,11 @@ pre,
   top: 18rem;
   width: 22rem;
   height: 22rem;
-  background: radial-gradient(circle, rgba(150, 187, 88, 0.11), transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(150, 187, 88, 0.11),
+    transparent 70%
+  );
 }
 
 .container {
@@ -252,8 +262,10 @@ h3 {
   font: inherit;
   box-shadow: 0 14px 28px rgba(75, 53, 28, 0.08);
   cursor: pointer;
-  transition: transform 160ms ease, border-color 160ms ease, background-color
-    160ms ease;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
 }
 
 .nav-toggle:hover,
@@ -273,7 +285,9 @@ h3 {
   height: 2px;
   border-radius: 999px;
   background: currentColor;
-  transition: transform 160ms ease, opacity 160ms ease;
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease;
 }
 
 .header-link,
@@ -306,8 +320,11 @@ h3 {
   border: 1px solid transparent;
   text-decoration: none;
   font-weight: 600;
-  transition: transform 160ms ease, background-color 160ms ease, border-color
-    160ms ease, color 160ms ease;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
 .button:hover,
@@ -509,11 +526,13 @@ ul {
 }
 
 .section-soft {
-  background: linear-gradient(
+  background:
+    linear-gradient(
       180deg,
       rgba(255, 255, 255, 0.28),
       rgba(255, 255, 255, 0.12)
-    ), rgba(255, 255, 255, 0.08);
+    ),
+    rgba(255, 255, 255, 0.08);
 }
 
 .hosting-list {
@@ -523,11 +542,9 @@ ul {
 
 .hosting-card-featured {
   border-color: rgba(222, 108, 48, 0.28);
-  background: linear-gradient(
-      180deg,
-      rgba(222, 108, 48, 0.08),
-      rgba(255, 255, 255, 0.72)
-    ), var(--surface-strong);
+  background:
+    linear-gradient(180deg, rgba(222, 108, 48, 0.08), rgba(255, 255, 255, 0.72)),
+    var(--surface-strong);
 }
 
 .config-card pre,
@@ -717,7 +734,9 @@ ul {
 .docs-card {
   text-decoration: none;
   display: block;
-  transition: transform 160ms ease, border-color 160ms ease;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease;
 }
 
 .docs-card:hover,
@@ -785,7 +804,9 @@ ul {
 .has-motion .reveal {
   opacity: 0;
   transform: translateY(16px);
-  transition: opacity 520ms ease, transform 520ms ease;
+  transition:
+    opacity 520ms ease,
+    transform 520ms ease;
 }
 
 .has-motion .reveal.is-visible {
@@ -868,7 +889,10 @@ summary:focus-visible {
     visibility: hidden;
     pointer-events: none;
     transform: translateY(-0.4rem);
-    transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease;
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease,
+      visibility 160ms ease;
   }
 
   .has-js .site-header[data-nav-open="true"] .site-nav {

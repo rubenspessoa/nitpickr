@@ -73,10 +73,7 @@ export interface MemoryStore {
     supersededBy: string;
     updatedAt: string;
   }): Promise<void>;
-  markUsage?(input: {
-    ids: string[];
-    lastUsedAt: string;
-  }): Promise<void>;
+  markUsage?(input: { ids: string[]; lastUsedAt: string }): Promise<void>;
   findActiveById?(input: {
     tenantId: string;
     repositoryId: string;

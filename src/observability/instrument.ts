@@ -41,9 +41,7 @@ if (!dsn) {
     tracesSampleRate: parseTracesSampleRate(
       process.env.SENTRY_TRACES_SAMPLE_RATE,
     ),
-    sendDefaultPii: true,
     includeLocalVariables: true,
-    enableLogs: true,
     integrations: [
       Sentry.httpIntegration(),
       Sentry.postgresIntegration(),

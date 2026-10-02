@@ -6,10 +6,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   LiveReviewEvaluator,
-  UsageTracker,
   liveEvaluationFixtureSchema,
   loadLiveEvaluationFixtures,
   matchFindings,
+  UsageTracker,
 } from "../../src/eval/live-review-evaluator.js";
 import type {
   ReviewFinding,

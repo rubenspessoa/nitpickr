@@ -238,10 +238,7 @@ export class PostgresMemoryStore implements MemoryStore {
     );
   }
 
-  async markUsage(input: {
-    ids: string[];
-    lastUsedAt: string;
-  }): Promise<void> {
+  async markUsage(input: { ids: string[]; lastUsedAt: string }): Promise<void> {
     if (input.ids.length === 0) {
       return;
     }

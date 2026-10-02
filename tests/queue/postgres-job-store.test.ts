@@ -4,7 +4,6 @@ import {
   type PostgresClient,
   PostgresJobStore,
 } from "../../src/queue/postgres-job-store.js";
-import type { QueueJob } from "../../src/queue/queue-scheduler.js";
 
 interface QueryCall {
   query: string;

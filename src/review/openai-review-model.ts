@@ -1,7 +1,7 @@
 import type { ReasoningEffort } from "../config/app-config.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
 import { createTimeoutFetch, isTimeoutError } from "../shared/http-client.js";
-import { ModelOutputError, extractJsonObject } from "../shared/model-output.js";
+import { extractJsonObject, ModelOutputError } from "../shared/model-output.js";
 import { normalizeOpenAiBaseUrl } from "../shared/openai-base-url.js";
 
 export interface OpenAiReviewModelConfig {

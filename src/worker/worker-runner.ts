@@ -1,6 +1,6 @@
 import { ZodError } from "zod";
 
-import { type ReviewRun, parseReviewTrigger } from "../domain/types.js";
+import { parseReviewTrigger, type ReviewRun } from "../domain/types.js";
 import type { ReviewFeedbackService } from "../feedback/review-feedback-service.js";
 import type { InstructionBundle } from "../instructions/instruction-loader.js";
 import { withTiming } from "../logging/correlation.js";
@@ -27,9 +27,9 @@ import type {
 import type { ReviewLifecycleService } from "../review/review-lifecycle-service.js";
 import type { ReviewPlanner } from "../review/review-planner.js";
 import {
+  parseInlineCommentContext,
   type ReviewerChatCommand,
   ReviewerChatService,
-  parseInlineCommentContext,
 } from "../review/reviewer-chat-service.js";
 import {
   applySeverityFloor,

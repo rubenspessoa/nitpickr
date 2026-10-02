@@ -2,8 +2,8 @@ import { access } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
-  ReviewEvaluator,
   loadReviewEvaluationFixtures,
+  ReviewEvaluator,
 } from "../eval/review-evaluator.js";
 
 export class EvalReviewsCommand {

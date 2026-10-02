@@ -5,18 +5,22 @@
 - **Breaking: local models only.** nitpickr now talks exclusively to a local
   model server (Ollama, llama-server, LM Studio, vLLM) over
   `/v1/chat/completions`; OpenAI defaults (`gpt-5-mini`, `api.openai.com`,
-  `text-embedding-3-small`), branding and pricing guidance are removed. Env
-  vars renamed: `OPENAI_BASE_URL` → `NITPICKR_MODEL_BASE_URL` (default
-  `http://localhost:11434/v1`), `OPENAI_API_KEY` → `NITPICKR_MODEL_API_KEY`
-  (optional; no auth header when unset), `OPENAI_MODEL` →
-  `NITPICKR_REVIEW_MODEL` (required, no default), `OPENAI_MEMORY_MODEL` →
-  `NITPICKR_MEMORY_MODEL` (defaults to the review model),
-  `OPENAI_REASONING_EFFORT` → `NITPICKR_MODEL_REASONING_EFFORT`,
-  `OPENAI_REQUEST_TIMEOUT_MS` → `NITPICKR_MODEL_REQUEST_TIMEOUT_MS`,
-  `OPENAI_EMBEDDING_MODEL` → `NITPICKR_EMBEDDING_MODEL`. A `.env` that still
-  sets `OPENAI_*` without `NITPICKR_REVIEW_MODEL` fails at boot naming the new
-  vars; once `NITPICKR_REVIEW_MODEL` is set, a stray `OPENAI_API_KEY` is
-  ignored.
+  `text-embedding-3-small`), branding and pricing guidance are removed.
+  Renamed environment variables:
+  - `OPENAI_BASE_URL` → `NITPICKR_MODEL_BASE_URL` (default
+    `http://localhost:11434/v1`)
+  - `OPENAI_API_KEY` → `NITPICKR_MODEL_API_KEY` (optional; no auth header when
+    unset)
+  - `OPENAI_MODEL` → `NITPICKR_REVIEW_MODEL` (required, no default)
+  - `OPENAI_MEMORY_MODEL` → `NITPICKR_MEMORY_MODEL` (defaults to the review
+    model)
+  - `OPENAI_REASONING_EFFORT` → `NITPICKR_MODEL_REASONING_EFFORT`
+  - `OPENAI_REQUEST_TIMEOUT_MS` → `NITPICKR_MODEL_REQUEST_TIMEOUT_MS`
+  - `OPENAI_EMBEDDING_MODEL` → `NITPICKR_EMBEDDING_MODEL`
+
+  A `.env` that still sets `OPENAI_*` without `NITPICKR_REVIEW_MODEL` fails at
+  boot naming the new vars; once `NITPICKR_REVIEW_MODEL` is set, a stray
+  `OPENAI_API_KEY` is ignored.
 - Memory embeddings run in-process in the worker via transformers.js (ONNX on
   CPU). Default model `nomic-ai/nomic-embed-text-v1.5` (q8, 768 dims, nomic
   `search_document`/`search_query` prefixes), baked into the Docker image at

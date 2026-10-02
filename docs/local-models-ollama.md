@@ -53,7 +53,9 @@ Why each matters:
   full-file context) per chunk. Lower it for models with small context windows
   or slow prefill (e.g. 120000 ≈ 30k tokens).
 - **Embeddings** — the `memories.embedding` column width is set from
-  `NITPICKR_EMBEDDING_DIMENSIONS` at migrate time. Changing it re-shapes the
+  `NITPICKR_EMBEDDING_DIMENSIONS` at migrate time. It defaults to 768, which
+  matches the default embedding model; set it together with
+  `NITPICKR_EMBEDDING_MODEL` when you switch models. Changing it re-shapes the
   column and clears stored vectors (memory falls back to keyword/recency
   ranking until re-embedded).
 

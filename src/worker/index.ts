@@ -93,6 +93,7 @@ async function main(): Promise<void> {
     });
     const runner = new WorkerRunner({
       logger,
+      repositoryAllowlist: runtime.config.repositoryAllowlist,
       promptOptimizationMode:
         operationalRuntime.config.review.promptOptimizationMode,
       queueScheduler: runtime.queueScheduler,

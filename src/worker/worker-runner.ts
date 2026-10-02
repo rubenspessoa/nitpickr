@@ -855,6 +855,8 @@ export interface InstructionBundleLoader {
 
 export interface WorkerRunnerDependencies {
   logger?: Logger;
+  /** `owner/name` entries; jobs for other repositories are skipped. */
+  repositoryAllowlist?: string[] | null;
   promptOptimizationMode?: PromptOptimizationMode;
   queueScheduler: Pick<
     QueueScheduler,
@@ -927,6 +929,7 @@ export class WorkerRunner {
   >;
   readonly #discussionAcknowledgmentStore: DiscussionAcknowledgmentStore | null;
   readonly #now: () => Date;
+  readonly #repositoryAllowlist: Set<string> | null;
 
   constructor(input: WorkerRunnerDependencies) {
     this.#logger = (input.logger ?? noopLogger).child({
@@ -948,6 +951,27 @@ export class WorkerRunner {
     this.#discussionAcknowledgmentStore =
       input.discussionAcknowledgmentStore ?? null;
     this.#now = input.now ?? (() => new Date());
+    this.#repositoryAllowlist = input.repositoryAllowlist
+      ? new Set(input.repositoryAllowlist.map((entry) => entry.toLowerCase()))
+      : null;
+  }
+
+  /** Full name of a job's repository when it falls outside the allowlist. */
+  #disallowedRepository(job: QueueJob): string | null {
+    const repository = job.payload?.repository as
+      | { owner?: unknown; name?: unknown }
+      | undefined;
+    if (
+      !this.#repositoryAllowlist ||
+      typeof repository?.owner !== "string" ||
+      typeof repository.name !== "string"
+    ) {
+      return null;
+    }
+    const fullName = `${repository.owner}/${repository.name}`;
+    return this.#repositoryAllowlist.has(fullName.toLowerCase())
+      ? null
+      : fullName;
   }
 
   async runOnce(input: {
@@ -984,6 +1008,17 @@ export class WorkerRunner {
 
     const jobStartedAt = process.hrtime.bigint();
     jobLogger.info("Claimed worker job.", {});
+
+    // Backstop for jobs queued before the allowlist changed; the webhook
+    // service already refuses new events from other repositories.
+    const disallowedRepository = this.#disallowedRepository(job);
+    if (disallowedRepository) {
+      jobLogger.warn("Skipped job for repository outside the allowlist.", {
+        repository: disallowedRepository,
+      });
+      await this.#queueScheduler.completeJob(job.id);
+      return true;
+    }
 
     try {
       if (job.type === "memory_ingest") {

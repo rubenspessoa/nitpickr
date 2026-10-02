@@ -155,6 +155,61 @@ class FakeGitHubAdapter {
 }
 
 describe("GitHubWebhookService", () => {
+  it("ignores events from repositories outside the allowlist without side effects", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const webhookEvents = new FakeWebhookEventService();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      webhookEvents,
+      new FakeLogger(),
+      { repositoryAllowlist: ["rubenspessoa/nitpickr-ollama-test"] },
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-outside",
+      eventName: "issue_comment",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: { repository: { full_name: "rubenspessoa/ai-automation" } },
+    });
+
+    expect(result).toEqual({
+      statusCode: 202,
+      accepted: false,
+      message:
+        "Repository rubenspessoa/ai-automation is not in NITPICKR_REPOSITORY_ALLOWLIST.",
+    });
+    expect(adapter.reactToMentionCalls).toBe(0);
+    expect(adapter.normalizeWebhookEventCalls).toBe(0);
+    expect(queue.calls).toHaveLength(0);
+    expect(webhookEvents.ignored).toEqual(["delivery-outside"]);
+  });
+
+  it("queues events from allowlisted repositories, ignoring case", async () => {
+    const adapter = new FakeGitHubAdapter();
+    const queue = new FakeQueueScheduler();
+    const service = new GitHubWebhookService(
+      adapter,
+      queue,
+      new FakeWebhookEventService(),
+      new FakeLogger(),
+      { repositoryAllowlist: ["RubensPessoa/Nitpickr"] },
+    );
+
+    const result = await service.handle({
+      deliveryId: "delivery-inside",
+      eventName: "pull_request",
+      signature: "sha256=test",
+      rawBody: "{}",
+      payload: { repository: { full_name: "rubenspessoa/nitpickr" } },
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(queue.calls).toHaveLength(1);
+  });
+
   it("enqueues review jobs for supported GitHub events", async () => {
     const adapter = new FakeGitHubAdapter();
     const queue = new FakeQueueScheduler();

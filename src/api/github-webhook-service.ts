@@ -55,6 +55,15 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+function repositoryFullName(payload: Record<string, unknown>): string | null {
+  const repository = payload.repository;
+  if (typeof repository !== "object" || repository === null) {
+    return null;
+  }
+  const fullName = (repository as { full_name?: unknown }).full_name;
+  return typeof fullName === "string" ? fullName : null;
+}
+
 function buildChangeRequestId(
   repositoryId: string | undefined,
   pullNumber: number | undefined,
@@ -148,6 +157,8 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
   readonly #queueScheduler: Pick<QueueScheduler, "enqueue">;
   readonly #logger: Logger;
   readonly #webhookEventService: WebhookEventTracker;
+  /** Lower-cased `owner/name` entries; `null` allows every repository. */
+  readonly #repositoryAllowlist: Set<string> | null;
 
   constructor(
     adapter: Pick<
@@ -157,6 +168,7 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
     queueScheduler: Pick<QueueScheduler, "enqueue">,
     webhookEventService: WebhookEventTracker,
     logger: Logger = noopLogger,
+    options: { repositoryAllowlist?: string[] | null } = {},
   ) {
     this.#adapter = adapter;
     this.#queueScheduler = queueScheduler;
@@ -164,6 +176,9 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
       component: "github-webhook",
     });
     this.#webhookEventService = webhookEventService;
+    this.#repositoryAllowlist = options.repositoryAllowlist
+      ? new Set(options.repositoryAllowlist.map((entry) => entry.toLowerCase()))
+      : null;
   }
 
   async verifySignature(rawBody: string, signature: string): Promise<boolean> {
@@ -284,6 +299,21 @@ export class GitHubWebhookService implements GitHubWebhookHandler {
         accepted: false,
         message: "Duplicate GitHub webhook delivery ignored.",
       };
+    }
+
+    // Checked before reacting to mentions so non-allowlisted repositories see
+    // no side effects at all. Events without a repository fall through to
+    // normalization, which ignores them.
+    const repository = repositoryFullName(parsed.payload);
+    if (
+      this.#repositoryAllowlist &&
+      repository !== null &&
+      !this.#repositoryAllowlist.has(repository.toLowerCase())
+    ) {
+      const reason = `Repository ${repository} is not in NITPICKR_REPOSITORY_ALLOWLIST.`;
+      await this.#updateWebhookEventStatus(parsed.deliveryId, "ignored");
+      requestLogger.info("Ignored GitHub webhook event.", { reason });
+      return { statusCode: 202, accepted: false, message: reason };
     }
 
     try {

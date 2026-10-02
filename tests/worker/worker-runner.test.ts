@@ -165,6 +165,91 @@ const testRepositoryConfig = {
 };
 
 describe("WorkerRunner", () => {
+  it("completes jobs for repositories outside the allowlist without processing them", async () => {
+    const queue = new FakeQueueScheduler();
+    const logger = new FakeLogger();
+    let fetched = false;
+    queue.nextJobs = [
+      {
+        id: "job_outside",
+        type: "review_requested",
+        tenantId: "github-installation:123456",
+        repositoryId: "github:7",
+        changeRequestId: "github:7:1",
+        dedupeKey: "github:7:1:full",
+        priority: 100,
+        status: "running",
+        attempts: 0,
+        maxAttempts: 3,
+        payload: {
+          installationId: "123456",
+          repository: { owner: "rubenspessoa", name: "ai-automation" },
+          pullNumber: 1,
+          mode: "full",
+        },
+        createdAt: new Date("2026-03-09T10:00:00.000Z"),
+        scheduledAt: new Date("2026-03-09T10:00:00.000Z"),
+        startedAt: new Date("2026-03-09T10:00:01.000Z"),
+        completedAt: null,
+        workerId: "worker_1",
+        lastError: null,
+      },
+    ];
+
+    const runner = new WorkerRunner({
+      logger,
+      repositoryAllowlist: ["rubenspessoa/nitpickr-ollama-test"],
+      queueScheduler: queue,
+      githubAdapter: {
+        async fetchChangeRequestContext() {
+          fetched = true;
+          throw new Error("should not fetch");
+        },
+      },
+      instructionBundleLoader: {
+        async loadForReview() {
+          throw new Error("should not load");
+        },
+      },
+      memoryService: {
+        async getRelevantMemories() {
+          return [];
+        },
+        async ingestDiscussion() {
+          throw new Error("should not ingest");
+        },
+      },
+      reviewPlanner: new FakeReviewPlanner(),
+      reviewLifecycle: new FakeReviewLifecycleService(),
+      reviewEngine: {
+        async review() {
+          throw new Error("should not review");
+        },
+      },
+      publisher: {
+        buildInlineComments() {
+          return [];
+        },
+        async publish() {
+          throw new Error("should not publish");
+        },
+      },
+    });
+
+    await expect(
+      runner.runOnce({ workerId: "worker_1", perTenantCap: 1 }),
+    ).resolves.toBe(true);
+    expect(fetched).toBe(false);
+    expect(queue.completed).toEqual(["job_outside"]);
+    expect(queue.failed).toEqual([]);
+    expect(logger.entries).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "Skipped job for repository outside the allowlist.",
+      }),
+    );
+  });
+
   it("processes review jobs end to end", async () => {
     const queue = new FakeQueueScheduler();
     const lifecycle = new FakeReviewLifecycleService();

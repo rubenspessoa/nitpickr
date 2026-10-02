@@ -14,7 +14,10 @@ export function createSetupAwareGitHubWebhookHandler(input: {
   logger?: Logger;
   runtime: Pick<
     AppRuntime,
-    "getOperationalRuntime" | "queueScheduler" | "webhookEventService"
+    | "config"
+    | "getOperationalRuntime"
+    | "queueScheduler"
+    | "webhookEventService"
   >;
   createWebhookService?: (
     operationalRuntime: NonNullable<OperationalRuntime>,
@@ -33,6 +36,7 @@ export function createSetupAwareGitHubWebhookHandler(input: {
         input.runtime.queueScheduler,
         input.runtime.webhookEventService,
         logger,
+        { repositoryAllowlist: input.runtime.config.repositoryAllowlist },
       ));
 
   return {

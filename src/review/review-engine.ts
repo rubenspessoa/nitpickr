@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import {
+  type ResponseJsonSchema,
+  toResponseSchema,
+} from "../shared/chat-completion-client.js";
+import {
   type DiagramSpec,
   defaultDiagramSpec,
   mergeDiagramSpecs,
@@ -482,10 +486,61 @@ const modelResponseSchema = z
     findings: value.findings,
   }));
 
+/**
+ * The reply shape the model is constrained to (JSON Schema structured
+ * output). Every field is required and optional values are nullable, as
+ * strict mode expects; modelResponseSchema above still normalizes the reply.
+ */
+const reviewResponseWireSchema = z.strictObject({
+  summary: z.string(),
+  diagram: z.union([
+    z.strictObject({
+      type: z.literal("sequence"),
+      participants: z.array(
+        z.strictObject({ id: z.string(), label: z.string() }),
+      ),
+      steps: z.array(
+        z.strictObject({ from: z.string(), to: z.string(), label: z.string() }),
+      ),
+    }),
+    z.strictObject({
+      type: z.literal("flowchart"),
+      direction: z.enum(["LR", "TD"]).nullable(),
+      nodes: z.array(z.strictObject({ id: z.string(), label: z.string() })),
+      edges: z.array(
+        z.strictObject({
+          from: z.string(),
+          to: z.string(),
+          label: z.string().nullable(),
+        }),
+      ),
+    }),
+  ]),
+  findings: z.array(
+    z.strictObject({
+      path: z.string(),
+      line: z.number().int(),
+      findingType: findingSchema.shape.findingType,
+      severity: findingSchema.shape.severity,
+      category: findingSchema.shape.category,
+      title: z.string(),
+      body: z.string(),
+      fixPrompt: z.string(),
+      suggestedChange: z.string().nullable(),
+    }),
+  ),
+});
+
+export const reviewResponseJsonSchema: ResponseJsonSchema = {
+  name: "nitpickr_review",
+  schema: toResponseSchema(reviewResponseWireSchema),
+};
+
 export interface ReviewModel {
   generateStructuredReview(input: {
     system: string;
     user: string;
+    jsonSchema?: ResponseJsonSchema | null;
   }): Promise<unknown>;
 }
 
@@ -834,7 +889,10 @@ export class ReviewEngine {
             : {}),
         });
 
-        const response = await this.#model.generateStructuredReview(prompt);
+        const response = await this.#model.generateStructuredReview({
+          ...prompt,
+          jsonSchema: reviewResponseJsonSchema,
+        });
         return modelResponseSchema.parse(response);
       },
     );

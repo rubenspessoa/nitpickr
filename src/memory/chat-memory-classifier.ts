@@ -4,6 +4,8 @@ import { type Logger, noopLogger } from "../logging/logger.js";
 import {
   ChatCompletionClient,
   type ChatCompletionClientConfig,
+  type ResponseJsonSchema,
+  toResponseSchema,
 } from "../shared/chat-completion-client.js";
 import type { FetchLike } from "../shared/http-client.js";
 import { extractJsonObject } from "../shared/model-output.js";
@@ -32,12 +34,35 @@ const responseSchema = z.object({
         tags: z.array(z.string()).optional().default([]),
         globs: z.array(z.string()).optional().default([]),
         confidence: z.number().min(0).max(1),
-        supersedesHint: z.string().optional(),
+        supersedesHint: z
+          .string()
+          .nullish()
+          .transform((value) => value ?? undefined),
       }),
     )
     .default([]),
   acknowledgment: z.string().min(1),
 });
+
+/** Strict-mode reply shape: all keys required, optional values nullable. */
+const responseJsonSchema: ResponseJsonSchema = {
+  name: "nitpickr_memory",
+  schema: toResponseSchema(
+    z.strictObject({
+      entries: z.array(
+        z.strictObject({
+          kind: memoryKindSchema,
+          summary: z.string(),
+          tags: z.array(z.string()),
+          globs: z.array(z.string()),
+          confidence: z.number(),
+          supersedesHint: z.string().nullable(),
+        }),
+      ),
+      acknowledgment: z.string(),
+    }),
+  ),
+};
 
 const SYSTEM_PROMPT = [
   "You extract durable repo-level knowledge from a single discussion comment left on a code review.",
@@ -87,6 +112,7 @@ export class ChatMemoryClassifier implements MemoryClassifier {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPayload },
       ],
+      jsonSchema: responseJsonSchema,
     });
     const durationMs = Number(
       (process.hrtime.bigint() - startedAt) / 1_000_000n,

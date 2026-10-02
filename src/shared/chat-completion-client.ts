@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import type { ReasoningEffort } from "../config/app-config.js";
 import { type Logger, noopLogger } from "../logging/logger.js";
 import {
@@ -41,6 +43,12 @@ export interface ChatUsage {
 export interface ResponseJsonSchema {
   name: string;
   schema: Record<string, unknown>;
+}
+
+/** JSON Schema for a zod schema, without the `$schema` meta key servers reject. */
+export function toResponseSchema(schema: z.ZodType): Record<string, unknown> {
+  const { $schema: _meta, ...jsonSchema } = z.toJSONSchema(schema);
+  return jsonSchema;
 }
 
 export class ChatCompletionClient {

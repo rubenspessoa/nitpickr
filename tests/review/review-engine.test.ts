@@ -26,6 +26,64 @@ class FakeReviewModel implements ReviewModel {
 }
 
 describe("ReviewEngine", () => {
+  it("constrains the model to the review JSON Schema and accepts null optional fields", async () => {
+    const schemas: unknown[] = [];
+    const model: ReviewModel = {
+      async generateStructuredReview(input) {
+        schemas.push(input.jsonSchema);
+        return {
+          summary: "Summary",
+          diagram: {
+            type: "flowchart",
+            direction: null,
+            nodes: [{ id: "a", label: "A" }],
+            edges: [{ from: "a", to: "a", label: null }],
+          },
+          findings: [
+            {
+              path: "src/queue/a.ts",
+              line: 1,
+              findingType: "bug",
+              severity: "high",
+              category: "correctness",
+              title: "Ordering breaks",
+              body: "Stable ordering is lost.",
+              fixPrompt: "Fix ordering in src/queue/a.ts line 1.",
+              suggestedChange: null,
+            },
+          ],
+        };
+      },
+    };
+
+    const result = await new ReviewEngine(model).review({
+      changeRequest: { title: "Queue", number: 1 },
+      files: [
+        {
+          path: "src/queue/a.ts",
+          additions: 1,
+          deletions: 0,
+          patch: "@@ -0,0 +1,1 @@\n+stable ordering",
+        },
+      ],
+      instructionText: "",
+      memory: [],
+      commentBudget: 5,
+    });
+
+    expect(schemas[0]).toEqual(
+      expect.objectContaining({
+        name: "nitpickr_review",
+        schema: expect.objectContaining({
+          required: ["summary", "diagram", "findings"],
+          additionalProperties: false,
+        }),
+      }),
+    );
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]?.suggestedChange).toBeUndefined();
+  });
+
   it("chunks large file sets and merges structured findings", async () => {
     const model = new FakeReviewModel([
       {

@@ -32,8 +32,17 @@ export class DoctorCommand {
       errors.push("DATABASE_URL must use a postgres:// or postgresql:// URL.");
     }
 
-    if (!isNonEmptyString(environment.OPENAI_API_KEY)) {
-      errors.push("OPENAI_API_KEY is required.");
+    if (!isNonEmptyString(environment.NITPICKR_REVIEW_MODEL)) {
+      errors.push(
+        "NITPICKR_REVIEW_MODEL is required (a model name on your model server, e.g. an Ollama tag).",
+      );
+    }
+
+    if (
+      environment.NITPICKR_MODEL_BASE_URL !== undefined &&
+      !isValidUrl(environment.NITPICKR_MODEL_BASE_URL)
+    ) {
+      errors.push("NITPICKR_MODEL_BASE_URL must be a valid URL.");
     }
 
     if (!isNonEmptyString(environment.GITHUB_APP_ID)) {
@@ -44,7 +53,9 @@ export class DoctorCommand {
 
     if (!isNonEmptyString(environment.GITHUB_PRIVATE_KEY)) {
       errors.push("GITHUB_PRIVATE_KEY is required.");
-    } else if (!environment.GITHUB_PRIVATE_KEY.includes("BEGIN PRIVATE KEY")) {
+    } else if (
+      !/BEGIN (RSA )?PRIVATE KEY/.test(environment.GITHUB_PRIVATE_KEY)
+    ) {
       errors.push("GITHUB_PRIVATE_KEY must contain a PEM private key block.");
     }
 

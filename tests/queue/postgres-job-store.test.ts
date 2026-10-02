@@ -4,7 +4,6 @@ import {
   type PostgresClient,
   PostgresJobStore,
 } from "../../src/queue/postgres-job-store.js";
-import type { QueueJob } from "../../src/queue/queue-scheduler.js";
 
 interface QueryCall {
   query: string;
@@ -122,11 +121,15 @@ describe("PostgresJobStore", () => {
     ]);
     const store = new PostgresJobStore(client);
 
-    const jobs = await store.listQueuedJobs(2);
+    const jobs = await store.listQueuedJobs(
+      2,
+      new Date("2026-03-09T10:05:00.000Z"),
+    );
 
     expect(jobs).toHaveLength(2);
     expect(client.calls[0]?.query).toContain("order by priority desc");
-    expect(client.calls[0]?.params).toEqual([2]);
+    expect(client.calls[0]?.query).toContain("scheduled_at <= $2");
+    expect(client.calls[0]?.params).toEqual([2, "2026-03-09T10:05:00.000Z"]);
   });
 
   it("lists running jobs", async () => {
@@ -232,6 +235,8 @@ describe("PostgresJobStore", () => {
     ]);
     const store = new PostgresJobStore(client);
 
-    await expect(() => store.listQueuedJobs(1)).rejects.toThrow(/tenantId/i);
+    await expect(() => store.listQueuedJobs(1, new Date())).rejects.toThrow(
+      /tenantId/i,
+    );
   });
 });

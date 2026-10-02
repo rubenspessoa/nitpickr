@@ -1,4 +1,6 @@
-import { type ReviewRun, parseReviewTrigger } from "../domain/types.js";
+import { ZodError } from "zod";
+
+import { parseReviewTrigger, type ReviewRun } from "../domain/types.js";
 import type { ReviewFeedbackService } from "../feedback/review-feedback-service.js";
 import type { InstructionBundle } from "../instructions/instruction-loader.js";
 import { withTiming } from "../logging/correlation.js";
@@ -13,6 +15,7 @@ import type {
 import type { ReviewPublisher } from "../publisher/review-publisher.js";
 import type { ReviewStatusPublisher } from "../publisher/review-status-publisher.js";
 import type { QueueJob, QueueScheduler } from "../queue/queue-scheduler.js";
+import { fingerprintFinding } from "../review/finding-fingerprint.js";
 import type {
   PriorThread,
   PriorThreadState,
@@ -25,14 +28,15 @@ import type {
 import type { ReviewLifecycleService } from "../review/review-lifecycle-service.js";
 import type { ReviewPlanner } from "../review/review-planner.js";
 import {
+  parseInlineCommentContext,
   type ReviewerChatCommand,
   ReviewerChatService,
-  parseInlineCommentContext,
 } from "../review/reviewer-chat-service.js";
 import {
   applySeverityFloor,
   severityFloorForRound,
 } from "../review/severity-floor.js";
+import { ModelOutputError } from "../shared/model-output.js";
 
 const REVIEW_DURATION_BUDGET_MS = 300_000;
 
@@ -50,7 +54,7 @@ function emptyPromptUsageSnapshot() {
 type ReviewFailureClass =
   | "config_setup"
   | "github_api"
-  | "openai_model_output"
+  | "model_output"
   | "publish_failure"
   | "internal_processing";
 
@@ -107,11 +111,13 @@ function classifyReviewError(
     );
   }
   if (stage === "review") {
-    return new ReviewJobError(
-      "openai_model_output",
-      isRetryableHttpError(message),
-      message,
-    );
+    // Malformed/empty model output, client timeouts, and schema mismatches
+    // are transient for LLM backends (especially local models) — retry them.
+    const retryable =
+      isRetryableHttpError(message) ||
+      error instanceof ModelOutputError ||
+      error instanceof ZodError;
+    return new ReviewJobError("model_output", retryable, message);
   }
 
   return new ReviewJobError(
@@ -850,6 +856,8 @@ export interface InstructionBundleLoader {
 
 export interface WorkerRunnerDependencies {
   logger?: Logger;
+  /** `owner/name` entries; jobs for other repositories are skipped. */
+  repositoryAllowlist?: string[] | null;
   promptOptimizationMode?: PromptOptimizationMode;
   queueScheduler: Pick<
     QueueScheduler,
@@ -922,6 +930,7 @@ export class WorkerRunner {
   >;
   readonly #discussionAcknowledgmentStore: DiscussionAcknowledgmentStore | null;
   readonly #now: () => Date;
+  readonly #repositoryAllowlist: Set<string> | null;
 
   constructor(input: WorkerRunnerDependencies) {
     this.#logger = (input.logger ?? noopLogger).child({
@@ -943,6 +952,27 @@ export class WorkerRunner {
     this.#discussionAcknowledgmentStore =
       input.discussionAcknowledgmentStore ?? null;
     this.#now = input.now ?? (() => new Date());
+    this.#repositoryAllowlist = input.repositoryAllowlist
+      ? new Set(input.repositoryAllowlist.map((entry) => entry.toLowerCase()))
+      : null;
+  }
+
+  /** Full name of a job's repository when it falls outside the allowlist. */
+  #disallowedRepository(job: QueueJob): string | null {
+    const repository = job.payload?.repository as
+      | { owner?: unknown; name?: unknown }
+      | undefined;
+    if (
+      !this.#repositoryAllowlist ||
+      typeof repository?.owner !== "string" ||
+      typeof repository.name !== "string"
+    ) {
+      return null;
+    }
+    const fullName = `${repository.owner}/${repository.name}`;
+    return this.#repositoryAllowlist.has(fullName.toLowerCase())
+      ? null
+      : fullName;
   }
 
   async runOnce(input: {
@@ -980,6 +1010,17 @@ export class WorkerRunner {
     const jobStartedAt = process.hrtime.bigint();
     jobLogger.info("Claimed worker job.", {});
 
+    // Backstop for jobs queued before the allowlist changed; the webhook
+    // service already refuses new events from other repositories.
+    const disallowedRepository = this.#disallowedRepository(job);
+    if (disallowedRepository) {
+      jobLogger.warn("Skipped job for repository outside the allowlist.", {
+        repository: disallowedRepository,
+      });
+      await this.#queueScheduler.completeJob(job.id);
+      return true;
+    }
+
     try {
       if (job.type === "memory_ingest") {
         await this.#processMemoryJob(job, jobLogger);
@@ -1001,11 +1042,14 @@ export class WorkerRunner {
         error instanceof ReviewJobError
           ? error.failureClass
           : "internal_processing";
+      const retryable =
+        error instanceof ReviewJobError ? error.retryable : false;
       jobLogger.error("Worker job failed.", {
         durationMs: Number(
           (process.hrtime.bigint() - jobStartedAt) / 1_000_000n,
         ),
         failureClass,
+        retryable,
         error: toErrorMessage(error),
       });
       captureError(error, {
@@ -1021,7 +1065,7 @@ export class WorkerRunner {
         },
       });
       await this.#queueScheduler.failJob(job.id, toErrorMessage(error), {
-        retryable: error instanceof ReviewJobError ? error.retryable : false,
+        retryable,
       });
       return true;
     }
@@ -1466,6 +1510,25 @@ export class WorkerRunner {
           })),
         },
       );
+      const anchoredFingerprints = new Set(
+        draftPublishedComments.map((comment) => comment.fingerprint),
+      );
+      const unanchoredFindings = publishableResult.findings.filter(
+        (finding) => !anchoredFingerprints.has(fingerprintFinding(finding)),
+      );
+      if (unanchoredFindings.length > 0) {
+        logger.warn(
+          "Dropped findings that could not be anchored to the diff.",
+          {
+            jobId: job.id,
+            reviewRunId: startedReviewRunId,
+            droppedCount: unanchoredFindings.length,
+            dropped: unanchoredFindings.map(
+              (finding) => `${finding.path}:${finding.line}`,
+            ),
+          },
+        );
+      }
       if (reviewScope === "commit_delta") {
         const staleThreadIds = findStaleThreadIds({
           comparedPaths: reviewPlan.files.map((file) => file.path),
@@ -1528,9 +1591,7 @@ export class WorkerRunner {
                   : "pr_summary",
               reviewedCommitSha: context.changeRequest.headSha,
               commitSummaryCounts: {
-                newFindings: publishableResult.findings.length,
                 resolvedThreads: resolvedThreadCount,
-                stillRelevantFindings: publishableResult.findings.length,
               },
               result: publishableResult as ReviewEngineResult,
               files: reviewPlan.files.map((file) => ({

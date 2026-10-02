@@ -1,0 +1,23 @@
+{
+  "name": "clean-retry-helper",
+  "source": "synthetic",
+  "input": {
+    "changeRequest": {
+      "title": "Add retry helper",
+      "number": 105
+    },
+    "files": [
+      {
+        "path": "src/shared/with-retry.ts",
+        "additions": 33,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,33 @@\n+export interface RetryOptions {\n+  attempts: number;\n+  baseDelayMs: number;\n+}\n+\n+const DEFAULT_OPTIONS: RetryOptions = { attempts: 3, baseDelayMs: 100 };\n+\n+function sleep(ms: number): Promise<void> {\n+  return new Promise((resolve) => setTimeout(resolve, ms));\n+}\n+\n+/**\n+ * Retry `task` with exponential backoff. Rethrows the last error once the\n+ * attempt budget is exhausted.\n+ */\n+export async function withRetry<T>(\n+  task: () => Promise<T>,\n+  options: Partial<RetryOptions> = {},\n+): Promise<T> {\n+  const { attempts, baseDelayMs } = { ...DEFAULT_OPTIONS, ...options };\n+  let lastError: unknown;\n+  for (let attempt = 0; attempt < attempts; attempt += 1) {\n+    try {\n+      return await task();\n+    } catch (error) {\n+      lastError = error;\n+      if (attempt < attempts - 1) {\n+        await sleep(baseDelayMs * 2 ** attempt);\n+      }\n+    }\n+  }\n+  throw lastError;\n+}",
+        "fileContent": "export interface RetryOptions {\n  attempts: number;\n  baseDelayMs: number;\n}\n\nconst DEFAULT_OPTIONS: RetryOptions = { attempts: 3, baseDelayMs: 100 };\n\nfunction sleep(ms: number): Promise<void> {\n  return new Promise((resolve) => setTimeout(resolve, ms));\n}\n\n/**\n * Retry `task` with exponential backoff. Rethrows the last error once the\n * attempt budget is exhausted.\n */\nexport async function withRetry<T>(\n  task: () => Promise<T>,\n  options: Partial<RetryOptions> = {},\n): Promise<T> {\n  const { attempts, baseDelayMs } = { ...DEFAULT_OPTIONS, ...options };\n  let lastError: unknown;\n  for (let attempt = 0; attempt < attempts; attempt += 1) {\n    try {\n      return await task();\n    } catch (error) {\n      lastError = error;\n      if (attempt < attempts - 1) {\n        await sleep(baseDelayMs * 2 ** attempt);\n      }\n    }\n  }\n  throw lastError;\n}\n"
+      }
+    ],
+    "instructionText": "",
+    "memory": [],
+    "commentBudget": 10
+  },
+  "expectedFindings": []
+}

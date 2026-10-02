@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { defaultRepositoryConfig } from "../../src/config/repository-config-loader.js";
 import type { QueueJob } from "../../src/queue/queue-scheduler.js";
 import type { PersistedReviewRun } from "../../src/review/review-lifecycle-service.js";
+import { ModelOutputError } from "../../src/shared/model-output.js";
 import { WorkerRunner } from "../../src/worker/worker-runner.js";
 
 class FakeLogger {
@@ -164,6 +165,91 @@ const testRepositoryConfig = {
 };
 
 describe("WorkerRunner", () => {
+  it("completes jobs for repositories outside the allowlist without processing them", async () => {
+    const queue = new FakeQueueScheduler();
+    const logger = new FakeLogger();
+    let fetched = false;
+    queue.nextJobs = [
+      {
+        id: "job_outside",
+        type: "review_requested",
+        tenantId: "github-installation:123456",
+        repositoryId: "github:7",
+        changeRequestId: "github:7:1",
+        dedupeKey: "github:7:1:full",
+        priority: 100,
+        status: "running",
+        attempts: 0,
+        maxAttempts: 3,
+        payload: {
+          installationId: "123456",
+          repository: { owner: "rubenspessoa", name: "ai-automation" },
+          pullNumber: 1,
+          mode: "full",
+        },
+        createdAt: new Date("2026-03-09T10:00:00.000Z"),
+        scheduledAt: new Date("2026-03-09T10:00:00.000Z"),
+        startedAt: new Date("2026-03-09T10:00:01.000Z"),
+        completedAt: null,
+        workerId: "worker_1",
+        lastError: null,
+      },
+    ];
+
+    const runner = new WorkerRunner({
+      logger,
+      repositoryAllowlist: ["rubenspessoa/nitpickr-ollama-test"],
+      queueScheduler: queue,
+      githubAdapter: {
+        async fetchChangeRequestContext() {
+          fetched = true;
+          throw new Error("should not fetch");
+        },
+      },
+      instructionBundleLoader: {
+        async loadForReview() {
+          throw new Error("should not load");
+        },
+      },
+      memoryService: {
+        async getRelevantMemories() {
+          return [];
+        },
+        async ingestDiscussion() {
+          throw new Error("should not ingest");
+        },
+      },
+      reviewPlanner: new FakeReviewPlanner(),
+      reviewLifecycle: new FakeReviewLifecycleService(),
+      reviewEngine: {
+        async review() {
+          throw new Error("should not review");
+        },
+      },
+      publisher: {
+        buildInlineComments() {
+          return [];
+        },
+        async publish() {
+          throw new Error("should not publish");
+        },
+      },
+    });
+
+    await expect(
+      runner.runOnce({ workerId: "worker_1", perTenantCap: 1 }),
+    ).resolves.toBe(true);
+    expect(fetched).toBe(false);
+    expect(queue.completed).toEqual(["job_outside"]);
+    expect(queue.failed).toEqual([]);
+    expect(logger.entries).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "Skipped job for repository outside the allowlist.",
+      }),
+    );
+  });
+
   it("processes review jobs end to end", async () => {
     const queue = new FakeQueueScheduler();
     const lifecycle = new FakeReviewLifecycleService();
@@ -666,9 +752,7 @@ describe("WorkerRunner", () => {
         publishMode: "commit_summary",
         reviewedCommitSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         commitSummaryCounts: {
-          newFindings: 1,
           resolvedThreads: 1,
-          stillRelevantFindings: 1,
         },
         result: expect.objectContaining({
           findings: [
@@ -1264,7 +1348,7 @@ describe("WorkerRunner", () => {
     expect(queue.failed).toEqual([{ jobId: "job_3", error: "boom" }]);
     expect(lifecycle.failed).toEqual([
       {
-        errorMessage: "openai_model_output: boom",
+        errorMessage: "model_output: boom",
         reviewRunId: "review_run_1",
       },
     ]);
@@ -1280,7 +1364,163 @@ describe("WorkerRunner", () => {
             jobType: "review_requested",
             tenantId: "github-installation:123456",
             repositoryId: "github:99",
-            failureClass: "openai_model_output",
+            failureClass: "model_output",
+            retryable: false,
+            error: "boom",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("marks malformed model output as retryable so the job gets another attempt", async () => {
+    const queue = new FakeQueueScheduler();
+    const lifecycle = new FakeReviewLifecycleService();
+    const planner = new FakeReviewPlanner();
+    const logger = new FakeLogger();
+    queue.nextJobs = [
+      {
+        id: "job_3",
+        type: "review_requested",
+        tenantId: "github-installation:123456",
+        repositoryId: "github:99",
+        changeRequestId: "github:99:42",
+        dedupeKey: "github:99:42:quick",
+        priority: 100,
+        status: "running",
+        attempts: 0,
+        maxAttempts: 3,
+        payload: {
+          installationId: "123456",
+          repository: {
+            owner: "rubenspessoa",
+            name: "nitpickr",
+          },
+          pullNumber: 42,
+          mode: "quick",
+          trigger: {
+            type: "pr_opened",
+            actorLogin: "ruben",
+          },
+        },
+        createdAt: new Date("2026-03-09T10:00:00.000Z"),
+        scheduledAt: new Date("2026-03-09T10:00:00.000Z"),
+        startedAt: new Date("2026-03-09T10:00:01.000Z"),
+        completedAt: null,
+        workerId: "worker_1",
+        lastError: null,
+      },
+    ];
+
+    const runner = new WorkerRunner({
+      logger,
+      queueScheduler: queue,
+      githubAdapter: {
+        async fetchChangeRequestContext() {
+          return {
+            tenantId: "github-installation:123456",
+            installationId: "123456",
+            repositoryId: "github:99",
+            repository: {
+              owner: "rubenspessoa",
+              name: "nitpickr",
+            },
+            changeRequest: {
+              id: "github:99:42",
+              tenantId: "github-installation:123456",
+              installationId: "123456",
+              repositoryId: "github:99",
+              provider: "github" as const,
+              number: 42,
+              title: "Improve queue fairness",
+              baseSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              status: "open" as const,
+              authorLogin: "ruben",
+            },
+            files: [
+              {
+                path: "src/queue/queue-scheduler.ts",
+                additions: 10,
+                deletions: 2,
+                status: "modified" as const,
+                patch: "@@ -1 +1 @@\n+stable ordering",
+                previousPath: null,
+              },
+            ],
+            comments: [],
+          };
+        },
+      },
+      instructionBundleLoader: {
+        async loadForReview() {
+          return {
+            config: {
+              ...testRepositoryConfig,
+              review: {
+                ...testRepositoryConfig.review,
+                maxComments: 5,
+                maxAutoComments: 5,
+                focusAreas: ["queue fairness"],
+              },
+            },
+            documents: [],
+            combinedText: "strictness: balanced",
+          };
+        },
+      },
+      memoryService: {
+        async getRelevantMemories() {
+          return [];
+        },
+        async ingestDiscussion() {
+          return { acknowledgments: [], savedEntries: [] };
+        },
+      },
+      reviewPlanner: planner,
+      reviewLifecycle: lifecycle,
+      reviewEngine: {
+        async review() {
+          throw new ModelOutputError("boom");
+        },
+      },
+      publisher: {
+        buildInlineComments() {
+          return [];
+        },
+        async publish() {
+          throw new Error("not used");
+        },
+      },
+    });
+
+    const processed = await runner.runOnce({
+      workerId: "worker_1",
+      perTenantCap: 1,
+    });
+
+    expect(processed).toBe(true);
+    expect(queue.failed).toEqual([{ jobId: "job_3", error: "boom" }]);
+    expect(lifecycle.failed).toEqual([
+      {
+        errorMessage: "model_output: boom",
+        reviewRunId: "review_run_1",
+      },
+    ]);
+    expect(logger.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "error",
+          message: "Worker job failed.",
+          fields: expect.objectContaining({
+            component: "worker-runner",
+            workerId: "worker_1",
+            jobId: "job_3",
+            jobType: "review_requested",
+            tenantId: "github-installation:123456",
+            repositoryId: "github:99",
+            failureClass: "model_output",
+            retryable: true,
             error: "boom",
           }),
         }),
@@ -1767,7 +2007,7 @@ describe("WorkerRunner", () => {
     expect(queue.failed).toEqual([{ jobId: "job_6", error: "boom" }]);
     expect(lifecycle.failed).toEqual([
       {
-        errorMessage: "openai_model_output: boom",
+        errorMessage: "model_output: boom",
         reviewRunId: "review_run_1",
       },
     ]);
@@ -1781,7 +2021,7 @@ describe("WorkerRunner", () => {
         checkRunId: "check-run-6",
         repositoryId: "github:99",
         sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        failureClass: "openai_model_output",
+        failureClass: "model_output",
         retryable: false,
         statusPhase: "failed",
         error:
@@ -1800,7 +2040,7 @@ describe("WorkerRunner", () => {
             jobType: "review_requested",
             tenantId: "github-installation:123456",
             repositoryId: "github:99",
-            failureClass: "openai_model_output",
+            failureClass: "model_output",
             error: "boom",
           }),
         }),

@@ -1,7 +1,7 @@
 import {
-  type RepositoryConfig,
   defaultRepositoryConfig,
   parseRepositoryConfigDocument,
+  type RepositoryConfig,
 } from "../config/repository-config-loader.js";
 
 export interface InstructionSource {

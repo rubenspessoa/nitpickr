@@ -1,22 +1,20 @@
 import { z } from "zod";
 
 import { type Logger, noopLogger } from "../logging/logger.js";
-import { normalizeOpenAiBaseUrl } from "../shared/openai-base-url.js";
+import {
+  ChatCompletionClient,
+  type ChatCompletionClientConfig,
+  type ResponseJsonSchema,
+  toResponseSchema,
+} from "../shared/chat-completion-client.js";
+import type { FetchLike } from "../shared/http-client.js";
+import { extractJsonObject } from "../shared/model-output.js";
 import type {
   MemoryClassifier,
   MemoryClassifierResult,
   MemoryClassifierResultEntry,
   MemoryKind,
 } from "./memory-service.js";
-
-export interface OpenAiMemoryClassifierConfig {
-  apiKey: string;
-  model: string;
-  baseUrl?: string;
-  logger?: Logger;
-}
-
-export type FetchLike = typeof fetch;
 
 const memoryKindSchema: z.ZodType<MemoryKind> = z.enum([
   "preferred_pattern",
@@ -36,12 +34,35 @@ const responseSchema = z.object({
         tags: z.array(z.string()).optional().default([]),
         globs: z.array(z.string()).optional().default([]),
         confidence: z.number().min(0).max(1),
-        supersedesHint: z.string().optional(),
+        supersedesHint: z
+          .string()
+          .nullish()
+          .transform((value) => value ?? undefined),
       }),
     )
     .default([]),
   acknowledgment: z.string().min(1),
 });
+
+/** Strict-mode reply shape: all keys required, optional values nullable. */
+const responseJsonSchema: ResponseJsonSchema = {
+  name: "nitpickr_memory",
+  schema: toResponseSchema(
+    z.strictObject({
+      entries: z.array(
+        z.strictObject({
+          kind: memoryKindSchema,
+          summary: z.string(),
+          tags: z.array(z.string()),
+          globs: z.array(z.string()),
+          confidence: z.number(),
+          supersedesHint: z.string().nullable(),
+        }),
+      ),
+      acknowledgment: z.string(),
+    }),
+  ),
+};
 
 const SYSTEM_PROMPT = [
   "You extract durable repo-level knowledge from a single discussion comment left on a code review.",
@@ -57,21 +78,19 @@ const SYSTEM_PROMPT = [
   "acknowledgment: one sentence, human-friendly, what the bot saved or why it didn't.",
 ].join("\n");
 
-export class OpenAiMemoryClassifier implements MemoryClassifier {
-  readonly #config: OpenAiMemoryClassifierConfig;
-  readonly #fetch: FetchLike;
+export class ChatMemoryClassifier implements MemoryClassifier {
+  readonly #client: ChatCompletionClient;
   readonly #logger: Logger;
 
-  constructor(
-    config: OpenAiMemoryClassifierConfig,
-    fetchFn: FetchLike = fetch,
-  ) {
-    this.#config = config;
-    this.#fetch = fetchFn;
+  constructor(config: ChatCompletionClientConfig, fetchFn?: FetchLike) {
     this.#logger = (config.logger ?? noopLogger).child({
-      component: "openai-memory-classifier",
+      component: "chat-memory-classifier",
       model: config.model,
     });
+    this.#client = new ChatCompletionClient(
+      { ...config, logger: this.#logger },
+      fetchFn,
+    );
   }
 
   async extract(input: {
@@ -79,7 +98,6 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
     authorLogin: string;
     path: string | null;
   }): Promise<MemoryClassifierResult> {
-    const endpoint = `${normalizeOpenAiBaseUrl(this.#config.baseUrl)}/chat/completions`;
     const userPayload = [
       `Author: ${input.authorLogin}`,
       input.path ? `Path: ${input.path}` : "Path: (general)",
@@ -89,83 +107,32 @@ export class OpenAiMemoryClassifier implements MemoryClassifier {
 
     const startedAt = process.hrtime.bigint();
     this.#logger.debug("memory_classifier.extract started", {});
-    let response: Response;
-    try {
-      response = await this.#fetch(endpoint, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.#config.apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: this.#config.model,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: userPayload },
-          ],
-        }),
-      });
-    } catch (error) {
-      this.#logger.error("memory_classifier.extract transport_error", {
-        durationMs: Number((process.hrtime.bigint() - startedAt) / 1_000_000n),
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-
-    if (!response.ok) {
-      const details = await response.text();
-      this.#logger.error("memory_classifier.extract failed", {
-        status: response.status,
-        durationMs: Number((process.hrtime.bigint() - startedAt) / 1_000_000n),
-        errorBody: details.slice(0, 500),
-      });
-      throw new Error(
-        `OpenAI memory classifier failed with status ${response.status}: ${details}`,
-      );
-    }
-
-    const payload = (await response.json()) as {
-      choices?: Array<{
-        message?: {
-          content?: string | null;
-        };
-      }>;
-      usage?: {
-        prompt_tokens?: number;
-        completion_tokens?: number;
-        total_tokens?: number;
-      };
-    };
-
+    const { content, usage } = await this.#client.complete({
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPayload },
+      ],
+      jsonSchema: responseJsonSchema,
+    });
     const durationMs = Number(
       (process.hrtime.bigint() - startedAt) / 1_000_000n,
     );
 
-    const content = payload.choices?.[0]?.message?.content;
-    if (!content) {
-      this.#logger.error("memory_classifier.extract empty_response", {
-        durationMs,
-      });
-      throw new Error("OpenAI memory classifier returned no content.");
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
+    const extracted = extractJsonObject(content);
+    if (!extracted.ok) {
       this.#logger.error("memory_classifier.extract invalid_json", {
         durationMs,
+        reason: extracted.reason,
       });
-      throw new Error("OpenAI memory classifier returned invalid JSON.");
+      throw new Error("Memory classifier returned invalid JSON.");
     }
+    const parsed: unknown = extracted.value;
 
     this.#logger.info("memory_classifier.extract succeeded", {
       durationMs,
-      promptTokens: payload.usage?.prompt_tokens,
-      completionTokens: payload.usage?.completion_tokens,
-      totalTokens: payload.usage?.total_tokens,
+      promptTokens: usage?.prompt_tokens,
+      completionTokens: usage?.completion_tokens,
+      totalTokens: usage?.total_tokens,
     });
 
     const validated = responseSchema.parse(parsed);

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isoTimestampSchema } from "../shared/db-timestamp.js";
+
 import type {
   ReviewFeedbackRecord,
   ReviewFeedbackStore,
@@ -42,8 +44,8 @@ const reviewFeedbackRowSchema = z
       "ignored",
     ]),
     count: z.number().int().nonnegative(),
-    created_at: z.string().min(1),
-    updated_at: z.string().min(1),
+    created_at: isoTimestampSchema,
+    updated_at: isoTimestampSchema,
   })
   .transform(
     (row): ReviewFeedbackRecord => ({

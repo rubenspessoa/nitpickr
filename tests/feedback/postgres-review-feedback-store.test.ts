@@ -103,4 +103,34 @@ describe("PostgresReviewFeedbackStore", () => {
       "src/api/server.ts:27:correctness:guard_the_parse",
     );
   });
+
+  it("accepts Date timestamps as returned by the postgres driver", async () => {
+    const client = new FakePostgresClient();
+    client.queueResponse([
+      {
+        id: "feedback_1",
+        tenant_id: "tenant_1",
+        repository_id: "repo_1",
+        scope_key: "comment_1",
+        provider_comment_id: "comment_1",
+        fingerprint: "src/api/server.ts:27:correctness:guard_the_parse",
+        path: "src/api/server.ts",
+        category: "correctness",
+        finding_type: "bug",
+        kind: "resolved_without_code_change",
+        count: 1,
+        created_at: new Date("2026-03-11T12:00:00.000Z"),
+        updated_at: new Date("2026-03-11T12:05:00.000Z"),
+      },
+    ]);
+    const store = new PostgresReviewFeedbackStore(client);
+
+    const records = await store.listByRepository({
+      tenantId: "tenant_1",
+      repositoryId: "repo_1",
+    });
+
+    expect(records[0]?.createdAt).toBe("2026-03-11T12:00:00.000Z");
+    expect(records[0]?.updatedAt).toBe("2026-03-11T12:05:00.000Z");
+  });
 });

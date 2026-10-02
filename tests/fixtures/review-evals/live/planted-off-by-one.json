@@ -1,0 +1,30 @@
+{
+  "name": "planted-off-by-one",
+  "source": "synthetic",
+  "input": {
+    "changeRequest": {
+      "title": "Add pagination helper",
+      "number": 102
+    },
+    "files": [
+      {
+        "path": "src/shared/paginate.ts",
+        "additions": 27,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,27 @@\n+export interface Page<T> {\n+  items: T[];\n+  nextOffset: number | null;\n+  total: number;\n+}\n+\n+/**\n+ * Slice `items` into a page of at most `limit` entries starting at `offset`.\n+ * `nextOffset` is null when there are no more items after this page.\n+ */\n+export function paginate<T>(items: T[], offset: number, limit: number): Page<T> {\n+  if (limit <= 0) {\n+    throw new Error(\"limit must be positive\");\n+  }\n+  const start = Math.max(0, offset);\n+  const end = start + limit + 1;\n+  const pageItems = items.slice(start, end);\n+  const nextOffset = end < items.length ? end : null;\n+  return { items: pageItems, nextOffset, total: items.length };\n+}\n+\n+export function lastPageOffset(total: number, limit: number): number {\n+  if (total === 0) {\n+    return 0;\n+  }\n+  return Math.floor(total / limit) * limit;\n+}",
+        "fileContent": "export interface Page<T> {\n  items: T[];\n  nextOffset: number | null;\n  total: number;\n}\n\n/**\n * Slice `items` into a page of at most `limit` entries starting at `offset`.\n * `nextOffset` is null when there are no more items after this page.\n */\nexport function paginate<T>(items: T[], offset: number, limit: number): Page<T> {\n  if (limit <= 0) {\n    throw new Error(\"limit must be positive\");\n  }\n  const start = Math.max(0, offset);\n  const end = start + limit + 1;\n  const pageItems = items.slice(start, end);\n  const nextOffset = end < items.length ? end : null;\n  return { items: pageItems, nextOffset, total: items.length };\n}\n\nexport function lastPageOffset(total: number, limit: number): number {\n  if (total === 0) {\n    return 0;\n  }\n  return Math.floor(total / limit) * limit;\n}\n"
+      }
+    ],
+    "instructionText": "",
+    "memory": [],
+    "commentBudget": 10
+  },
+  "expectedFindings": [
+    {
+      "label": "page returns limit+1 items",
+      "path": "src/shared/paginate.ts",
+      "lineStart": 16,
+      "lineEnd": 18
+    }
+  ]
+}

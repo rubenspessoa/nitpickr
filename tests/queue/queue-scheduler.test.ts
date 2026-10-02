@@ -40,9 +40,13 @@ class InMemoryJobStore implements JobStore {
     return job;
   }
 
-  async listQueuedJobs(limit: number): Promise<QueueJob[]> {
+  async listQueuedJobs(limit: number, dueBy: Date): Promise<QueueJob[]> {
     return [...this.jobs.values()]
-      .filter((job) => job.status === "queued")
+      .filter(
+        (job) =>
+          job.status === "queued" &&
+          job.scheduledAt.getTime() <= dueBy.getTime(),
+      )
       .sort((left, right) => right.priority - left.priority)
       .slice(0, limit);
   }
@@ -355,8 +359,43 @@ describe("QueueScheduler", () => {
     expect(retried.status).toBe("queued");
     expect(retried.attempts).toBe(1);
     expect(retried.lastError).toBe("network issue");
+    expect(retried.scheduledAt.toISOString()).toBe("2026-03-09T10:03:30.000Z");
     expect(failed.status).toBe("failed");
     expect(failed.attempts).toBe(3);
+  });
+
+  it("backs off retries exponentially up to the cap and holds them until due", async () => {
+    const store = new InMemoryJobStore();
+    await store.createJob(
+      buildJobInput({
+        id: "flaky_job",
+        status: "running",
+        attempts: 3,
+        maxAttempts: 10,
+      }),
+    );
+    let now = new Date("2026-03-09T10:00:00.000Z");
+    const scheduler = new QueueScheduler(store, {
+      now: () => now,
+      retryBaseDelayMs: 1_000,
+      maxRetryDelayMs: 5_000,
+    });
+
+    const retried = await scheduler.failJob("flaky_job", "model timeout");
+    // 4th attempt: 1s * 2^3 = 8s, capped at 5s.
+    expect(retried.scheduledAt.toISOString()).toBe("2026-03-09T10:00:05.000Z");
+
+    await expect(
+      scheduler.claimNextJobs({ limit: 1, perTenantCap: 1, workerId: "w" }),
+    ).resolves.toEqual([]);
+
+    now = new Date("2026-03-09T10:00:05.000Z");
+    const claimed = await scheduler.claimNextJobs({
+      limit: 1,
+      perTenantCap: 1,
+      workerId: "w",
+    });
+    expect(claimed.map((job) => job.id)).toEqual(["flaky_job"]);
   });
 
   it("fails non-retryable jobs immediately", async () => {

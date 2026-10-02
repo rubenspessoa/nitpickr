@@ -1,5 +1,28 @@
-export const migrations = [
-  `
+export interface MigrationOptions {
+  /** Width of the `memories.embedding` vector column (default 1536). */
+  embeddingDimensions?: number;
+}
+
+export const DEFAULT_MIGRATION_EMBEDDING_DIMENSIONS = 1536;
+
+function assertDimensions(value: number): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error("embeddingDimensions must be a positive integer.");
+  }
+  return value;
+}
+
+/**
+ * Build the ordered, idempotent migration list. The embedding vector width is
+ * a parameter so self-hosters can use non-OpenAI embedding models (e.g.
+ * nomic-embed-text = 768) — see NITPICKR_EMBEDDING_DIMENSIONS.
+ */
+export function buildMigrations(options: MigrationOptions = {}): string[] {
+  const dims = assertDimensions(
+    options.embeddingDimensions ?? DEFAULT_MIGRATION_EMBEDDING_DIMENSIONS,
+  );
+  return [
+    `
     create table if not exists jobs (
       id text primary key,
       type text not null,
@@ -23,7 +46,7 @@ export const migrations = [
     create index if not exists jobs_queue_idx on jobs (status, priority desc, scheduled_at asc);
     create index if not exists jobs_tenant_idx on jobs (tenant_id, status);
   `,
-  `
+    `
     create table if not exists memories (
       id text primary key,
       tenant_id text not null,
@@ -38,7 +61,7 @@ export const migrations = [
 
     create index if not exists memories_repo_idx on memories (tenant_id, repository_id);
   `,
-  `
+    `
     create table if not exists change_requests (
       id text primary key,
       tenant_id text not null,
@@ -56,7 +79,7 @@ export const migrations = [
 
     create index if not exists change_requests_repo_idx on change_requests (tenant_id, repository_id, number desc);
   `,
-  `
+    `
     create table if not exists review_runs (
       id text primary key,
       tenant_id text not null,
@@ -80,7 +103,7 @@ export const migrations = [
 
     create index if not exists review_runs_lookup_idx on review_runs (tenant_id, repository_id, change_request_id, created_at desc);
   `,
-  `
+    `
     create table if not exists review_findings (
       id text primary key,
       review_run_id text not null references review_runs (id),
@@ -98,7 +121,7 @@ export const migrations = [
 
     create index if not exists review_findings_run_idx on review_findings (review_run_id, severity);
   `,
-  `
+    `
     create table if not exists published_comments (
       id text primary key,
       review_run_id text not null references review_runs (id),
@@ -115,7 +138,7 @@ export const migrations = [
 
     create index if not exists published_comments_run_idx on published_comments (review_run_id);
   `,
-  `
+    `
     create table if not exists discussion_events (
       id text primary key,
       tenant_id text not null,
@@ -132,26 +155,26 @@ export const migrations = [
 
     create index if not exists discussion_events_repo_idx on discussion_events (tenant_id, repository_id, change_request_id, provider_created_at desc);
   `,
-  `
+    `
     alter table review_findings
     add column if not exists suggested_change text;
   `,
-  `
+    `
     alter table review_runs
     add column if not exists check_run_id text;
   `,
-  `
+    `
     alter table review_runs
     add column if not exists scope text not null default 'full_pr';
 
     alter table review_runs
     add column if not exists compared_from_sha text;
   `,
-  `
+    `
     alter table review_findings
     add column if not exists finding_type text not null default 'bug';
   `,
-  `
+    `
     alter table published_comments
     add column if not exists provider_thread_id text;
 
@@ -164,14 +187,14 @@ export const migrations = [
     alter table published_comments
     add column if not exists resolved_at timestamptz;
   `,
-  `
+    `
     create table if not exists app_runtime_config (
       singleton_key text primary key,
       encrypted_runtime_secrets text,
       updated_at timestamptz not null
     );
   `,
-  `
+    `
     create table if not exists worker_heartbeats (
       worker_id text primary key,
       status text not null,
@@ -179,7 +202,7 @@ export const migrations = [
       updated_at timestamptz not null
     );
   `,
-  `
+    `
     create table if not exists webhook_events (
       delivery_id text primary key,
       provider text not null,
@@ -195,7 +218,7 @@ export const migrations = [
 
     create index if not exists webhook_events_status_idx on webhook_events (provider, status, updated_at desc);
   `,
-  `
+    `
     create table if not exists review_feedback_events (
       id text primary key,
       tenant_id text not null,
@@ -218,17 +241,17 @@ export const migrations = [
     create index if not exists review_feedback_events_repo_idx
       on review_feedback_events (tenant_id, repository_id, updated_at desc);
   `,
-  `
+    `
     drop index if exists review_feedback_events_scope_idx;
 
     create unique index if not exists review_feedback_events_scope_idx
       on review_feedback_events (repository_id, scope_key);
   `,
-  `
+    `
     create extension if not exists vector;
 
     alter table memories
-      add column if not exists embedding vector(1536);
+      add column if not exists embedding vector(${dims});
 
     alter table memories
       add column if not exists tags text[] not null default '{}';
@@ -257,7 +280,7 @@ export const migrations = [
       on memories (tenant_id, repository_id)
       where superseded_by is null;
   `,
-  `
+    `
     create table if not exists discussion_acknowledgments (
       repository_id text not null,
       provider_comment_id text not null,
@@ -265,4 +288,32 @@ export const migrations = [
       primary key (repository_id, provider_comment_id)
     );
   `,
-];
+    // Re-shape memories.embedding when the configured dimension changes (e.g.
+    // switching from text-embedding-3-small/1536 to nomic-embed-text/768).
+    // Existing vectors cannot be converted, so they are cleared; memory recall
+    // falls back to keyword/recency ranking for those rows until re-embedded.
+    `
+    do $$
+    begin
+      if exists (
+        select 1
+        from pg_attribute
+        where attrelid = 'memories'::regclass
+          and attname = 'embedding'
+          and not attisdropped
+          and atttypmod <> ${dims}
+      ) then
+        drop index if exists memories_embedding_idx;
+        alter table memories
+          alter column embedding type vector(${dims}) using null;
+        create index if not exists memories_embedding_idx
+          on memories using hnsw (embedding vector_cosine_ops);
+      end if;
+    end
+    $$;
+  `,
+  ];
+}
+
+/** Default migration list (1536-dimension embeddings). */
+export const migrations = buildMigrations();

@@ -76,9 +76,13 @@ class InMemoryJobStore implements JobStore {
     return job;
   }
 
-  async listQueuedJobs(limit: number): Promise<QueueJob[]> {
+  async listQueuedJobs(limit: number, dueBy: Date): Promise<QueueJob[]> {
     return [...this.jobs.values()]
-      .filter((job) => job.status === "queued")
+      .filter(
+        (job) =>
+          job.status === "queued" &&
+          job.scheduledAt.getTime() <= dueBy.getTime(),
+      )
       .sort((left, right) => {
         if (left.priority !== right.priority) {
           return right.priority - left.priority;
@@ -101,7 +105,7 @@ class InMemoryJobStore implements JobStore {
     const jobs: QueueJob[] = [];
     for (const jobId of jobIds) {
       const current = this.jobs.get(jobId);
-      if (!current || current.status !== "queued") {
+      if (current?.status !== "queued") {
         continue;
       }
 

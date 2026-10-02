@@ -6,7 +6,6 @@ describe("SecretCrypto", () => {
   it("encrypts and decrypts JSON payloads without leaking plaintext", () => {
     const crypto = new SecretCrypto("super-secret-key");
     const payload = {
-      openAiApiKey: "sk-test-key",
       githubWebhookSecret: "webhook-secret",
     };
 

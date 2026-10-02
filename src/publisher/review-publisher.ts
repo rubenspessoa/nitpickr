@@ -621,10 +621,13 @@ export class ReviewPublisher {
     pullNumber: number;
     publishMode: "pr_summary" | "commit_summary";
     reviewedCommitSha?: string;
+    /**
+     * Counts only the caller knows. Finding counts are derived here from the
+     * inline comments actually posted: findings whose line cannot be anchored
+     * to the diff are dropped and must not be reported as new.
+     */
     commitSummaryCounts?: {
-      newFindings: number;
       resolvedThreads: number;
-      stillRelevantFindings: number;
     };
     result: {
       summary: string;
@@ -687,10 +690,10 @@ export class ReviewPublisher {
         ? this.buildCommitSummaryBody({
             reviewRunId: input.reviewRunId,
             summary: input.result.summary,
-            counts: input.commitSummaryCounts ?? {
-              newFindings: input.result.findings.length,
-              resolvedThreads: 0,
-              stillRelevantFindings: input.result.findings.length,
+            counts: {
+              newFindings: comments.length,
+              resolvedThreads: input.commitSummaryCounts?.resolvedThreads ?? 0,
+              stillRelevantFindings: comments.length,
             },
             ...(input.reviewedCommitSha
               ? { reviewedCommitSha: input.reviewedCommitSha }

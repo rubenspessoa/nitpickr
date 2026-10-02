@@ -7,7 +7,7 @@ describe("DoctorCommand", () => {
     const command = new DoctorCommand();
     const result = command.run({
       DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
-      OPENAI_API_KEY: "sk-test",
+      NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
       GITHUB_APP_ID: "123456",
       GITHUB_BOT_LOGINS: "nitpickr,getnitpickr",
       GITHUB_PRIVATE_KEY:
@@ -24,7 +24,7 @@ describe("DoctorCommand", () => {
     const command = new DoctorCommand();
     const result = command.run({
       DATABASE_URL: "https://nitpickr.example.com",
-      OPENAI_API_KEY: "",
+      NITPICKR_REVIEW_MODEL: "",
       GITHUB_APP_ID: "123456",
       GITHUB_PRIVATE_KEY: "not-a-pem",
       GITHUB_WEBHOOK_SECRET: "secret",
@@ -33,7 +33,7 @@ describe("DoctorCommand", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors.join("\n")).toContain("DATABASE_URL");
-    expect(result.errors.join("\n")).toContain("OPENAI_API_KEY");
+    expect(result.errors.join("\n")).toContain("NITPICKR_REVIEW_MODEL");
     expect(result.errors.join("\n")).toContain("GITHUB_PRIVATE_KEY");
     expect(result.errors.join("\n")).toContain("NITPICKR_WEBHOOK_URL");
   });
@@ -42,7 +42,7 @@ describe("DoctorCommand", () => {
     const command = new DoctorCommand();
     const result = command.run({
       DATABASE_URL: "postgres://nitpickr:nitpickr@localhost:5432/nitpickr",
-      OPENAI_API_KEY: "sk-test",
+      NITPICKR_REVIEW_MODEL: "qwen3.6:35b-a3b-coding-nvfp4",
       GITHUB_APP_ID: "123456",
       GITHUB_BOT_LOGINS: " , ",
       GITHUB_PRIVATE_KEY:

@@ -43,4 +43,32 @@ describe("MigrateCommand", () => {
     expect(client.executed[0]).toContain("select pg_advisory_xact_lock(");
     expect(client.executed[1]).toContain("create table if not exists jobs");
   });
+
+  it("uses the configured embedding dimension and re-shapes on change", async () => {
+    const client = new FakeSqlClient();
+
+    await new MigrateCommand(client, { embeddingDimensions: 768 }).run();
+
+    const joined = client.executed.join("\n");
+    expect(joined).toContain("embedding vector(768)");
+    expect(joined).not.toContain("vector(1536)");
+    expect(joined).toContain("atttypmod <> 768");
+    expect(joined).toContain(
+      "alter column embedding type vector(768) using null",
+    );
+  });
+
+  it("defaults to 1536-dimension embeddings", async () => {
+    const client = new FakeSqlClient();
+
+    await new MigrateCommand(client).run();
+
+    expect(client.executed.join("\n")).toContain("embedding vector(1536)");
+  });
+
+  it("rejects invalid embedding dimensions", () => {
+    expect(
+      () => new MigrateCommand(new FakeSqlClient(), { embeddingDimensions: 0 }),
+    ).toThrow(/positive integer/);
+  });
 });

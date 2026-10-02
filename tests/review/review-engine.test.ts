@@ -26,6 +26,64 @@ class FakeReviewModel implements ReviewModel {
 }
 
 describe("ReviewEngine", () => {
+  it("constrains the model to the review JSON Schema and accepts null optional fields", async () => {
+    const schemas: unknown[] = [];
+    const model: ReviewModel = {
+      async generateStructuredReview(input) {
+        schemas.push(input.jsonSchema);
+        return {
+          summary: "Summary",
+          diagram: {
+            type: "flowchart",
+            direction: null,
+            nodes: [{ id: "a", label: "A" }],
+            edges: [{ from: "a", to: "a", label: null }],
+          },
+          findings: [
+            {
+              path: "src/queue/a.ts",
+              line: 1,
+              findingType: "bug",
+              severity: "high",
+              category: "correctness",
+              title: "Ordering breaks",
+              body: "Stable ordering is lost.",
+              fixPrompt: "Fix ordering in src/queue/a.ts line 1.",
+              suggestedChange: null,
+            },
+          ],
+        };
+      },
+    };
+
+    const result = await new ReviewEngine(model).review({
+      changeRequest: { title: "Queue", number: 1 },
+      files: [
+        {
+          path: "src/queue/a.ts",
+          additions: 1,
+          deletions: 0,
+          patch: "@@ -0,0 +1,1 @@\n+stable ordering",
+        },
+      ],
+      instructionText: "",
+      memory: [],
+      commentBudget: 5,
+    });
+
+    expect(schemas[0]).toEqual(
+      expect.objectContaining({
+        name: "nitpickr_review",
+        schema: expect.objectContaining({
+          required: ["summary", "diagram", "findings"],
+          additionalProperties: false,
+        }),
+      }),
+    );
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]?.suggestedChange).toBeUndefined();
+  });
+
   it("chunks large file sets and merges structured findings", async () => {
     const model = new FakeReviewModel([
       {
@@ -889,5 +947,97 @@ describe("ReviewEngine", () => {
 
     expect(result.mermaid).toContain("flowchart TD");
     expect(result.mermaid).toContain("A[Legacy] --> B[Graph]");
+  });
+
+  it("splits chunks by total characters when full file content is large", async () => {
+    const model = new FakeReviewModel([]);
+    const engine = new ReviewEngine(model, {
+      maxPatchCharactersPerChunk: 10_000,
+      maxTotalCharactersPerChunk: 1_500,
+    });
+
+    await engine.review({
+      changeRequest: { title: "Big files", number: 7 },
+      files: [
+        {
+          path: "src/a.ts",
+          additions: 1,
+          deletions: 0,
+          patch: "@@ -1 +1 @@\n+a",
+          fileContent: "x".repeat(1_000),
+        },
+        {
+          path: "src/b.ts",
+          additions: 1,
+          deletions: 0,
+          patch: "@@ -1 +1 @@\n+b",
+          fileContent: "y".repeat(1_000),
+        },
+        {
+          path: "src/c.ts",
+          additions: 1,
+          deletions: 0,
+          patch: "@@ -1 +1 @@\n+c",
+          fileContent: null,
+        },
+      ],
+      instructionText: "",
+      memory: [],
+      commentBudget: 5,
+      optimizationMode: "off",
+    });
+
+    // a alone (1k), then b + c (1k + tiny) — patch budget never trips.
+    expect(model.prompts).toHaveLength(2);
+    expect(model.prompts[0]).toContain("src/a.ts");
+    expect(model.prompts[0]).not.toContain("src/b.ts");
+    expect(model.prompts[1]).toContain("src/b.ts");
+    expect(model.prompts[1]).toContain("src/c.ts");
+  });
+
+  it("bounds concurrent model requests and preserves chunk order", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const order: number[] = [];
+    const model: ReviewModel = {
+      async generateStructuredReview(input) {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        const match = /Chunk (\d+) of/.exec(input.user);
+        const index = Number(match?.[1] ?? 0);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        order.push(index);
+        return {
+          summary: `Summary ${index}`,
+          mermaid: "flowchart TD\nA --> B",
+          findings: [],
+        };
+      },
+    };
+    const engine = new ReviewEngine(model, {
+      maxPatchCharactersPerChunk: 5,
+      maxConcurrentModelRequests: 1,
+    });
+
+    const result = await engine.review({
+      changeRequest: { title: "Sequential", number: 8 },
+      files: ["a", "b", "c", "d"].map((name) => ({
+        path: `src/${name}.ts`,
+        additions: 1,
+        deletions: 0,
+        patch: `@@ -1 +1 @@\n+${name}${name}${name}`,
+      })),
+      instructionText: "",
+      memory: [],
+      commentBudget: 5,
+      optimizationMode: "off",
+    });
+
+    expect(maxInFlight).toBe(1);
+    expect(order).toEqual([1, 2, 3, 4]);
+    expect(result.summary).toMatch(
+      /Summary 1[\s\S]*Summary 2[\s\S]*Summary 3[\s\S]*Summary 4/,
+    );
   });
 });

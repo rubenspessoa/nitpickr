@@ -193,16 +193,17 @@ export class PostgresJobStore implements JobStore {
     return parseRow(rows[0] ?? {});
   }
 
-  async listQueuedJobs(limit: number): Promise<QueueJob[]> {
+  async listQueuedJobs(limit: number, dueBy: Date): Promise<QueueJob[]> {
     const rows = await this.#client.unsafe<Record<string, unknown>>(
       `
         select *
         from jobs
         where status = 'queued'
+          and scheduled_at <= $2
         order by priority desc, scheduled_at asc, created_at asc
         limit $1
       `,
-      [limit],
+      [limit, dueBy.toISOString()],
     );
 
     return rows.map(parseRow);

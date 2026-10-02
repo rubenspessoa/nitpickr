@@ -32,7 +32,8 @@ clear explanation of why a change exists.
    ```
 
 3. Fill in the required values:
-   - OpenAI API key
+   - a local model server (e.g. Ollama) and `NITPICKR_REVIEW_MODEL` (see
+     [docs/local-models-ollama.md](docs/local-models-ollama.md))
    - GitHub App ID
    - GitHub App private key
    - GitHub webhook secret

@@ -6,13 +6,41 @@ const promptOptimizationModeSchema = z.enum(["off", "balanced"]);
 export type PromptOptimizationMode = z.infer<
   typeof promptOptimizationModeSchema
 >;
+const reasoningEffortSchema = z.enum([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+]);
+export type ReasoningEffort = z.infer<typeof reasoningEffortSchema>;
+
+/** Sentinel for NITPICKR_EMBEDDING_MODEL that disables memory embeddings. */
+export const EMBEDDING_MODEL_DISABLED = "off";
+/** Ollama's OpenAI-compatible endpoint on the same machine. */
+export const DEFAULT_MODEL_BASE_URL = "http://localhost:11434/v1";
+/** Runs in-process via transformers.js; see LocalMemoryEmbedder. */
+export const DEFAULT_EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5";
+export const DEFAULT_EMBEDDING_DIMENSIONS = 768;
+export const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 300_000;
+export const DEFAULT_MODEL_MAX_CONCURRENT_REQUESTS = 4;
+export const DEFAULT_REVIEW_CHUNK_MAX_TOTAL_CHARS = 200_000;
 
 const bootstrapEnvironmentSchema = z.object({
   NODE_ENV: nodeEnvironmentSchema.optional(),
   PORT: z.string().optional(),
   DATABASE_URL: z.string().url(),
-  OPENAI_MODEL: z.string().min(1).optional(),
-  OPENAI_BASE_URL: z.string().url().optional(),
+  NITPICKR_MODEL_BASE_URL: z.string().url().optional(),
+  NITPICKR_MODEL_API_KEY: z.string().min(1).optional(),
+  NITPICKR_REVIEW_MODEL: z.string().min(1).optional(),
+  NITPICKR_MEMORY_MODEL: z.string().min(1).optional(),
+  NITPICKR_MODEL_REASONING_EFFORT: reasoningEffortSchema.optional(),
+  NITPICKR_MODEL_REQUEST_TIMEOUT_MS: z.string().optional(),
+  NITPICKR_EMBEDDING_MODEL: z.string().min(1).optional(),
+  NITPICKR_EMBEDDING_CACHE_DIR: z.string().min(1).optional(),
+  NITPICKR_EMBEDDING_DIMENSIONS: z.string().optional(),
+  NITPICKR_MODEL_MAX_CONCURRENT_REQUESTS: z.string().optional(),
+  NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS: z.string().optional(),
   GITHUB_API_BASE_URL: z.string().url().optional(),
   GITHUB_BOT_LOGINS: z.string().min(1).optional(),
   NITPICKR_BASE_URL: z.string().url().optional(),
@@ -30,8 +58,6 @@ const bootstrapEnvironmentSchema = z.object({
 });
 
 const runtimeSecretEnvironmentSchema = z.object({
-  OPENAI_API_KEY: z.string().min(1),
-  OPENAI_MODEL: z.string().min(1).optional(),
   GITHUB_APP_ID: z.string().regex(/^\d+$/),
   GITHUB_BOT_LOGINS: z.string().min(1).optional(),
   GITHUB_PRIVATE_KEY: z.string().min(1),
@@ -43,12 +69,38 @@ export type BotLogins = [string, ...string[]];
 const defaultBotLogins: BotLogins = ["nitpickr", "getnitpickr"];
 
 export interface RuntimeSecrets {
-  openAiApiKey: string;
-  openAiModel?: string;
   githubAppId: number;
   githubPrivateKey: string;
   githubWebhookSecret: string;
   githubBotLogins?: BotLogins;
+}
+
+/**
+ * Settings for the local model server (Ollama, llama-server, LM Studio, …),
+ * reached over the `/v1/chat/completions` protocol they all speak.
+ */
+export interface ModelSettings {
+  baseUrl: string;
+  /** Bearer token for servers that require one; `null` sends no auth header. */
+  apiKey: string | null;
+  /** Chat model used for reviews; `null` until configured (setup required). */
+  reviewModel: string | null;
+  /** Sent as `reasoning_effort` when set; omitted from requests otherwise. */
+  reasoningEffort: ReasoningEffort | null;
+  /** Chat model used by the memory classifier; defaults to the review model. */
+  memoryModel: string | null;
+  /** In-process embedding model for memory recall; `null` disables embeddings. */
+  embeddingModel: string | null;
+  /** Cache directory for embedding model files; `null` uses the library default. */
+  embeddingCacheDir: string | null;
+  /** Vector width stored in the `memories.embedding` column. */
+  embeddingDimensions: number;
+  /** Per-request timeout for every model call. */
+  requestTimeoutMs: number;
+  /** Max in-flight model requests within one review (chunk fan-out). */
+  maxConcurrentRequests: number;
+  /** Total prompt characters (patch + file content) packed per review chunk. */
+  reviewChunkMaxTotalChars: number;
 }
 
 export interface BootstrapConfig {
@@ -57,10 +109,7 @@ export interface BootstrapConfig {
   databaseUrl: string;
   baseUrl: string;
   secretKey: string | null;
-  openAi: {
-    model: string;
-    baseUrl: string;
-  };
+  models: ModelSettings;
   github: {
     apiBaseUrl: string;
     botLogins: BotLogins;
@@ -92,11 +141,7 @@ export interface AppConfig {
   baseUrl: string;
   databaseUrl: string;
   runtimeSecretSource: "environment" | "persisted_store";
-  openAiApiKey: string;
-  openAi: {
-    model: string;
-    baseUrl: string;
-  };
+  models: ModelSettings;
   github: {
     appId: number;
     apiBaseUrl: string;
@@ -184,6 +229,78 @@ function parseRepositoryAllowlist(value: string | undefined): string[] | null {
   return entries.length > 0 ? [...new Set(entries)] : null;
 }
 
+/**
+ * Renamed when nitpickr went local-models-only. An unmigrated .env (old names
+ * set, no NITPICKR_REVIEW_MODEL) fails loudly; once the new names are set, an
+ * unrelated OPENAI_API_KEY exported for other tools is simply ignored.
+ */
+const RENAMED_MODEL_VARIABLES: Record<string, string> = {
+  OPENAI_BASE_URL: "NITPICKR_MODEL_BASE_URL",
+  OPENAI_API_KEY: "NITPICKR_MODEL_API_KEY (optional; local servers need none)",
+  OPENAI_MODEL: "NITPICKR_REVIEW_MODEL",
+  OPENAI_MEMORY_MODEL: "NITPICKR_MEMORY_MODEL",
+  OPENAI_REASONING_EFFORT: "NITPICKR_MODEL_REASONING_EFFORT",
+  OPENAI_REQUEST_TIMEOUT_MS: "NITPICKR_MODEL_REQUEST_TIMEOUT_MS",
+  OPENAI_EMBEDDING_MODEL:
+    "NITPICKR_EMBEDDING_MODEL (now a Hugging Face model id run in-process)",
+};
+
+function rejectRenamedModelVariables(
+  input: Record<string, string | undefined>,
+): void {
+  if (input.NITPICKR_REVIEW_MODEL !== undefined) {
+    return;
+  }
+  const stale = Object.keys(RENAMED_MODEL_VARIABLES).filter(
+    (name) => input[name] !== undefined,
+  );
+  if (stale.length > 0) {
+    throw new Error(
+      `Unsupported environment variables: ${stale
+        .map((name) => `${name} → use ${RENAMED_MODEL_VARIABLES[name]}`)
+        .join("; ")}.`,
+    );
+  }
+}
+
+function parseModelSettings(parsed: BootstrapEnvironment): ModelSettings {
+  const embeddingModel =
+    parsed.NITPICKR_EMBEDDING_MODEL ?? DEFAULT_EMBEDDING_MODEL;
+  const reviewModel = parsed.NITPICKR_REVIEW_MODEL ?? null;
+  return {
+    baseUrl: parsed.NITPICKR_MODEL_BASE_URL ?? DEFAULT_MODEL_BASE_URL,
+    apiKey: parsed.NITPICKR_MODEL_API_KEY ?? null,
+    reviewModel,
+    reasoningEffort: parsed.NITPICKR_MODEL_REASONING_EFFORT ?? null,
+    memoryModel: parsed.NITPICKR_MEMORY_MODEL ?? reviewModel,
+    embeddingModel:
+      embeddingModel.toLowerCase() === EMBEDDING_MODEL_DISABLED
+        ? null
+        : embeddingModel,
+    embeddingCacheDir: parsed.NITPICKR_EMBEDDING_CACHE_DIR ?? null,
+    embeddingDimensions: parseInteger(
+      parsed.NITPICKR_EMBEDDING_DIMENSIONS,
+      "NITPICKR_EMBEDDING_DIMENSIONS",
+      DEFAULT_EMBEDDING_DIMENSIONS,
+    ),
+    requestTimeoutMs: parseInteger(
+      parsed.NITPICKR_MODEL_REQUEST_TIMEOUT_MS,
+      "NITPICKR_MODEL_REQUEST_TIMEOUT_MS",
+      DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
+    ),
+    maxConcurrentRequests: parseInteger(
+      parsed.NITPICKR_MODEL_MAX_CONCURRENT_REQUESTS,
+      "NITPICKR_MODEL_MAX_CONCURRENT_REQUESTS",
+      DEFAULT_MODEL_MAX_CONCURRENT_REQUESTS,
+    ),
+    reviewChunkMaxTotalChars: parseInteger(
+      parsed.NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS,
+      "NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS",
+      DEFAULT_REVIEW_CHUNK_MAX_TOTAL_CHARS,
+    ),
+  };
+}
+
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
 }
@@ -222,15 +339,10 @@ function normalizeRuntimeSecrets(
   parsed: z.infer<typeof runtimeSecretEnvironmentSchema>,
 ): RuntimeSecrets {
   const runtimeSecrets: RuntimeSecrets = {
-    openAiApiKey: parsed.OPENAI_API_KEY,
     githubAppId: Number.parseInt(parsed.GITHUB_APP_ID, 10),
     githubPrivateKey: normalizePrivateKey(parsed.GITHUB_PRIVATE_KEY),
     githubWebhookSecret: parsed.GITHUB_WEBHOOK_SECRET,
   };
-
-  if (parsed.OPENAI_MODEL) {
-    runtimeSecrets.openAiModel = parsed.OPENAI_MODEL;
-  }
 
   if (parsed.GITHUB_BOT_LOGINS) {
     runtimeSecrets.githubBotLogins = parseBotLogins(parsed.GITHUB_BOT_LOGINS);
@@ -242,6 +354,7 @@ function normalizeRuntimeSecrets(
 export function parseBootstrapConfig(
   input: Record<string, string | undefined>,
 ): BootstrapConfig {
+  rejectRenamedModelVariables(input);
   const parsed = bootstrapEnvironmentSchema.parse(input);
   const port = parseInteger(parsed.PORT, "PORT", 3000);
 
@@ -251,10 +364,7 @@ export function parseBootstrapConfig(
     databaseUrl: parsed.DATABASE_URL,
     baseUrl: deriveBaseUrl(parsed, port),
     secretKey: parsed.NITPICKR_SECRET_KEY ?? null,
-    openAi: {
-      model: parsed.OPENAI_MODEL ?? "gpt-5-mini",
-      baseUrl: parsed.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-    },
+    models: parseModelSettings(parsed),
     github: {
       apiBaseUrl: parsed.GITHUB_API_BASE_URL ?? "https://api.github.com",
       botLogins: parseBotLogins(parsed.GITHUB_BOT_LOGINS),
@@ -327,11 +437,7 @@ export function buildAppConfig(
     baseUrl: bootstrap.baseUrl,
     databaseUrl: bootstrap.databaseUrl,
     runtimeSecretSource,
-    openAiApiKey: secrets.openAiApiKey,
-    openAi: {
-      model: secrets.openAiModel ?? bootstrap.openAi.model,
-      baseUrl: bootstrap.openAi.baseUrl,
-    },
+    models: bootstrap.models,
     github: {
       appId: secrets.githubAppId,
       apiBaseUrl: bootstrap.github.apiBaseUrl,

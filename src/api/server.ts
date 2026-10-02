@@ -37,7 +37,7 @@ const invalidWebhookAuthenticationMessage =
 function buildDefaultSetupStatus(): SetupStatus {
   return {
     state: "ready",
-    openAiConfigured: true,
+    modelConfigured: true,
     githubAppConfigured: true,
     ready: true,
   };
@@ -111,7 +111,7 @@ function renderSetupPage(setupStatus: SetupStatus): string {
       <h1>nitpickr setup</h1>
       <p>State: <strong>${setupStatus.state}</strong></p>
       <ul>
-        <li>OpenAI configured: ${setupStatus.openAiConfigured ? "yes" : "no"}</li>
+        <li>Review model configured (NITPICKR_REVIEW_MODEL): ${setupStatus.modelConfigured ? "yes" : "no"}</li>
         <li>GitHub App configured: ${setupStatus.githubAppConfigured ? "yes" : "no"}</li>
       </ul>
     </main>

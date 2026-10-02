@@ -15,6 +15,7 @@ import type {
 import type { ReviewPublisher } from "../publisher/review-publisher.js";
 import type { ReviewStatusPublisher } from "../publisher/review-status-publisher.js";
 import type { QueueJob, QueueScheduler } from "../queue/queue-scheduler.js";
+import { fingerprintFinding } from "../review/finding-fingerprint.js";
 import type {
   PriorThread,
   PriorThreadState,
@@ -1509,15 +1510,22 @@ export class WorkerRunner {
           })),
         },
       );
-      const unanchoredFindingCount =
-        publishableResult.findings.length - draftPublishedComments.length;
-      if (unanchoredFindingCount > 0) {
+      const anchoredFingerprints = new Set(
+        draftPublishedComments.map((comment) => comment.fingerprint),
+      );
+      const unanchoredFindings = publishableResult.findings.filter(
+        (finding) => !anchoredFingerprints.has(fingerprintFinding(finding)),
+      );
+      if (unanchoredFindings.length > 0) {
         logger.warn(
           "Dropped findings that could not be anchored to the diff.",
           {
             jobId: job.id,
             reviewRunId: startedReviewRunId,
-            droppedCount: unanchoredFindingCount,
+            droppedCount: unanchoredFindings.length,
+            dropped: unanchoredFindings.map(
+              (finding) => `${finding.path}:${finding.line}`,
+            ),
           },
         );
       }

@@ -34,8 +34,8 @@ for details.
 
 ## Features
 
-- Lowest-cost path: local Docker + a public HTTPS tunnel means you mainly pay
-  for model usage.
+- Lowest-cost path: local Docker + a public HTTPS tunnel + a model running on
+  your own hardware means no per-review API bill.
 - Small-team friendly: repository-specific instructions live in
   `.nitpickr.yml`, `.nitpickr/`, and `AGENTS.md`.
 - Operationally simple: one API service, one worker service, one Postgres
@@ -43,8 +43,9 @@ for details.
 - Review output includes inline comments, a summary, and a GitHub status check.
 - Manual commands let authors request review, summary, recheck, and follow-up
   explanations directly from the PR conversation.
-- Cost-aware by default: `gpt-5-mini` is a strong default for review quality
-  per dollar, and you can switch to larger or cheaper models at any time.
+- Local models only: reviews run against your own model server (Ollama,
+  llama-server, LM Studio, vLLM), so code never leaves your hardware. Memory
+  embeddings run in-process in the worker.
 - Designed to grow: GitHub is first, but the internals are already split in a
   way that can support more SCM providers and more model providers later.
 
@@ -58,7 +59,7 @@ flowchart LR
     D --> E["Worker service"]
     E --> F["GitHub API"]
     E --> G["Repository instructions"]
-    E --> H["OpenAI review model"]
+    E --> H["Local review model"]
     E --> I["Review publisher"]
     I --> J["Inline comments + summary + status check"]
 ```
@@ -80,11 +81,11 @@ More background is available in [docs/architecture-plan.md](docs/architecture-pl
 
 ### Requirements
 
-- Node.js `>=20.9.0`
+- Node.js `>=24` (24 LTS)
 - `pnpm` `10`
 - Docker and Docker Compose for the easiest local run
 - a GitHub account or organization where you can create a GitHub App
-- an OpenAI API key, or a local OpenAI-compatible model server such as
+- a local model server that speaks `/v1/chat/completions`, such as
   [Ollama](https://ollama.com) (see [Local models via Ollama](docs/local-models-ollama.md))
 - a public HTTPS URL for GitHub webhooks
   - local: use a tunnel such as Tailscale Funnel, `cloudflared`, or `ngrok`
@@ -162,9 +163,9 @@ understand first:
 | `NITPICKR_BASE_URL` | Yes | Your public HTTPS base URL | Local: your tunnel origin. Railway: your API service public domain. |
 | `NITPICKR_WEBHOOK_URL` | Yes for local setup and `doctor` | `NITPICKR_BASE_URL` + `/webhooks/github` | GitHub webhook target. |
 | `NITPICKR_SECRET_KEY` | Recommended | Generate with `openssl rand -hex 32` | Enables encrypted persisted runtime secrets. |
-| `OPENAI_API_KEY` | Yes | [OpenAI API keys](https://platform.openai.com/api-keys) | Required for review generation. Any non-empty value for local servers that ignore it. |
-| `OPENAI_MODEL` | Yes | Your chosen OpenAI model | Start with `gpt-5-mini`. |
-| `OPENAI_BASE_URL` | No | OpenAI or any OpenAI-compatible endpoint | Point at Ollama/vLLM/etc. to use local models. |
+| `NITPICKR_REVIEW_MODEL` | Yes | A model name on your model server (for Ollama, a tag from `ollama list`) | No default; setup status stays "setup required" until set. |
+| `NITPICKR_MODEL_BASE_URL` | No | Your model server's `/v1` endpoint | Defaults to `http://localhost:11434/v1`. From Docker Compose use `http://host.docker.internal:11434/v1`. |
+| `NITPICKR_MODEL_API_KEY` | No | Only for servers that require a bearer token | No auth header is sent when unset. Ollama needs none. |
 | `GITHUB_APP_ID` | Yes | GitHub App settings page | Numeric app ID. |
 | `GITHUB_PRIVATE_KEY` | Yes | GitHub App private key download | Paste the PEM directly or with `\n` escapes. |
 | `GITHUB_WEBHOOK_SECRET` | Yes | A secret you choose in GitHub App settings | Must match the value configured in the GitHub App. |
@@ -175,48 +176,46 @@ Useful optional settings:
 - `NITPICKR_LOG_LEVEL=debug` for first-run troubleshooting
 - `NITPICKR_WORKER_CONCURRENCY=4` for default worker parallelism
 - `NITPICKR_REPOSITORY_ALLOWLIST=owner/repo-a,owner/repo-b` to limit which
-  repos the instance may review
+  repos the instance may review (case-insensitive; events from other repos are
+  acknowledged and ignored)
 - `NITPICKR_PROMPT_OPTIMIZATION_MODE=balanced` to keep prompt sizes under
   control on larger PRs
-- `OPENAI_MEMORY_MODEL`, `OPENAI_EMBEDDING_MODEL` (or `off`),
-  `NITPICKR_EMBEDDING_DIMENSIONS` to control the memory classifier/embedder
-- `OPENAI_REASONING_EFFORT`, `OPENAI_REQUEST_TIMEOUT_MS`,
+- `NITPICKR_MEMORY_MODEL` (defaults to the review model),
+  `NITPICKR_EMBEDDING_MODEL` (or `off`), `NITPICKR_EMBEDDING_DIMENSIONS` to
+  control the memory classifier and the in-process embedder
+- `NITPICKR_MODEL_REASONING_EFFORT`, `NITPICKR_MODEL_REQUEST_TIMEOUT_MS`,
   `NITPICKR_MODEL_MAX_CONCURRENT_REQUESTS`, `NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS`
-  to tune for slower or smaller-context (local) models
+  to tune for slower or smaller-context models
+
+Upgrading from a build that used `OPENAI_*` variables: rename them to the
+`NITPICKR_MODEL_*` / `NITPICKR_REVIEW_MODEL` equivalents in `.env.example`.
+nitpickr refuses to boot with the old names and lists the replacements.
 
 ### Model guidance
 
+nitpickr only talks to a local model server over the `/v1/chat/completions`
+protocol: Ollama, llama-server (llama.cpp), LM Studio, vLLM and similar.
+Requests use strict JSON Schema structured output, with lenient JSON
+extraction and one repair re-prompt as a fallback for servers that ignore it.
+
 Recommended starting point:
 
-- `OPENAI_MODEL=gpt-5-mini`
-
-Why:
-
-- it is materially cheaper than flagship GPT-5-tier models
-- it still produces useful review comments for most small and medium PRs
-- it keeps self-hosting costs reasonable for indie teams
+- a coding-tuned model that fits your hardware, for example
+  `NITPICKR_REVIEW_MODEL=qwen3.6:35b-a3b-coding-nvfp4` on Ollama
 
 Practical guidance:
 
-- use `gpt-5-mini` first unless you already know you need the strongest model
-- if your account does not have access to `gpt-5-mini`, set `OPENAI_MODEL` to
-  another supported model such as `gpt-4.1`
-- move to a larger GPT-5-family model if you want deeper reasoning and are
-  comfortable paying more per review
-- try a cheaper model only if you are intentionally optimizing for cost and can
-  tolerate lower recall
+- prefer coding-tuned models; general chat models miss more real bugs
+- set `NITPICKR_MODEL_REASONING_EFFORT=none` on thinking models for the
+  fastest reviews, and raise it only if the eval shows a recall gain
+- if the model has a small context window or slow prefill, lower
+  `NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS`
+- no embedding model is needed on the server; memory embeddings run inside the
+  worker
 
-Check the latest official model and pricing pages before locking in a hosted
-budget:
-
-- [OpenAI models](https://platform.openai.com/docs/models)
-- [OpenAI API pricing](https://openai.com/api/pricing/)
-
-Local models: nitpickr talks plain OpenAI-compatible HTTP, so it can run fully
-offline against Ollama, vLLM, LM Studio and similar. See
-[docs/local-models-ollama.md](docs/local-models-ollama.md) for the recommended
-settings and the `pnpm eval:reviews --live` harness for comparing models on
-your own hardware.
+See [docs/local-models-ollama.md](docs/local-models-ollama.md) for the
+recommended settings and the `pnpm eval:reviews --live` harness for comparing
+models on your own hardware.
 
 ## Development
 

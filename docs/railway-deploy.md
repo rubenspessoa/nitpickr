@@ -2,6 +2,11 @@
 
 Railway is the easiest always-on hosting path for `nitpickr` today.
 
+> **Local models only.** nitpickr does not call any hosted model API. A Railway
+> deploy needs a model server (Ollama, llama-server, LM Studio, vLLM) that the
+> worker can reach from Railway; point `NITPICKR_MODEL_BASE_URL` at it. Memory
+> embeddings run inside the worker and need nothing extra.
+
 Recommended deployment shape:
 
 - one public `api` service
@@ -27,7 +32,7 @@ but the cheapest ongoing option is still:
 
 - local Docker Compose
 - plus a low-cost or free HTTPS tunnel
-- plus your OpenAI usage
+- plus a model server on your own hardware
 
 ## 1. Create the Railway project
 
@@ -72,8 +77,9 @@ Set these shared values across both services:
 | Variable | Value |
 | --- | --- |
 | `NITPICKR_SECRET_KEY` | Generate with `openssl rand -hex 32` |
-| `OPENAI_API_KEY` | Your OpenAI API key |
-| `OPENAI_MODEL` | Start with `gpt-5-mini` |
+| `NITPICKR_MODEL_BASE_URL` | Your model server's `/v1` URL, reachable from Railway |
+| `NITPICKR_REVIEW_MODEL` | A model name on that server (e.g. an Ollama tag) |
+| `NITPICKR_MODEL_API_KEY` | Only if your model server requires a bearer token |
 | `GITHUB_APP_ID` | The numeric GitHub App ID |
 | `GITHUB_PRIVATE_KEY` | The GitHub App PEM private key |
 | `GITHUB_WEBHOOK_SECRET` | The same webhook secret configured in the GitHub App |
@@ -95,8 +101,10 @@ Notes:
 - `NITPICKR_BASE_URL` should point to the public API domain, not the worker.
 - `NITPICKR_WEBHOOK_URL` is redundant at runtime when `NITPICKR_BASE_URL` is
   set, but it keeps the environment explicit and matches `pnpm cli doctor`.
-- `OPENAI_BASE_URL` and `GITHUB_API_BASE_URL` can stay on their defaults unless
-  you are using custom proxies or stubs.
+- `NITPICKR_MODEL_BASE_URL` must be set: its default
+  (`http://localhost:11434/v1`) points inside the Railway container.
+- `GITHUB_API_BASE_URL` can stay on its default unless you are using custom
+  proxies or stubs.
 
 ## 5. Wire the GitHub App to Railway
 

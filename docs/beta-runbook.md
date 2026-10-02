@@ -20,7 +20,7 @@
 - `Published pending review status.`
   - GitHub status checks are active.
 - `Generated review result.`
-  - OpenAI returned a usable review payload.
+  - The model server returned a usable review payload.
 - `Published review result.`
   - GitHub review body and inline comments were posted.
 - `Published failed review status.`
@@ -37,6 +37,8 @@
   - invalid signature
   - ignored webhook event
   - missing bot mention/command
+  - repository not in `NITPICKR_REPOSITORY_ALLOWLIST` (answered `202` and
+    ignored, with no mention reaction)
 
 ### Worker never publishes a review
 
@@ -44,22 +46,30 @@
 - Check for:
   - `config_setup`
   - `github_api`
-  - `openai_model_output`
+  - `model_output`
   - `publish_failure`
 
 ### Local model (Ollama) reviews fail or never finish
 
-- `openai.chat_completion failed` with status 404: the model tag in
-  `OPENAI_MODEL` / `OPENAI_MEMORY_MODEL` / `OPENAI_EMBEDDING_MODEL` is not
-  pulled — compare with `curl $OPENAI_BASE_URL/models`.
-- `openai.chat_completion invalid_json` twice in a row: the model is not
-  honouring `json_object` mode; the job is retried automatically. Try a larger
-  model or `OPENAI_REASONING_EFFORT=none`.
-- `openai.chat_completion transport_error ... TimeoutError`: raise
-  `OPENAI_REQUEST_TIMEOUT_MS`, lower `NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS`,
-  and keep `NITPICKR_JOB_STALE_AFTER_MS` above the timeout.
+- Boot fails naming `NITPICKR_*` replacements: the `.env` still uses the old
+  `OPENAI_*` names. Rename them (see `.env.example`) and set
+  `NITPICKR_REVIEW_MODEL`.
+- `model.chat_completion failed` with status 404: the model tag in
+  `NITPICKR_REVIEW_MODEL` / `NITPICKR_MEMORY_MODEL` is not pulled — compare
+  with `curl $NITPICKR_MODEL_BASE_URL/models`.
+- `model.chat_completion invalid_json` twice in a row: the model is not
+  honouring structured (JSON Schema) output; the job is retried automatically
+  with exponential backoff (30 s base, capped at 15 min). Try a larger model or
+  `NITPICKR_MODEL_REASONING_EFFORT=none`.
+- `model.chat_completion transport_error ... TimeoutError`: raise
+  `NITPICKR_MODEL_REQUEST_TIMEOUT_MS`, lower
+  `NITPICKR_REVIEW_CHUNK_MAX_TOTAL_CHARS`, and keep
+  `NITPICKR_JOB_STALE_AFTER_MS` above the timeout.
 - `memory_embedder.embed dimension_mismatch`: `NITPICKR_EMBEDDING_DIMENSIONS`
-  does not match the embedding model; fix it and re-run `migrate`.
+  does not match `NITPICKR_EMBEDDING_MODEL`; fix it and re-run `migrate`.
+- `memory_embedder.model_load_failed`: the in-process embedding model could not
+  load (not baked into the image, or no network on a native run); rebuild the
+  image or set `NITPICKR_EMBEDDING_MODEL=off`.
 - Full guide: [local-models-ollama.md](local-models-ollama.md).
 
 ### GitHub review appears twice

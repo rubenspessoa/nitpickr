@@ -158,7 +158,13 @@ export interface LiveCaseReport {
   /** Expectations matched by inline or second-look findings. */
   matchedIncludingSecondLook?: number;
   secondLook?: Array<
-    Pick<ReviewFinding, "path" | "line" | "severity" | "category" | "title">
+    Pick<ReviewFinding, "path" | "line" | "severity" | "category" | "title"> &
+      Partial<
+        Pick<
+          ReviewFinding,
+          "findingType" | "body" | "fixPrompt" | "verification"
+        >
+      >
   >;
   durationMs: number;
   modelCalls: number;
@@ -183,7 +189,8 @@ export interface LiveCaseReport {
       | "title"
       | "body"
       | "verification"
-    >
+    > &
+      Partial<Pick<ReviewFinding, "fixPrompt" | "failureScenario">>
   >;
   error: string | null;
 }
@@ -511,7 +518,13 @@ export class LiveReviewEvaluator {
           line: finding.line,
           severity: finding.severity,
           category: finding.category,
+          findingType: finding.findingType,
           title: finding.title,
+          body: finding.body,
+          fixPrompt: finding.fixPrompt,
+          ...(finding.verification
+            ? { verification: finding.verification }
+            : {}),
         })),
         verdictsCorrect: fixture.expectedVerdicts.filter(
           (entry) => verdicts.get(entry.threadId) === entry.verdict,
@@ -544,6 +557,11 @@ export class LiveReviewEvaluator {
           findingType: finding.findingType,
           title: finding.title,
           body: finding.body,
+          // Kept so a voice sample shows what was really posted.
+          fixPrompt: finding.fixPrompt,
+          ...(finding.failureScenario
+            ? { failureScenario: finding.failureScenario }
+            : {}),
           ...(finding.verification
             ? { verification: finding.verification }
             : {}),
